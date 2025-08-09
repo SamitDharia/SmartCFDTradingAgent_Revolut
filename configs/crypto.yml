@@ -3,6 +3,7 @@ profiles:
     watch: [BTC-USD, ETH-USD]
     interval: "1h"
     intervals: "15m,1h"
+    interval_weights: "15m=1,1h=2"
     vote: true
     adx: 10
     ema_fast: 10
