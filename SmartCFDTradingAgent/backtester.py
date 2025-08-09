@@ -46,13 +46,18 @@ def backtest(price_df: pd.DataFrame, signal_map: Dict[str, str],
 
             if pos != 0:
                 hold += 1
-                hit_sl = (pos == 1 and price_now <= entry_price * (1 - sl)) or                          (pos == -1 and price_now >= entry_price * (1 + sl))
-                hit_tp = (pos == 1 and price_now >= entry_price * (1 + tp)) or                          (pos == -1 and price_now <= entry_price * (1 - tp))
-                if hit_sl or hit_tp:
-                    pos = 0; entry_price = None; pnl.at[date, tkr] -= cost; continue
                 pnl.at[date, tkr] += pos * qty * rets.at[date, tkr]
+                hit_sl = (pos == 1 and price_now <= entry_price * (1 - sl)) or (pos == -1 and price_now >= entry_price * (1 + sl))
+                hit_tp = (pos == 1 and price_now >= entry_price * (1 + tp)) or (pos == -1 and price_now <= entry_price * (1 - tp))
+                if hit_sl or hit_tp:
+                    pos = 0
+                    entry_price = None
+                    pnl.at[date, tkr] -= cost
+                    continue
                 if hold >= max_hold:
-                    pos = 0; entry_price = None; pnl.at[date, tkr] -= cost
+                    pos = 0
+                    entry_price = None
+                    pnl.at[date, tkr] -= cost
 
     pnl["total"] = pnl.sum(axis=1, skipna=True)
     pnl["cum_return"] = (1 + pnl["total"].fillna(0)).cumprod()
