@@ -314,17 +314,13 @@ def run_cycle(watch, size, grace, risk, equity,
                 start_v = (dt.date.today() - dt.timedelta(days=lb_v)).isoformat()
                 price_v = get_price_data(tickers, start_v, end, interval=itv)
 
-                maps.append(
-                    generate_signals(
-                        price_v,
-                        adx_threshold=adx,
-                        fast_span=ema_fast,
-                        slow_span=ema_slow,
-                        macd_signal=macd_signal,
-                    )
+                maps[itv] = generate_signals(
+                    price_v,
+                    adx_threshold=adx,
+                    fast_span=ema_fast,
+                    slow_span=ema_slow,
+                    macd_signal=macd_signal,
                 )
-
-                maps[itv] = generate_signals(price_v, adx_threshold=adx)
 
             except Exception as e:
                 log.error("Voting interval %s failed: %s", itv, e)
