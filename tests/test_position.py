@@ -12,7 +12,6 @@ from SmartCFDTradingAgent.position import qty_from_atr
 @pytest.fixture
 def valid_params():
     return {
-        "price": 100.0,
         "atr_value": 2.0,
         "equity": 10_000.0,
         "risk_frac": 0.02,
@@ -36,4 +35,4 @@ def test_qty_from_atr_positive_inputs(valid_params):
 )
 
 def test_qty_from_atr_invalid_inputs_return_one(atr_value, equity, risk_frac):
-    assert qty_from_atr(price=100.0, atr_value=atr_value, equity=equity, risk_frac=risk_frac) == 1
+    assert qty_from_atr(atr_value=atr_value, equity=equity, risk_frac=risk_frac) == 1
