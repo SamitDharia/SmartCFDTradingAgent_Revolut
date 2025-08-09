@@ -11,7 +11,7 @@ Paste:
 ## How it works
 1) Load `.env` (BOT_TOKEN, CHAT_ID) → Telegram ready.
 2) Rank watchlist by 30-day Sharpe → take top-N.
-3) Download prices (intraday uses `period=59d` to satisfy Yahoo limits).
+3) Download prices (intraday uses tested period/interval combos `("7d","1h")`, `("30d","60m")`, `("30d","30m")`, `("7d","15m")` to satisfy Yahoo limits).
 4) Signals = EMA + MACD filtered by ADX (optional multi-timeframe voting).
 5) Build PRE-TRADE: side, price, **SL/TP**, **Qty≈** (ATR-based sizing within portfolio risk cap).
 6) Send to Telegram + log to file; write to `storage/decision_log.csv`.
