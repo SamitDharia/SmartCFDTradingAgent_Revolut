@@ -330,7 +330,7 @@ def run_cycle(watch, size, grace, risk, equity,
                 log.error("Voting interval %s failed: %s", itv, e)
         base_sig = vote_signals(maps, weights)
 
-    params = load_params()
+    params = load_params() if use_params else {}
     key_group = ",".join(sorted(watch)) + "|" + interval
     defaults = {
         "adx": adx,
