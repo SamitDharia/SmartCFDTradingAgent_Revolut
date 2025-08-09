@@ -6,8 +6,12 @@ from typing import Iterable, List
 import pandas as pd
 import yfinance as yf
 
+from SmartCFDTradingAgent.utils.logger import get_logger
+
 INTRADAY = {"1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h"}
 FIELDS_ORDER = ["Open", "High", "Low", "Close", "Adj Close", "Volume"]
+
+log = get_logger()
 
 
 def _normalize_to_ticker_field(df: pd.DataFrame, tickers: List[str]) -> pd.DataFrame:
@@ -125,7 +129,7 @@ def get_price_data(
         if frames:
             out = pd.concat(frames, axis=1).sort_index()
             if missing:
-                print(f"{len(missing)} Failed downloads:\n{missing}")
+                log.warning("%d Failed downloads:\n%s", len(missing), missing)
             return out
 
         # nothing worked
@@ -161,7 +165,7 @@ def get_price_data(
     if frames:
         out = pd.concat(frames, axis=1).sort_index()
         if missing:
-            print(f"{len(missing)} Failed downloads:\n{missing}")
+            log.warning("%d Failed downloads:\n%s", len(missing), missing)
         return out
 
     if missing:
