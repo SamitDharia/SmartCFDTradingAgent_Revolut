@@ -27,6 +27,10 @@ Weekend crypto (24/7; no --force needed):
 ```
 python -m SmartCFDTradingAgent.pipeline --watch BTC-USD ETH-USD --size 2 --interval 1h --adx 10 --grace 10 --risk 0.01 --equity 1000
 ```
+Config-based profile run:
+```
+python -m SmartCFDTradingAgent.pipeline --config configs/crypto.yml --profile crypto_1h
+```
 
 Weighted multi-interval voting:
 ```
@@ -60,6 +64,27 @@ Cap the number of alerts in a run:
 python -m SmartCFDTradingAgent.pipeline --watch SPY QQQ DIA IWM --size 4 --max-trades 2
 ```
 
+## Parameter tuning
+Optimize parameters and save them to `SmartCFDTradingAgent/storage/params.json`:
+```
+python -m SmartCFDTradingAgent.optimizer --watch BTC-USD ETH-USD --interval 1h --years 2
+```
+Walk-forward validation (writes to the same params file):
+```
+python -m SmartCFDTradingAgent.walk_forward --watch BTC-USD ETH-USD --interval 1h --years 3 --train-months 6 --test-months 1
+```
+
+## Logs and decisions
+Logs are written under `logs/`. Inspect the latest log, for example:
+```
+ls logs/
+tail -n 20 logs/<recent-log>.log
+```
+Pre-trade decisions accumulate in `SmartCFDTradingAgent/storage/decision_log.csv`:
+```
+tail -n 20 SmartCFDTradingAgent/storage/decision_log.csv
+```
+
 ## Automation
 
 The `scripts` directory contains Unix-friendly `.sh` helpers mirroring the Windows `.cmd` files.
@@ -72,3 +97,4 @@ Schedule runs with `crontab -e`. For example, to execute the market loop at 14:3
 ```
 
 This entry invokes `market_loop.sh` with the same CLI options as its Windows counterpart. Adjust the schedule and paths to suit your environment.
+
