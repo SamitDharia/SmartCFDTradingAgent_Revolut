@@ -12,7 +12,7 @@
 **What’s in this release**
 - Telegram PRE-TRADE alerts (Buy/Sell, price, **SL/TP**, **Qty≈**)
 - Strategy: EMA + MACD with **ADX** filter; optional **multi-timeframe voting** (e.g., 15m/1h/1d)
-- **Intraday data fix**: uses `period=59d` for 15m/1h (Yahoo’s 60-day limit)
+- **Intraday data fix**: uses tested period/interval combos `("7d","1h")`, `("30d","60m")`, `("30d","30m")`, `("7d","15m")`
 - **ATR-based position size** hint + **max portfolio risk** cap
 - **Cooldown** to suppress duplicate (ticker+side) alerts for N minutes
 - **Backtest** snapshot after `--grace` delay
@@ -61,7 +61,7 @@ Edit
 SmartCFDTradingAgent_Revolut/
   SmartCFDTradingAgent/
     pipeline.py            # main loop (alerts + backtest + cooldown)
-    data_loader.py         # yfinance with intraday period=59d
+    data_loader.py         # yfinance intraday combos ("7d","1h"), ("30d","60m"), ("30d","30m"), ("7d","15m")
     signals/ indicators/   # EMA, MACD, ADX, ATR
     backtester.py
     position.py            # qty_from_atr()
@@ -112,7 +112,7 @@ Strategy variants (ATR-based SL/TP live; advanced entries/exits)
 Changelog
 2025-08-09 — v0.1.4
 
-Intraday fetch via period=59d
+Intraday fetch via tested period/interval combos `("7d","1h")`, `("30d","60m")`, `("30d","30m")`, `("7d","15m")`
 
 Cooldown + per-line logging
 
