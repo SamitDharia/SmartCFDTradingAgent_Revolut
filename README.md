@@ -52,3 +52,16 @@ Cap the number of alerts in a run:
 ```
 python -m SmartCFDTradingAgent.pipeline --watch SPY QQQ DIA IWM --size 4 --max-trades 2
 ```
+
+## Automation
+
+The `scripts` directory contains Unix-friendly `.sh` helpers mirroring the Windows `.cmd` files.
+
+### Cron (Unix)
+Schedule runs with `crontab -e`. For example, to execute the market loop at 14:30 UTC every weekday:
+
+```
+30 14 * * 1-5 /path/to/SmartCFDTradingAgent_Revolut/scripts/market_loop.sh >> /path/to/market_loop.log 2>&1
+```
+
+This entry invokes `market_loop.sh` with the same CLI options as its Windows counterpart. Adjust the schedule and paths to suit your environment.
