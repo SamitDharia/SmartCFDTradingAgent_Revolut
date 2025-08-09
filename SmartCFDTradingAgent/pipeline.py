@@ -554,23 +554,32 @@ def main():
         sys.exit(2)
 
     try:
-
         run_cycle(
-            args.watch, args.size, args.grace, args.risk, args.equity,
-            args.force, args.interval, args.adx, args.tz,
-            args.ema_fast, args.ema_slow, args.macd_signal,
-            args.max_trades, args.intervals, args.vote, args.use_params,
-            args.max_portfolio_risk, args.cooldown_min,
-            args.cap_crypto, args.cap_equity, args.cap_per_ticker,
-            args.risk_budget_crypto, args.risk_budget_equity,
+            watch=args.watch,
+            size=args.size,
+            grace=args.grace,
+            risk=args.risk,
+            equity=args.equity,
+            force=args.force,
+            interval=args.interval,
+            adx=args.adx,
+            tz=args.tz,
+            ema_fast=args.ema_fast,
+            ema_slow=args.ema_slow,
+            macd_signal=args.macd_signal,
+            max_trades=args.max_trades,
+            intervals=args.intervals,
+            interval_weights=args.interval_weights,
+            vote=args.vote,
+            use_params=args.use_params,
+            max_portfolio_risk=args.max_portfolio_risk,
+            cooldown_min=args.cooldown_min,
+            cap_crypto=args.cap_crypto,
+            cap_equity=args.cap_equity,
+            cap_per_ticker=args.cap_per_ticker,
+            risk_budget_crypto=args.risk_budget_crypto,
+            risk_budget_equity=args.risk_budget_equity,
         )
-
-        run_cycle(args.watch, args.size, args.grace, args.risk, args.equity,
-                  args.force, args.interval, args.adx, args.tz,
-                  args.max_trades, args.intervals, args.interval_weights, args.vote, args.use_params,
-                  args.max_portfolio_risk, args.cooldown_min,
-                  args.cap_crypto, args.cap_equity, args.cap_per_ticker,
-                  args.risk_budget_crypto, args.risk_budget_equity)
 
     except Exception as e:
         log.exception("Pipeline crashed: %s", e)
