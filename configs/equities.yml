@@ -8,6 +8,9 @@ profiles:
     interval: "1d"
     use_params: true
     adx: 8
+    ema_fast: 15
+    ema_slow: 30
+    macd_signal: 7
     risk: 0.01
     equity: 1000
     cooldown_min: 60
