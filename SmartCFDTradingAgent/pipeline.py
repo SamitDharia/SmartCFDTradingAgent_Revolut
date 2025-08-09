@@ -424,7 +424,7 @@ def run_cycle(watch, size, grace, risk, equity,
         per_trade_budget = max(0.0, remaining_budget[cls]) / planned_left
         per_trade_risk = min(per_trade_budget,  # honor class budget
                              risk)              # honor per-trade cap
-        qty = qty_from_atr(last, atr_val, equity, per_trade_risk)
+        qty = qty_from_atr(atr_val, equity, per_trade_risk)
 
         risk_eur = round(per_trade_risk * equity, 2)
         atr_pct = (atr_val / last) * 100.0 if last else 0.0
