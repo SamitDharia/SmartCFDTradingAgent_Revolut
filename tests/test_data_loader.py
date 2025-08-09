@@ -1,11 +1,13 @@
 import sys
 from pathlib import Path
 
+
 import pandas as pd
 import pytest
 
 # Ensure project root is on path
 sys.path.append(str(Path(__file__).resolve().parents[1]))
+
 
 from SmartCFDTradingAgent.data_loader import get_price_data
 
@@ -36,4 +38,3 @@ def test_get_price_data_logs_missing_warning(monkeypatch, caplog):
 
     assert any("Failed downloads" in r.message for r in caplog.records)
     assert any("BAD" in r.message for r in caplog.records)
-
