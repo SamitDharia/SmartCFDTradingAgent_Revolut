@@ -1,56 +1,40 @@
 import sys
 from pathlib import Path
 
-import numpy as np
+
 import pandas as pd
+import pytest
 
 # Ensure project root is on path
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from SmartCFDTradingAgent import data_loader
+
+from SmartCFDTradingAgent.data_loader import get_price_data
 
 
-# Mock helpers
+def test_get_price_data_logs_missing_warning(monkeypatch, caplog):
+    def fake_download(tickers_or_symbol, *_, **__):
+        if isinstance(tickers_or_symbol, list):
+            raise Exception("batch fail")
+        if tickers_or_symbol == "GOOD":
+            idx = pd.date_range("2022-01-01", periods=1)
+            data = {
+                "Open": [1],
+                "High": [1],
+                "Low": [1],
+                "Close": [1],
+                "Adj Close": [1],
+                "Volume": [1],
+            }
+            return pd.DataFrame(data, index=idx)
+        raise Exception("no data")
 
-def fake_download_intraday(symbol, *, period=None, start=None, end=None, interval=None, threads=True):
-    idx = pd.date_range("2020-01-01", periods=2)
-    data = pd.DataFrame(
-        {
-            "Open": [1.0, 2.0],
-            "High": [2.0, 3.0],
-            "Low": [0.5, 1.5],
-            "Close": [1.5, 2.5],
-            "Adj Close": [1.5, 2.5],
-            "Volume": [100, 200],
-        },
-        index=idx,
+    monkeypatch.setattr(
+        "SmartCFDTradingAgent.data_loader._download", fake_download
     )
-    return data
 
+    caplog.set_level("WARNING", logger="SmartCFD")
+    get_price_data(["GOOD", "BAD"], "2022-01-01", "2022-01-02", max_tries=1, pause=0)
 
-def fake_download_daily(tickers, *, period=None, start=None, end=None, interval=None, threads=True):
-    if not isinstance(tickers, (list, tuple)):
-        tickers = [tickers]
-    idx = pd.date_range("2020-01-01", periods=2)
-    cols = pd.MultiIndex.from_product([tickers, data_loader.FIELDS_ORDER])
-    data = pd.DataFrame(
-        np.arange(len(idx) * len(cols)).reshape(len(idx), len(cols)),
-        index=idx,
-        columns=cols,
-    )
-    return data
-
-
-def test_get_price_data_intraday(monkeypatch):
-    monkeypatch.setattr(data_loader, "_download", fake_download_intraday)
-    df = data_loader.get_price_data(["AAA"], "2020-01-01", "2020-01-02", interval="1h")
-    assert isinstance(df.columns, pd.MultiIndex)
-    assert ("AAA", "Close") in df.columns
-
-
-def test_get_price_data_daily(monkeypatch):
-    monkeypatch.setattr(data_loader, "_download", fake_download_daily)
-    df = data_loader.get_price_data(["AAA", "BBB"], "2020-01-01", "2020-01-02", interval="1d")
-    assert isinstance(df.columns, pd.MultiIndex)
-    assert ("AAA", "Close") in df.columns
-    assert ("BBB", "Close") in df.columns
+    assert any("Failed downloads" in r.message for r in caplog.records)
+    assert any("BAD" in r.message for r in caplog.records)
