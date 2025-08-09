@@ -1,0 +1,18 @@
+profiles:
+  equities_daily:
+    watch:
+      - SPY
+      - QQQ
+      - DIA
+      - IWM
+    interval: "1d"
+    use_params: true
+    adx: 8
+    risk: 0.01
+    equity: 1000
+    cooldown_min: 60
+    cap_equity: 2
+    cap_crypto: 0
+    max_trades: 2
+    risk_budget_equity: 0.02
+    grace: 120

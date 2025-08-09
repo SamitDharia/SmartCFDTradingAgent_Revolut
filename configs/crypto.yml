@@ -1,0 +1,15 @@
+profiles:
+  crypto_1h:
+    watch: [BTC-USD, ETH-USD]
+    interval: "1h"
+    intervals: "15m,1h"
+    vote: true
+    adx: 10
+    risk: 0.02
+    equity: 1000
+    cooldown_min: 30
+    cap_crypto: 2
+    cap_equity: 0
+    max_trades: 10
+    risk_budget_crypto: 0.10
+    grace: 0
