@@ -62,6 +62,38 @@ def _normalize_intervals(intervals) -> list[str]:
     # anything else -> single item
     s = str(intervals).strip()
     return [s] if s else []
+
+def _parse_interval_weights(weights) -> dict[str, float]:
+    """Parse interval weight mapping from a string or dict.
+
+    Accepts strings like "15m=1,1h=2" or a dict mapping interval to weight.
+    Returns a dict with float weights, defaulting to empty dict if parsing fails.
+    """
+    if not weights:
+        return {}
+    if isinstance(weights, dict):
+        out: dict[str, float] = {}
+        for k, v in weights.items():
+            try:
+                out[str(k).strip()] = float(v)
+            except (TypeError, ValueError):
+                continue
+        return out
+    if isinstance(weights, str):
+        out: dict[str, float] = {}
+        for part in weights.split(","):
+            part = part.strip()
+            if not part or "=" not in part:
+                continue
+            iv, w = part.split("=", 1)
+            try:
+                out[iv.strip()] = float(w)
+            except ValueError:
+                continue
+        return out
+    if isinstance(weights, (list, tuple)):
+        return _parse_interval_weights(",".join(map(str, weights)))
+    return {}
 # -------------------------------------------
 
 def write_decision_log(rows: list[dict]):
@@ -143,13 +175,24 @@ def send_daily_summary(tz: str = "Europe/Dublin") -> str:
     safe_send(msg)
     return msg
 
-def vote_signals(maps: list[dict]) -> dict:
-    out = {}
-    keys = set().union(*[m.keys() for m in maps])
+def vote_signals(maps: dict[str, dict], weights: dict[str, float] | None = None) -> dict:
+    """Weighted majority vote across interval signal maps.
+
+    ``maps`` should map interval strings to signal dictionaries. ``weights``
+    assigns a numeric weight to each interval; unspecified intervals default to 1.
+    """
+    weights = weights or {}
+    out: dict = {}
+    if not maps:
+        return out
+    keys = set().union(*[m.keys() for m in maps.values()])
     for k in keys:
-        votes = [m.get(k, 'Hold') for m in maps]
-        # majority vote (change to consensus if you want stricter behavior)
-        out[k] = max(set(votes), key=votes.count)
+        tally: dict[str, float] = {}
+        for iv, m in maps.items():
+            side = m.get(k, "Hold")
+            w = weights.get(iv, 1.0)
+            tally[side] = tally.get(side, 0.0) + w
+        out[k] = max(tally, key=tally.get)
     return out
 
 def _max_lookback_days(iv: str) -> int:
@@ -230,7 +273,7 @@ def load_profile_config(path: str, profile: str) -> dict:
 
 def run_cycle(watch, size, grace, risk, equity,
               force=False, interval="1d", adx=15, tz="Europe/Dublin",
-              max_trades=999, intervals="", vote=False, use_params=False,
+              max_trades=999, intervals="", interval_weights=None, vote=False, use_params=False,
               max_portfolio_risk=0.02, cooldown_min=30,
               cap_crypto=2, cap_equity=2, cap_per_ticker=1,
               risk_budget_crypto=0.01, risk_budget_equity=0.01):
@@ -256,16 +299,19 @@ def run_cycle(watch, size, grace, risk, equity,
 
     # Multi-interval voting (accept list OR string)
     if vote and intervals:
-        maps = [base_sig]
+        weights = _parse_interval_weights(interval_weights)
+        maps = {interval: base_sig}
         for itv in _normalize_intervals(intervals):
+            if itv in maps:
+                continue
             try:
                 lb_v = _max_lookback_days(itv)
                 start_v = (dt.date.today() - dt.timedelta(days=lb_v)).isoformat()
                 price_v = get_price_data(tickers, start_v, end, interval=itv)
-                maps.append(generate_signals(price_v, adx_threshold=adx))
+                maps[itv] = generate_signals(price_v, adx_threshold=adx)
             except Exception as e:
                 log.error("Voting interval %s failed: %s", itv, e)
-        base_sig = vote_signals(maps)
+        base_sig = vote_signals(maps, weights)
 
     params = load_params()
     key_group = ",".join(sorted(watch)) + "|" + interval
@@ -423,6 +469,7 @@ def main():
     ap.add_argument("--risk-budget-equity", type=float, default=0.01)
     # Voting / params
     ap.add_argument("--intervals", default="")
+    ap.add_argument("--interval-weights", default="", help="Weights for voting intervals, e.g. 15m=1,1h=2")
     ap.add_argument("--vote", action="store_true")
     ap.add_argument("--use-params", action="store_true")
     # Utility / reporting
@@ -463,6 +510,7 @@ def main():
             tz=cfg.get("tz", args.tz),
             max_trades=int(cfg.get("max_trades", args.max_trades)),
             intervals=cfg.get("intervals", args.intervals),  # list or string — handled inside run_cycle
+            interval_weights=cfg.get("interval_weights", args.interval_weights),
             vote=bool(cfg.get("vote", args.vote)),
             use_params=bool(cfg.get("use_params", args.use_params)),
             max_portfolio_risk=float(cfg.get("max_portfolio_risk", args.max_portfolio_risk)),
@@ -482,7 +530,7 @@ def main():
     try:
         run_cycle(args.watch, args.size, args.grace, args.risk, args.equity,
                   args.force, args.interval, args.adx, args.tz,
-                  args.max_trades, args.intervals, args.vote, args.use_params,
+                  args.max_trades, args.intervals, args.interval_weights, args.vote, args.use_params,
                   args.max_portfolio_risk, args.cooldown_min,
                   args.cap_crypto, args.cap_equity, args.cap_per_ticker,
                   args.risk_budget_crypto, args.risk_budget_equity)
