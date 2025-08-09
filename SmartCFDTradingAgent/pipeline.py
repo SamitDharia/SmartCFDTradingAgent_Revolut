@@ -273,7 +273,10 @@ def load_profile_config(path: str, profile: str) -> dict:
 
 def run_cycle(watch, size, grace, risk, equity,
               force=False, interval="1d", adx=15, tz="Europe/Dublin",
+
+              ema_fast=12, ema_slow=26, macd_signal=9,
               max_trades=999, intervals="", interval_weights=None, vote=False, use_params=False,
+
               max_portfolio_risk=0.02, cooldown_min=30,
               cap_crypto=2, cap_equity=2, cap_per_ticker=1,
               risk_budget_crypto=0.01, risk_budget_equity=0.01):
@@ -294,7 +297,9 @@ def run_cycle(watch, size, grace, risk, equity,
     lookback_days = _max_lookback_days(interval)
     start = (dt.date.today() - dt.timedelta(days=lookback_days)).isoformat()
     price = get_price_data(tickers, start, end, interval=interval)
-    base_sig = generate_signals(price, adx_threshold=adx)
+    base_sig = generate_signals(price, adx_threshold=adx,
+                                fast_span=ema_fast, slow_span=ema_slow,
+                                macd_signal=macd_signal)
     log.info("Signals: %s", base_sig)
 
     # Multi-interval voting (accept list OR string)
@@ -308,14 +313,33 @@ def run_cycle(watch, size, grace, risk, equity,
                 lb_v = _max_lookback_days(itv)
                 start_v = (dt.date.today() - dt.timedelta(days=lb_v)).isoformat()
                 price_v = get_price_data(tickers, start_v, end, interval=itv)
+
+                maps.append(
+                    generate_signals(
+                        price_v,
+                        adx_threshold=adx,
+                        fast_span=ema_fast,
+                        slow_span=ema_slow,
+                        macd_signal=macd_signal,
+                    )
+                )
+
                 maps[itv] = generate_signals(price_v, adx_threshold=adx)
+
             except Exception as e:
                 log.error("Voting interval %s failed: %s", itv, e)
         base_sig = vote_signals(maps, weights)
 
     params = load_params()
     key_group = ",".join(sorted(watch)) + "|" + interval
-    defaults = {"adx": adx, "sl": 0.02, "tp": 0.04, "ema_fast": 12, "ema_slow": 26}
+    defaults = {
+        "adx": adx,
+        "sl": 0.02,
+        "tp": 0.04,
+        "ema_fast": ema_fast,
+        "ema_slow": ema_slow,
+        "macd_signal": macd_signal,
+    }
 
     header = f"PRE-TRADE {now_local:%Y-%m-%d %H:%M} {tz_label} (int={interval})"
     lines = [header]
@@ -457,6 +481,9 @@ def main():
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--interval", default="1d")
     ap.add_argument("--adx", type=int, default=15)
+    ap.add_argument("--ema-fast", type=int, default=12)
+    ap.add_argument("--ema-slow", type=int, default=26)
+    ap.add_argument("--macd-signal", type=int, default=9)
     ap.add_argument("--tz", default="Europe/Dublin")
     # Caps & budgets
     ap.add_argument("--max-trades", type=int, default=999)
@@ -508,6 +535,9 @@ def main():
             interval=cfg.get("interval", args.interval),
             adx=int(cfg.get("adx", args.adx)),
             tz=cfg.get("tz", args.tz),
+            ema_fast=int(cfg.get("ema_fast", args.ema_fast)),
+            ema_slow=int(cfg.get("ema_slow", args.ema_slow)),
+            macd_signal=int(cfg.get("macd_signal", args.macd_signal)),
             max_trades=int(cfg.get("max_trades", args.max_trades)),
             intervals=cfg.get("intervals", args.intervals),  # list or string — handled inside run_cycle
             interval_weights=cfg.get("interval_weights", args.interval_weights),
@@ -528,12 +558,24 @@ def main():
         sys.exit(2)
 
     try:
+
+        run_cycle(
+            args.watch, args.size, args.grace, args.risk, args.equity,
+            args.force, args.interval, args.adx, args.tz,
+            args.ema_fast, args.ema_slow, args.macd_signal,
+            args.max_trades, args.intervals, args.vote, args.use_params,
+            args.max_portfolio_risk, args.cooldown_min,
+            args.cap_crypto, args.cap_equity, args.cap_per_ticker,
+            args.risk_budget_crypto, args.risk_budget_equity,
+        )
+
         run_cycle(args.watch, args.size, args.grace, args.risk, args.equity,
                   args.force, args.interval, args.adx, args.tz,
                   args.max_trades, args.intervals, args.interval_weights, args.vote, args.use_params,
                   args.max_portfolio_risk, args.cooldown_min,
                   args.cap_crypto, args.cap_equity, args.cap_per_ticker,
                   args.risk_budget_crypto, args.risk_budget_equity)
+
     except Exception as e:
         log.exception("Pipeline crashed: %s", e)
         safe_send(f"⚠️ SmartCFD crashed\n{e}")
