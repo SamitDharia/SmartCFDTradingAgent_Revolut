@@ -2,21 +2,25 @@
 
 Rank assets, generate signals, and send manual execution alerts via Telegram (with SL/TP).
 
-## Install (Windows)
+## Installation
 
-```bat
-cd C:\Projects\SmartCFDTradingAgent_Revolut
-python -m venv venv
-venv\Scripts\activate
+Create a virtual environment and install the project in editable mode. This makes the
+`SmartCFDTradingAgent` package available on your `PYTHONPATH` without any manual path
+modifications:
+
+```bash
+git clone <repo-url>
+cd SmartCFDTradingAgent_Revolut
+python -m venv .venv
+source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
 pip install -e .
 ```
 
-## Development
+## Development workflow
 
-After cloning the repository and installing in editable mode with `pip install -e .`,
-run the test suite to verify everything is working:
+With the package installed, run the test suite using the standard package imports:
 
-```
+```bash
 pytest
 ```
 
