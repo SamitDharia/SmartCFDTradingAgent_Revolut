@@ -1,0 +1,24 @@
+profiles:
+  multi_example:
+    watch:
+      - BTC-USD
+      - SPY
+      - EURUSD=X
+      - XAUUSD=X
+    interval: "1h"
+    adx: 10
+    risk: 0.01
+    equity: 1000
+    class_caps:
+      crypto: 1
+      equity: 1
+      forex: 1
+      commodity: 1
+    class_risk_budget:
+      crypto: 0.01
+      equity: 0.01
+      forex: 0.005
+      commodity: 0.005
+    cooldown_min: 30
+    max_trades: 4
+    grace: 0

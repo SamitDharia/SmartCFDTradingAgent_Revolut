@@ -26,6 +26,10 @@ from SmartCFDTradingAgent.signals import generate_signals
 from SmartCFDTradingAgent.backtester import backtest
 from SmartCFDTradingAgent.position import qty_from_atr
 from SmartCFDTradingAgent.indicators import adx as _adx
+try:  # PyYAML may be missing in minimal environments
+    import yaml  # type: ignore
+except Exception:  # pragma: no cover - fallback for tests
+    yaml = None  # type: ignore
 
 log = get_logger()
 ROOT = Path(__file__).resolve().parent
@@ -39,12 +43,45 @@ def safe_send(msg: str) -> None:
     except Exception as e:
         log.error("Telegram send failed: %s", e)
 
-def is_crypto(t: str) -> bool:
-    t = (t or "").upper()
-    return t.endswith("-USD") and (t.startswith("BTC") or t.startswith("ETH") or t in ("BTC-USD", "ETH-USD"))
+# --- asset classification ---
+ASSET_MAP: dict[str, str] = {}
+
+
+def _load_asset_classes(path: Path | None = None) -> dict[str, str]:
+    """Load ticker -> class mapping from a YAML file.
+
+    The YAML may map classes to lists of tickers or tickers to classes.
+    Any tickers not present default to ``equity``.
+    """
+    if yaml is None:
+        return {}
+    path = path or ROOT / "assets.yml"
+    try:
+        data = yaml.safe_load(path.read_text()) or {}
+    except Exception:
+        return {}
+
+    mapping: dict[str, str] = {}
+    if isinstance(data, dict):
+        if all(isinstance(v, (list, tuple, set)) for v in data.values()):
+            for cls, tickers in data.items():
+                for t in tickers:
+                    mapping[str(t).upper()] = str(cls)
+        else:
+            for t, cls in data.items():
+                mapping[str(t).upper()] = str(cls)
+    return mapping
+
+
+ASSET_MAP = _load_asset_classes()
+
 
 def classify(t: str) -> str:
-    return "crypto" if is_crypto(t) else "equity"
+    return ASSET_MAP.get((t or "").upper(), "equity")
+
+
+def is_crypto(t: str) -> bool:
+    return classify(t) == "crypto"
 
 def _normalize_intervals(intervals) -> list[str]:
     """Accept list/tuple/set or comma-separated string; return clean list of strings."""
@@ -93,6 +130,35 @@ def _parse_interval_weights(weights) -> dict[str, float]:
         return out
     if isinstance(weights, (list, tuple)):
         return _parse_interval_weights(",".join(map(str, weights)))
+    return {}
+
+
+def _parse_class_caps(caps) -> dict[str, int]:
+    """Parse class cap mapping from a string or dict."""
+    if not caps:
+        return {}
+    if isinstance(caps, dict):
+        out: dict[str, int] = {}
+        for k, v in caps.items():
+            try:
+                out[str(k).strip()] = int(v)
+            except (TypeError, ValueError):
+                continue
+        return out
+    if isinstance(caps, str):
+        out: dict[str, int] = {}
+        for part in caps.split(","):
+            part = part.strip()
+            if not part or "=" not in part:
+                continue
+            k, v = part.split("=", 1)
+            try:
+                out[k.strip()] = int(v)
+            except ValueError:
+                continue
+        return out
+    if isinstance(caps, (list, tuple)):
+        return _parse_class_caps(",".join(map(str, caps)))
     return {}
 # -------------------------------------------
 
@@ -279,7 +345,8 @@ def run_cycle(watch, size, grace, risk, equity,
 
               max_portfolio_risk=0.02, cooldown_min=30,
               cap_crypto=2, cap_equity=2, cap_per_ticker=1,
-              risk_budget_crypto=0.01, risk_budget_equity=0.01):
+              risk_budget_crypto=0.01, risk_budget_equity=0.01,
+              class_caps=None, class_risk_budget=None):
 
     # Market hours gate (skip if equity market closed unless it's crypto-only or --force)
     if not force and not (all(is_crypto(t) for t in watch) or market_open()):
@@ -343,8 +410,14 @@ def run_cycle(watch, size, grace, risk, equity,
     last_state = _load_last_signals()
     now_iso = now_local.isoformat(timespec="minutes")
 
-    c_crypto = 0; c_equity = 0; per_tkr = {}
-    candidates: list[tuple[str,str,str,dict]] = []
+    per_cls: Counter = Counter()
+    per_tkr: dict[str, int] = {}
+    candidates: list[tuple[str, str, str, dict]] = []
+
+    caps = _parse_class_caps(class_caps)
+    caps.setdefault("crypto", cap_crypto)
+    caps.setdefault("equity", cap_equity)
+    default_cap = caps.get("_", max_trades)
 
     # Filter candidates by caps and tuned ADX
     for tkr in tickers:
@@ -363,29 +436,36 @@ def run_cycle(watch, size, grace, risk, equity,
         except Exception:
             pass
 
-        if cls == "crypto":
-            if c_crypto >= cap_crypto:
-                log.info("Cap skip (crypto): %s", tkr); continue
-        else:
-            if c_equity >= cap_equity:
-                log.info("Cap skip (equity): %s", tkr); continue
+        if per_cls[cls] >= caps.get(cls, default_cap):
+            log.info("Cap skip (%s): %s", cls, tkr); continue
         if per_tkr.get(tkr, 0) >= cap_per_ticker:
             log.info("Cap skip (per-ticker): %s", tkr); continue
 
         candidates.append((tkr, side, cls, tuned))
-        if cls == "crypto": c_crypto += 1
-        else:               c_equity += 1
+        per_cls[cls] += 1
         per_tkr[tkr] = per_tkr.get(tkr, 0) + 1
         if len(candidates) >= max_trades:
             break
 
     # Risk budgeting per class
-    use_split = (risk_budget_crypto > 0 or risk_budget_equity > 0)
-    budget = {
-        "crypto": risk_budget_crypto if use_split else max_portfolio_risk / 2.0,
-        "equity": risk_budget_equity if use_split else max_portfolio_risk / 2.0,
-    }
-    planned_counts = Counter(cls for _,_,cls,_ in candidates)
+    planned_counts = Counter(cls for _, _, cls, _ in candidates)
+    classes = list(planned_counts.keys())
+    budgets_input = _parse_interval_weights(class_risk_budget)
+    if not budgets_input and (risk_budget_crypto > 0 or risk_budget_equity > 0):
+        budgets_input = {"crypto": risk_budget_crypto, "equity": risk_budget_equity}
+    if budgets_input:
+        specified_total = sum(budgets_input.get(cls, 0.0) for cls in classes)
+        unspecified = [c for c in classes if c not in budgets_input]
+        remaining_port = max(0.0, max_portfolio_risk - specified_total)
+        budget = {cls: budgets_input.get(cls, 0.0) for cls in classes}
+        if unspecified:
+            per_cls_budget = remaining_port / len(unspecified)
+            for c in unspecified:
+                budget[c] = per_cls_budget
+    else:
+        per_cls_budget = max_portfolio_risk / max(1, len(classes))
+        budget = {cls: per_cls_budget for cls in classes}
+
     remaining = planned_counts.copy()
     remaining_budget = budget.copy()
 
@@ -444,9 +524,10 @@ def run_cycle(watch, size, grace, risk, equity,
         last_state[key] = now_iso
 
     if len(lines) == 1:
+        caps_msg = ", ".join(f"{k}={v}" for k, v in caps.items()) or "none"
         lines.append(
             f"All alerts suppressed by caps/cooldown/filters "
-            f"(caps: crypto={cap_crypto}, equity={cap_equity}, per_ticker={cap_per_ticker}; cooldown={cooldown_min} min)."
+            f"(caps: {caps_msg}, per_ticker={cap_per_ticker}; cooldown={cooldown_min} min)."
         )
 
     txt = "\n".join(lines)
@@ -490,6 +571,8 @@ def main():
     ap.add_argument("--max-portfolio-risk", type=float, default=0.02)
     ap.add_argument("--risk-budget-crypto", type=float, default=0.01)
     ap.add_argument("--risk-budget-equity", type=float, default=0.01)
+    ap.add_argument("--class-caps", default="", help="Per-class caps, e.g. crypto=2,forex=1")
+    ap.add_argument("--class-risk-budget", default="", help="Per-class risk budgets, e.g. crypto=0.01,forex=0.005")
     # Voting / params
     ap.add_argument("--intervals", default="")
     ap.add_argument("--interval-weights", default="", help="Weights for voting intervals, e.g. 15m=1,1h=2")
@@ -546,6 +629,8 @@ def main():
             cap_per_ticker=int(cfg.get("cap_per_ticker", args.cap_per_ticker)),
             risk_budget_crypto=float(cfg.get("risk_budget_crypto", args.risk_budget_crypto)),
             risk_budget_equity=float(cfg.get("risk_budget_equity", args.risk_budget_equity)),
+            class_caps=_parse_class_caps(cfg.get("class_caps", args.class_caps)),
+            class_risk_budget=_parse_interval_weights(cfg.get("class_risk_budget", args.class_risk_budget)),
         )
         return
 
@@ -579,6 +664,8 @@ def main():
             cap_per_ticker=args.cap_per_ticker,
             risk_budget_crypto=args.risk_budget_crypto,
             risk_budget_equity=args.risk_budget_equity,
+            class_caps=_parse_class_caps(args.class_caps),
+            class_risk_budget=_parse_interval_weights(args.class_risk_budget),
         )
 
     except Exception as e:
