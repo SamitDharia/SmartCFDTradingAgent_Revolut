@@ -1,10 +1,4 @@
-import sys
-from pathlib import Path
-
 import pytest
-
-# Ensure project root is on path
-sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from SmartCFDTradingAgent.position import qty_from_atr
 

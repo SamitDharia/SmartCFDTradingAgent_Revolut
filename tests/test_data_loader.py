@@ -1,14 +1,5 @@
-import sys
-from pathlib import Path
-
-
 import pandas as pd
 import pytest
-
-# Ensure project root is on path
-sys.path.append(str(Path(__file__).resolve().parents[1]))
-
-
 from SmartCFDTradingAgent.data_loader import get_price_data
 
 
