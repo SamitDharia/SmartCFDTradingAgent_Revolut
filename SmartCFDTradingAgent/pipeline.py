@@ -36,6 +36,11 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:  # pragma: no cover - hint only
     from SmartCFDTradingAgent.ml_models import PriceDirectionModel
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover - hint only
+    from SmartCFDTradingAgent.ml_models import PriceDirectionModel
+
 log = get_logger()
 ROOT = Path(__file__).resolve().parent
 STORE = ROOT / "storage"
