@@ -27,6 +27,11 @@ from SmartCFDTradingAgent.backtester import backtest
 from SmartCFDTradingAgent.position import qty_from_atr
 from SmartCFDTradingAgent.indicators import adx as _adx
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover - hint only
+    from SmartCFDTradingAgent.ml_models import PriceDirectionModel
+
 log = get_logger()
 ROOT = Path(__file__).resolve().parent
 STORE = ROOT / "storage"
@@ -275,6 +280,7 @@ def run_cycle(watch, size, grace, risk, equity,
               force=False, interval="1d", adx=15, tz="Europe/Dublin",
 
               ema_fast=12, ema_slow=26, macd_signal=9,
+              ml_model: "PriceDirectionModel | None" = None, ml_threshold: float = 0.6,
               max_trades=999, intervals="", interval_weights=None, vote=False, use_params=False,
 
               max_portfolio_risk=0.02, cooldown_min=30,
@@ -297,9 +303,15 @@ def run_cycle(watch, size, grace, risk, equity,
     lookback_days = _max_lookback_days(interval)
     start = (dt.date.today() - dt.timedelta(days=lookback_days)).isoformat()
     price = get_price_data(tickers, start, end, interval=interval)
-    base_sig = generate_signals(price, adx_threshold=adx,
-                                fast_span=ema_fast, slow_span=ema_slow,
-                                macd_signal=macd_signal)
+    base_sig = generate_signals(
+        price,
+        adx_threshold=adx,
+        fast_span=ema_fast,
+        slow_span=ema_slow,
+        macd_signal=macd_signal,
+        ml_model=ml_model,
+        ml_threshold=ml_threshold,
+    )
     log.info("Signals: %s", base_sig)
 
     # Multi-interval voting (accept list OR string)
@@ -320,6 +332,8 @@ def run_cycle(watch, size, grace, risk, equity,
                     fast_span=ema_fast,
                     slow_span=ema_slow,
                     macd_signal=macd_signal,
+                    ml_model=ml_model,
+                    ml_threshold=ml_threshold,
                 )
 
             except Exception as e:
@@ -481,6 +495,8 @@ def main():
     ap.add_argument("--ema-slow", type=int, default=26)
     ap.add_argument("--macd-signal", type=int, default=9)
     ap.add_argument("--tz", default="Europe/Dublin")
+    ap.add_argument("--ml-model", help="Path to trained ML model for signal blending")
+    ap.add_argument("--ml-threshold", type=float, default=0.6, help="Probability threshold for ML override")
     # Caps & budgets
     ap.add_argument("--max-trades", type=int, default=999)
     ap.add_argument("--cap-crypto", type=int, default=2)
@@ -521,6 +537,14 @@ def main():
             watch = watch.split()
         if not watch:
             print("Config missing 'watch' list."); sys.exit(2)
+        model_cfg = None
+        ml_path = cfg.get("ml_model", args.ml_model)
+        if ml_path:
+            try:
+                from SmartCFDTradingAgent.ml_models import PriceDirectionModel
+                model_cfg = PriceDirectionModel.load(ml_path)
+            except Exception as e:
+                log.error("Failed to load ML model from config: %s", e)
         run_cycle(
             watch=watch,
             size=int(cfg.get("size", args.size)),
@@ -534,6 +558,8 @@ def main():
             ema_fast=int(cfg.get("ema_fast", args.ema_fast)),
             ema_slow=int(cfg.get("ema_slow", args.ema_slow)),
             macd_signal=int(cfg.get("macd_signal", args.macd_signal)),
+            ml_model=model_cfg,
+            ml_threshold=float(cfg.get("ml_threshold", args.ml_threshold)),
             max_trades=int(cfg.get("max_trades", args.max_trades)),
             intervals=cfg.get("intervals", args.intervals),  # list or string — handled inside run_cycle
             interval_weights=cfg.get("interval_weights", args.interval_weights),
@@ -553,6 +579,14 @@ def main():
         print("Error: --watch is required for normal run.")
         sys.exit(2)
 
+    model = None
+    if args.ml_model:
+        try:
+            from SmartCFDTradingAgent.ml_models import PriceDirectionModel
+            model = PriceDirectionModel.load(args.ml_model)
+        except Exception as e:
+            log.error("Failed to load ML model: %s", e)
+
     try:
         run_cycle(
             watch=args.watch,
@@ -567,6 +601,8 @@ def main():
             ema_fast=args.ema_fast,
             ema_slow=args.ema_slow,
             macd_signal=args.macd_signal,
+            ml_model=model,
+            ml_threshold=args.ml_threshold,
             max_trades=args.max_trades,
             intervals=args.intervals,
             interval_weights=args.interval_weights,
