@@ -15,8 +15,9 @@ profiles:
     risk: 0.01
     equity: 1000
     cooldown_min: 60
-    cap_equity: 2
-    cap_crypto: 0
+    class_caps:
+      equity: 2
+    class_risk_budget:
+      equity: 0.02
     max_trades: 2
-    risk_budget_equity: 0.02
     grace: 120

@@ -27,6 +27,11 @@ BOT_TOKEN=123456:ABC-XYZ
 CHAT_ID=123456789
 ```
 
+## Asset categories
+Tickers are grouped into asset classes in `SmartCFDTradingAgent/assets.yml` (e.g. `crypto`, `equity`, `forex`, `commodity`).
+These categories drive per-class alert caps and risk budgets via the `class_caps` and
+`class_risk_budget` options in configuration files or CLI arguments.
+
 ## Run examples
 Weekday equities (NYSE hours):
 ```
@@ -39,6 +44,11 @@ python -m SmartCFDTradingAgent.pipeline --watch BTC-USD ETH-USD --size 2 --inter
 Config-based profile run:
 ```
 python -m SmartCFDTradingAgent.pipeline --config configs/crypto.yml --profile crypto_1h
+```
+
+Multi-asset example with per-class caps and risk budgets:
+```
+python -m SmartCFDTradingAgent.pipeline --config configs/multi_asset.yml --profile multi_example
 ```
 
 Weighted multi-interval voting:
