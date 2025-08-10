@@ -1,10 +1,4 @@
-import sys
-from pathlib import Path
-
 import pandas as pd
-
-# Ensure project root is on path
-sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from SmartCFDTradingAgent.signals import generate_signals
 

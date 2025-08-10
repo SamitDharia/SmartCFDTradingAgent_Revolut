@@ -8,7 +8,16 @@ Rank assets, generate signals, and send manual execution alerts via Telegram (wi
 cd C:\Projects\SmartCFDTradingAgent_Revolut
 python -m venv venv
 venv\Scripts\activate
-pip install -r requirements.txt
+pip install -e .
+```
+
+## Development
+
+After cloning the repository and installing in editable mode with `pip install -e .`,
+run the test suite to verify everything is working:
+
+```
+pytest
 ```
 
 ## Configure Telegram
