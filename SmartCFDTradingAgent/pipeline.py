@@ -462,10 +462,14 @@ def run_cycle(watch, size, grace, risk, equity,
     time.sleep(max(0, grace))
 
     # Lightweight backtest preview on the same data slice
-    pnl = backtest(price, base_sig, max_hold=5, cost=0.0002,
-                   sl=defaults["sl"], tp=defaults["tp"], risk_pct=risk, equity=equity)
+    pnl, stats, _ = backtest(price, base_sig, max_hold=5, cost=0.0002,
+                             sl=defaults["sl"], tp=defaults["tp"], risk_pct=risk, equity=equity)
     last_cum = pnl["cum_return"].iloc[-1]
-    safe_send(f"Backtest cum return (1yr): {last_cum:.2f}x")
+    msg = ("Backtest cum return (1yr): "
+           f"{last_cum:.2f}x | Sharpe {stats['sharpe']:.2f} | "
+           f"Max DD {stats['max_drawdown']:.2%} | Win rate {stats['win_rate']:.2%}")
+    safe_send(msg)
+    return pnl, stats
 
 def main():
     ap = argparse.ArgumentParser()
