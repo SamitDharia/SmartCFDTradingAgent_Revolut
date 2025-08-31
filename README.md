@@ -41,12 +41,9 @@ TELEGRAM_BOT_TOKEN=123456:ABC-XYZ TELEGRAM_CHAT_ID=123456789 \
 python -c "from SmartCFDTradingAgent.utils.telegram import send; send('test')"
 ```
 
-Windows Task Scheduler users can set **Start in** to the project root and
-include environment variables in the command:
-
-```
-cmd /c "set TELEGRAM_BOT_TOKEN=123456:ABC-XYZ && set TELEGRAM_CHAT_ID=123456789 && python -c \"from SmartCFDTradingAgent.utils.telegram import send; send('test')\""
-```
+Windows Task Scheduler users should set **Start in** to the project root and
+include environment variables in the command. See [Scheduling on Windows](#scheduling-on-windows)
+for a step-by-step guide and sample command.
 
 ## Asset categories
 Tickers are grouped into asset classes in `SmartCFDTradingAgent/assets.yml` (e.g. `crypto`, `equity`, `forex`, `commodity`).
@@ -136,5 +133,18 @@ Schedule runs with `crontab -e`. For example, to execute the market loop at 14:3
 30 14 * * 1-5 /path/to/SmartCFDTradingAgent_Revolut/scripts/market_loop.sh >> /path/to/market_loop.log 2>&1
 ```
 
-This entry invokes `market_loop.sh` with the same CLI options as its Windows counterpart. Adjust the schedule and paths to suit your environment.
+This entry invokes `market_loop.sh` with the same CLI options as its Windows counterpart. Adjust the schedule and paths to suit your environment. See [docs/linux-scheduling.md](docs/linux-scheduling.md) for more examples.
 
+### Scheduling on Windows
+1. Open **Task Scheduler** and choose **Create Basic Task...**.
+2. Select a trigger (daily, at startup, etc.) and proceed to the **Action** step.
+3. Set **Program/script** to `cmd` and **Add arguments** to:
+
+   ```
+   /c "set TELEGRAM_BOT_TOKEN=123456:ABC-XYZ && set TELEGRAM_CHAT_ID=123456789 && python -m SmartCFDTradingAgent.pipeline --config configs/crypto.yml --profile crypto_1h"
+   ```
+
+4. In **Start in**, browse to the project root (where `.env` resides).
+5. Finish the wizard and ensure the task runs under an account with the required permissions.
+
+The `set` commands above define environment variables for the task before launching Python. Adjust the command and schedule for your environment. See [docs/windows-scheduling.md](docs/windows-scheduling.md) for more examples.
