@@ -32,9 +32,14 @@ class AlpacaBroker(Broker):
         )
 
     # --- helper methods ---
-    def get_equity(self) -> float:
+    def get_equity(self) -> float | None:
         """Return account equity from Alpaca."""
-        acct = self.api.get_account()
+        try:
+            acct = self.api.get_account()
+        except Exception as e:  # pragma: no cover - runtime logging
+            self.log.error("Account retrieval failed: %s", e)
+            return None
+
         try:
             return float(getattr(acct, "equity", 0.0))
         except Exception:

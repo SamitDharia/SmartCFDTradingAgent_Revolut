@@ -398,7 +398,9 @@ def run_cycle(
 
     if broker is not None and hasattr(broker, "get_equity"):
         try:
-            equity = float(broker.get_equity())
+            val = broker.get_equity()
+            if val is not None:
+                equity = float(val)
         except Exception as e:
             log.error("Broker equity fetch failed: %s", e)
 
