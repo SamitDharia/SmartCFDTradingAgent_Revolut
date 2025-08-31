@@ -395,15 +395,16 @@ def run_cycle(
     dry_run: bool = False,
 ):
     equity = qty
+
     if broker is not None and hasattr(broker, "get_equity"):
         try:
             equity = float(broker.get_equity())
         except Exception as e:
             log.error("Broker equity fetch failed: %s", e)
+
     if not watch:
         log.info("Watchlist empty – skipping cycle.")
         return
-
 
     # Market hours gate (skip if equity market closed unless it's crypto-only or --force)
     if not force and not (all(is_crypto(t) for t in watch) or market_open()):
@@ -588,14 +589,12 @@ def run_cycle(
 
         if per_trade_budget <= 0:
             limits_hit.add("risk")
-        qty = qty_from_atr(atr_val, equity, per_trade_risk)
-
         trade_qty = qty_from_atr(atr_val, equity, per_trade_risk)
 
         if broker is not None:
             try:
                 broker.submit_order(
-                    tkr, side, qty, entry=last, sl=sl, tp=tp,
+                    tkr, side, trade_qty, entry=last, sl=sl, tp=tp,
                     tif="day", dry_run=dry_run
                 )
             except Exception as e:
@@ -619,7 +618,7 @@ def run_cycle(
         )
         if trail_start is not None:
             line += f" | TR {trail_start:.2f}"
-        line += f" | Qty≈{qty} | ATR≈{atr_pct:.2f}% | R≈{r_multiple:.2f} | Risk≈€{risk_eur}"
+        line += f" | Qty≈{trade_qty} | ATR≈{atr_pct:.2f}% | R≈{r_multiple:.2f} | Risk≈€{risk_eur}"
 
         lines.append(
             f"{emoji} {tkr}  {side} | Px {last:.2f} | SL {sl:.2f} | TP {tp:.2f} | "
@@ -682,6 +681,12 @@ def run_cycle(
     if limits_hit:
         summary += " | limits: " + ",".join(sorted(limits_hit))
     safe_send(summary)
+    if not dry_run:
+        try:
+            from SmartCFDTradingAgent.walk_forward import retrain_from_trade_log
+            retrain_from_trade_log()
+        except Exception as e:  # pragma: no cover - best effort
+            log.error("Retraining failed: %s", e)
     return pnl, stats, summary
 
 def main():
