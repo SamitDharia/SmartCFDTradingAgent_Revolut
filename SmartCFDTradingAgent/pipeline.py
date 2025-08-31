@@ -394,8 +394,9 @@ def run_cycle(
     broker: "Broker | None" = None,
     dry_run: bool = False,
 ):
-
     equity = qty
+    …
+
 
     # Market hours gate (skip if equity market closed unless it's crypto-only or --force)
     if not force and not (all(is_crypto(t) for t in watch) or market_open()):
