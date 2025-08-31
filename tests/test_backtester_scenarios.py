@@ -33,8 +33,8 @@ def test_long_short_time_stop_non_nan_equity():
         delay=0,
         max_hold=2,
         cost=0.0,
-        sl=0.05,
-        tp=0.05,
+        sl_atr=2.5,
+        tp_atr=2.5,
         risk_pct=0.1,
         equity=10_000,
     )
