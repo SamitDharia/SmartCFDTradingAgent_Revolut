@@ -395,6 +395,11 @@ def run_cycle(
     dry_run: bool = False,
 ):
     equity = qty
+    if broker is not None and hasattr(broker, "get_equity"):
+        try:
+            equity = float(broker.get_equity())
+        except Exception as e:
+            log.error("Broker equity fetch failed: %s", e)
     if not watch:
         log.info("Watchlist empty – skipping cycle.")
         return
@@ -700,7 +705,7 @@ def main():
     ap.add_argument("--tz", default="Europe/Dublin")
     ap.add_argument("--ml-model", help="Path to trained ML model for signal blending")
     ap.add_argument("--ml-threshold", type=float, default=0.6, help="Probability threshold for ML override")
-    ap.add_argument("--broker", choices=["manual"], default="manual")
+    ap.add_argument("--broker", choices=["manual", "alpaca"], default="manual")
     ap.add_argument("--dry-run", action="store_true")
     # Caps & budgets
     ap.add_argument("--max-trades", type=int, default=999)
