@@ -1,4 +1,4 @@
-# SmartCFDTradingAgent – Revolut (with optional Alpaca)
+# SmartCFDTradingAgent – Revolut
 
 Rank assets, generate signals, and send manual execution alerts via Telegram (with SL/TP).
 
@@ -46,9 +46,6 @@ Fill in the variables:
 ```
 TELEGRAM_BOT_TOKEN=123456:ABC-XYZ
 TELEGRAM_CHAT_ID=123456789
-ALPACA_API_KEY=YOUR_ALPACA_API_KEY
-ALPACA_API_SECRET=YOUR_ALPACA_API_SECRET
-ALPACA_PAPER=true
 ```
 
 Additional optional settings are available in `.env.example` such as
@@ -82,22 +79,6 @@ python -m SmartCFDTradingAgent.pipeline --config configs/multi_asset.yml --profi
 Weighted multi-interval voting:
 ```
 python -m SmartCFDTradingAgent.pipeline --watch BTC-USD ETH-USD --interval 1h --intervals 15m,1h --interval-weights 15m=1,1h=2 --vote
-```
-
-### Dual-broker examples
-
-Run Alpaca for executions while continuing to receive Revolut alerts.
-
-Windows (CMD):
-```cmd
-python -m SmartCFDTradingAgent.pipeline --broker alpaca --watch AAPL MSFT --alpaca-paper
-python -m SmartCFDTradingAgent.pipeline --broker revolut --watch BTC-USD ETH-USD
-```
-
-WSL/Linux:
-```bash
-python -m SmartCFDTradingAgent.pipeline --broker alpaca --watch AAPL MSFT --alpaca-paper
-python -m SmartCFDTradingAgent.pipeline --broker revolut --watch BTC-USD ETH-USD
 ```
 
 ## New flags & features (v0.1.1)
