@@ -7,11 +7,15 @@ from pathlib import Path
 import pandas as pd
 
 from SmartCFDTradingAgent.ml_models import PriceDirectionModel
+from SmartCFDTradingAgent.utils.logger import get_logger
 
 log = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parent
 STORE = ROOT / "storage"
+
+
+log = get_logger()
 
 
 def main() -> None:

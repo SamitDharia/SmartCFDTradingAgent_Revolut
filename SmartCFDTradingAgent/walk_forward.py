@@ -7,6 +7,7 @@ import pandas as pd
 from SmartCFDTradingAgent.data_loader import get_price_data
 from SmartCFDTradingAgent.indicators import ema, macd, adx
 from SmartCFDTradingAgent.utils import trade_logger
+from SmartCFDTradingAgent.utils.logger import get_logger
 
 try:  # optional dependency
     from SmartCFDTradingAgent.ml_models import PriceDirectionModel
@@ -17,6 +18,9 @@ STORE = Path(__file__).resolve().parent / "storage"
 STORE.mkdir(exist_ok=True)
 
 log = logging.getLogger(__name__)
+
+
+log = get_logger()
 
 
 def _tz_naive_index(idx: pd.DatetimeIndex) -> pd.DatetimeIndex:

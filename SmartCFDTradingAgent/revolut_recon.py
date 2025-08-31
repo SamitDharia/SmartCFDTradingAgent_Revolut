@@ -4,11 +4,15 @@ import logging
 from pathlib import Path
 import pandas as pd
 
+from SmartCFDTradingAgent.utils.logger import get_logger
+
 ROOT = Path(__file__).resolve().parent
 STORE = ROOT / "storage"
 DECISIONS = STORE / "decision_log.csv"
 
+
 log = logging.getLogger(__name__)
+
 
 def _load_decisions(day: str) -> pd.DataFrame:
     if not DECISIONS.exists():
