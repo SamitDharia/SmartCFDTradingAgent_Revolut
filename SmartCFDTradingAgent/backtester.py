@@ -13,21 +13,6 @@ def _sig_to_pos(sig: str) -> int:
     return {"Buy": 1, "Sell": -1}.get(sig, 0)
 
 
-def backtest(
-    price_df: pd.DataFrame,
-    signal_map: Dict[str, str],
-    delay: int = 1,
-    max_hold: int = 20,
-    cost: float = 0.0002,
-    sl: float = 0.02,
-    tp: float = 0.04,
-    risk_pct: float = 0.01,
-    equity: float = 100_000,
-) -> Tuple[pd.DataFrame, Dict[str, float], pd.DataFrame]:
-    """Simple vectorised backtest using ATR based position sizing."""
-
-    close = price_df.xs("Close", level=1, axis=1).copy()
-    rets = close.pct_change().shift(-delay).fillna(0.0)
 def backtest(price_df: pd.DataFrame, signal_map: Dict[str, str],
              delay: int = 1, max_hold: int = 20, cost: float = 0.0002,
              sl_atr: float = 2.0, tp_atr: float = 4.0, trail_atr: float = 0.0,
@@ -93,13 +78,6 @@ def backtest(price_df: pd.DataFrame, signal_map: Dict[str, str],
 
             if pos != 0:
                 hold += 1
-                r = rets.at[date, tkr]
-                pnl.at[date, tkr] += pos * r * qty
-                hit_sl = ((pos == 1 and price_now <= entry_price * (1 - sl)) or
-                          (pos == -1 and price_now >= entry_price * (1 + sl)))
-                hit_tp = ((pos == 1 and price_now >= entry_price * (1 + tp)) or
-                          (pos == -1 and price_now <= entry_price * (1 - tp)))
-                exit_trade = hit_sl or hit_tp or hold >= max_hold
                 pnl.at[date, tkr] += pos * qty * rets.at[date, tkr]
 
                 if trail is not None and trail_atr > 0:
