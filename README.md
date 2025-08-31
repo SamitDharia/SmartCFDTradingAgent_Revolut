@@ -1,18 +1,28 @@
-# SmartCFDTradingAgent – Revolut (Alerts-Only, No Alpaca)
+# SmartCFDTradingAgent – Revolut (with optional Alpaca)
 
 Rank assets, generate signals, and send manual execution alerts via Telegram (with SL/TP).
 
 ## Installation
 
-Create a virtual environment and install the project in editable mode. This makes the
-`SmartCFDTradingAgent` package available on your `PYTHONPATH` without any manual path
-modifications:
+### Windows (CMD)
+
+```cmd
+git clone <repo-url>
+cd SmartCFDTradingAgent_Revolut
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+pip install -e .
+```
+
+### WSL/Linux
 
 ```bash
 git clone <repo-url>
 cd SmartCFDTradingAgent_Revolut
 python -m venv .venv
-source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
+source .venv/bin/activate
+pip install -r requirements.txt
 pip install -e .
 ```
 
@@ -24,12 +34,26 @@ With the package installed, run the test suite using the standard package import
 pytest
 ```
 
-## Configure Telegram
-Create a bot with @BotFather and set a local `.env` (do not commit):
+## .env configuration
+Create a bot with @BotFather and copy `.env.example` to `.env` (do not commit):
+
 ```
-BOT_TOKEN=123456:ABC-XYZ
-CHAT_ID=123456789
+cp .env.example .env
 ```
+
+Fill in the variables:
+
+```
+TELEGRAM_BOT_TOKEN=123456:ABC-XYZ
+TELEGRAM_CHAT_ID=123456789
+ALPACA_API_KEY=YOUR_ALPACA_API_KEY
+ALPACA_API_SECRET=YOUR_ALPACA_API_SECRET
+ALPACA_PAPER=true
+```
+
+Additional optional settings are available in `.env.example` such as
+`SKIP_SSL_VERIFY`, `RISK_PCT`, `MAX_POSITIONS`, `MAX_DAILY_LOSS_PCT`,
+`MARKET_GATE`, and `ALLOW_FRACTIONAL`.
 
 ## Asset categories
 Tickers are grouped into asset classes in `SmartCFDTradingAgent/assets.yml` (e.g. `crypto`, `equity`, `forex`, `commodity`).
@@ -58,6 +82,22 @@ python -m SmartCFDTradingAgent.pipeline --config configs/multi_asset.yml --profi
 Weighted multi-interval voting:
 ```
 python -m SmartCFDTradingAgent.pipeline --watch BTC-USD ETH-USD --interval 1h --intervals 15m,1h --interval-weights 15m=1,1h=2 --vote
+```
+
+### Dual-broker examples
+
+Run Alpaca for executions while continuing to receive Revolut alerts.
+
+Windows (CMD):
+```cmd
+python -m SmartCFDTradingAgent.pipeline --broker alpaca --watch AAPL MSFT --alpaca-paper
+python -m SmartCFDTradingAgent.pipeline --broker revolut --watch BTC-USD ETH-USD
+```
+
+WSL/Linux:
+```bash
+python -m SmartCFDTradingAgent.pipeline --broker alpaca --watch AAPL MSFT --alpaca-paper
+python -m SmartCFDTradingAgent.pipeline --broker revolut --watch BTC-USD ETH-USD
 ```
 
 ## New flags & features (v0.1.1)
