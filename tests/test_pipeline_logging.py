@@ -37,7 +37,7 @@ def test_dry_run_cycle_logging_and_summary(monkeypatch, tmp_path):
 
     monkeypatch.setattr(pipeline, "backtest", fake_backtest)
 
-    pipeline.run_cycle(watch=["AAA"], size=1, grace=0, risk=0.01, equity=1000, force=True)
+    pipeline.run_cycle(watch=["AAA"], size=1, grace=0, risk=0.01, qty=1000, force=True)
 
     assert any(msg.startswith("Summary:") for msg in sent)
 
