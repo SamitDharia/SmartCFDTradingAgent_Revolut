@@ -347,7 +347,7 @@ def load_profile_config(path: str, profile: str) -> dict:
     return _expand(cfg)
 # -------------------------------
 
-def run_cycle(watch, size, grace, risk, equity,
+def run_cycle(watch, size, grace, qty, risk,
               force=False, interval="1d", adx=15, tz="Europe/Dublin",
 
               ema_fast=12, ema_slow=26, macd_signal=9,
@@ -358,6 +358,8 @@ def run_cycle(watch, size, grace, risk, equity,
               cap_crypto=2, cap_equity=2, cap_per_ticker=1,
               risk_budget_crypto=0.01, risk_budget_equity=0.01,
               class_caps=None, class_risk_budget=None):
+
+    equity = qty
 
     # Market hours gate (skip if equity market closed unless it's crypto-only or --force)
     if not force and not (all(is_crypto(t) for t in watch) or market_open()):
@@ -519,7 +521,7 @@ def run_cycle(watch, size, grace, risk, equity,
         per_trade_budget = max(0.0, remaining_budget[cls]) / planned_left
         per_trade_risk = min(per_trade_budget,  # honor class budget
                              risk)              # honor per-trade cap
-        qty = qty_from_atr(atr_val, equity, per_trade_risk)
+        trade_qty = qty_from_atr(atr_val, equity, per_trade_risk)
 
         risk_eur = round(per_trade_risk * equity, 2)
         atr_pct = (atr_val / last) * 100.0 if last else 0.0
@@ -531,7 +533,7 @@ def run_cycle(watch, size, grace, risk, equity,
         emoji = "🟢" if side == "Buy" else "🔴"
         lines.append(
             f"{emoji} {tkr}  {side} | Px {last:.2f} | SL {sl:.2f} | TP {tp:.2f} | "
-            f"Qty≈{qty} | ATR≈{atr_pct:.2f}% | R≈{r_multiple:.2f} | Risk≈€{risk_eur}"
+            f"Qty≈{trade_qty} | ATR≈{atr_pct:.2f}% | R≈{r_multiple:.2f} | Risk≈€{risk_eur}"
         )
         rows.append({
             "ts": now_iso, "tz": tz_label, "interval": interval, "adx": int(tuned.get("adx", adx)),
@@ -577,7 +579,7 @@ def main():
     ap.add_argument("--size", type=int, default=5)
     ap.add_argument("--grace", type=int, default=900)
     ap.add_argument("--risk", type=float, default=0.01)
-    ap.add_argument("--equity", type=float, default=1000.0)
+    ap.add_argument("--qty", type=float, default=1000.0)
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--interval", default="1d")
     ap.add_argument("--adx", type=int, default=15)
@@ -641,8 +643,8 @@ def main():
             watch=watch,
             size=int(cfg.get("size", args.size)),
             grace=int(cfg.get("grace", args.grace)),
+            qty=float(cfg.get("qty", args.qty)),
             risk=float(cfg.get("risk", args.risk)),
-            equity=float(cfg.get("equity", args.equity)),
             force=(args.force or bool(cfg.get("force", False))),
             interval=cfg.get("interval", args.interval),
             adx=int(cfg.get("adx", args.adx)),
@@ -686,8 +688,8 @@ def main():
             watch=args.watch,
             size=args.size,
             grace=args.grace,
+            qty=args.qty,
             risk=args.risk,
-            equity=args.equity,
             force=args.force,
             interval=args.interval,
             adx=args.adx,
