@@ -7,6 +7,10 @@ from typing import Iterable, List
 import pandas as pd
 
 from SmartCFDTradingAgent.data_loader import get_price_data
+from SmartCFDTradingAgent.utils.logger import get_logger
+
+
+log = get_logger()
 
 
 def top_n(
@@ -33,8 +37,10 @@ def top_n(
     try:
         df = get_price_data(tickers, start, end, interval="1d")
     except Exception as e:
-        print(
-            f"[rank_assets] daily ranking failed ({e}); returning unranked first {n}.",
+        log.warning(
+            "[rank_assets] daily ranking failed (%s); returning unranked first %s.",
+            e,
+            n,
         )
         return tickers[: min(n, len(tickers))]
 
@@ -94,7 +100,7 @@ def main(argv: Iterable[str] | None = None) -> None:
         lookback=lookback,
         min_dollar_volume=min_dollar_volume,
     )
-    print(ranked)
+    log.info("%s", ranked)
 
 
 if __name__ == "__main__":
