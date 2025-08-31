@@ -1,5 +1,5 @@
 from __future__ import annotations
-import SmartCFDTradingAgent.utils.no_ssl  # must be first
+
 import argparse, datetime as dt, json
 from pathlib import Path
 import pandas as pd

@@ -1,9 +1,10 @@
 import pandas as pd
 
+from SmartCFDTradingAgent import signals as sig_mod
 from SmartCFDTradingAgent.signals import generate_signals
 
 
-def test_generate_signals_buy_sell_hold():
+def test_generate_signals_buy_sell_hold(monkeypatch):
     idx = pd.date_range("2020-01-01", periods=60)
     step = pd.Series(range(60), index=idx)
 
@@ -39,7 +40,13 @@ def test_generate_signals_buy_sell_hold():
     price_df["FLAT", "Low"] = low_flat
     price_df["FLAT", "Close"] = close_flat
 
+    def fake_rsi(series, period=14):
+        val = {"UP": 60, "DOWN": 40, "FLAT": 50}[series.name]
+        return pd.Series([val] * len(series), index=series.index)
+
+    monkeypatch.setattr(sig_mod, "rsi", fake_rsi)
+
     signals = generate_signals(price_df)
-    assert signals["UP"] == "Buy"
-    assert signals["DOWN"] == "Sell"
-    assert signals["FLAT"] == "Hold"
+    assert signals["UP"]["action"] == "Buy" and signals["UP"]["confidence"] > 0
+    assert signals["DOWN"]["action"] == "Sell" and signals["DOWN"]["confidence"] > 0
+    assert signals["FLAT"]["action"] == "Hold" and signals["FLAT"]["confidence"] == 0
