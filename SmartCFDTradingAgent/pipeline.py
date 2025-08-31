@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-# Must be first: force yfinance to use safe downloader (no SSL issues)
-import SmartCFDTradingAgent.utils.no_ssl  # noqa: F401
-
 import os
-os.environ.setdefault("CURL_CA_BUNDLE", "")
-os.environ.setdefault("YF_DISABLE_CURL", "1")
+
+if os.getenv("SKIP_SSL_VERIFY") == "1":
+    import SmartCFDTradingAgent.utils.no_ssl  # noqa: F401
 
 import argparse, time, datetime as dt, csv, sys, json
 from dotenv import load_dotenv
