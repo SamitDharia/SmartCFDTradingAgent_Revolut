@@ -19,3 +19,4 @@ SmartCFDTradingAgent/storage/cache/
 # Databases
 *.sqlite
 *.db
+.env.example
