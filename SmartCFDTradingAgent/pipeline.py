@@ -683,6 +683,7 @@ def run_cycle(
     if limits_hit:
         summary += " | limits: " + ",".join(sorted(limits_hit))
     safe_send(summary)
+    log.info(summary)
     if not dry_run:
         try:
             from SmartCFDTradingAgent.walk_forward import retrain_from_trade_log

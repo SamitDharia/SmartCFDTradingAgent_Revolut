@@ -1,13 +1,63 @@
 import csv
 import sqlite3
 import sys
-import pandas as pd
+import types
+
+
+class FakeSeries(list):
+    def dropna(self):
+        return self
+
+    def tail(self, n):
+        return FakeSeries(self[-n:])
+
+    @property
+    def iloc(self):
+        return self
+
+
+sys.modules.setdefault("dotenv", types.SimpleNamespace(load_dotenv=lambda *a, **k: None))
+sys.modules.setdefault(
+    "SmartCFDTradingAgent.utils.market_time",
+    types.SimpleNamespace(market_open=lambda *a, **k: True),
+)
+sys.modules.setdefault(
+    "requests",
+    types.SimpleNamespace(post=lambda *a, **k: types.SimpleNamespace(status_code=200, json=lambda: {}, text="")),
+)
+sys.modules.setdefault(
+    "SmartCFDTradingAgent.rank_assets",
+    types.SimpleNamespace(top_n=lambda watch, size: watch),
+)
+sys.modules.setdefault(
+    "SmartCFDTradingAgent.data_loader",
+    types.SimpleNamespace(get_price_data=lambda *a, **k: {}),
+)
+sys.modules.setdefault(
+    "SmartCFDTradingAgent.signals",
+    types.SimpleNamespace(generate_signals=lambda *a, **k: {}),
+)
+sys.modules.setdefault(
+    "SmartCFDTradingAgent.backtester",
+    types.SimpleNamespace(backtest=lambda *a, **k: ({"cum_return": FakeSeries([1, 1.1])}, {"sharpe":1,"max_drawdown":0.1,"win_rate":0.5}, None)),
+)
+sys.modules.setdefault(
+    "SmartCFDTradingAgent.position",
+    types.SimpleNamespace(qty_from_atr=lambda *a, **k: 1),
+)
+sys.modules.setdefault(
+    "SmartCFDTradingAgent.indicators",
+    types.SimpleNamespace(
+        adx=lambda *a, **k: FakeSeries([30]),
+        atr=lambda *a, **k: FakeSeries([1, 1]),
+    ),
+)
 
 from SmartCFDTradingAgent import pipeline
 from SmartCFDTradingAgent.utils import trade_logger
 
 
-def test_dry_run_cycle_logging_and_summary(monkeypatch, tmp_path):
+def test_dry_run_cycle_logging_and_summary(monkeypatch, tmp_path, caplog):
     sent = []
     monkeypatch.setattr(pipeline, "safe_send", lambda msg: sent.append(msg))
     monkeypatch.setattr(pipeline, "market_open", lambda: True)
@@ -21,26 +71,31 @@ def test_dry_run_cycle_logging_and_summary(monkeypatch, tmp_path):
     monkeypatch.setattr(pipeline, "top_n", lambda watch, size: watch)
 
     def fake_price(tickers, start, end, interval="1d"):
-        idx = pd.date_range("2020-01-01", periods=5, freq="D")
         data = {}
         for t in tickers:
-            data[(t, "High")] = pd.Series([10]*5, index=idx)
-            data[(t, "Low")] = pd.Series([8]*5, index=idx)
-            data[(t, "Close")] = pd.Series([9]*5, index=idx)
-        return pd.DataFrame(data)
+            data[t] = {
+                "High": FakeSeries([10] * 5),
+                "Low": FakeSeries([8] * 5),
+                "Close": FakeSeries([9] * 5),
+            }
+        return data
 
     monkeypatch.setattr(pipeline, "get_price_data", fake_price)
-    monkeypatch.setattr(pipeline, "generate_signals", lambda price, **k: {list(price.columns.levels[0])[0]: "Buy"})
+    monkeypatch.setattr(pipeline, "generate_signals", lambda price, **k: {list(price.keys())[0]: "Buy"})
     monkeypatch.setattr(pipeline, "qty_from_atr", lambda atr, equity, risk: 1)
+    monkeypatch.setattr(pipeline, "_adx", lambda *a, **k: FakeSeries([30]))
 
     def fake_backtest(price, base_sig, **kwargs):
-        return pd.DataFrame({"cum_return": [1, 1.1]}), {"sharpe": 1, "max_drawdown": 0.1, "win_rate": 0.5}, None
+        pnl = {"cum_return": FakeSeries([1, 1.1])}
+        return pnl, {"sharpe": 1, "max_drawdown": 0.1, "win_rate": 0.5}, None
 
     monkeypatch.setattr(pipeline, "backtest", fake_backtest)
 
-    pipeline.run_cycle(watch=["AAA"], size=1, grace=0, risk=0.01, qty=1000, force=True)
+    with caplog.at_level("INFO"):
+        pipeline.run_cycle(watch=["AAA"], size=1, grace=0, risk=0.01, qty=1000, force=True)
 
     assert any(msg.startswith("Summary:") for msg in sent)
+    assert "Summary:" in caplog.text
 
     decision_log = tmp_path / "decision_log.csv"
     assert decision_log.exists()
