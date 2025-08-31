@@ -12,6 +12,7 @@ venv/
 # Logs and data
 logs/
 SmartCFDTradingAgent/logs/
+SmartCFDTradingAgent/storage/
 SmartCFDTradingAgent/storage/decision_log.csv
 pnl_log.csv
 SmartCFDTradingAgent/storage/cache/
