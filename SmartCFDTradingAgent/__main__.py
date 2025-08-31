@@ -1,5 +1,7 @@
 from __future__ import annotations
 import argparse, datetime as dt
+import os
+
 from SmartCFDTradingAgent.data_loader import get_price_data
 from SmartCFDTradingAgent.signals import generate_signals
 from SmartCFDTradingAgent.backtester import backtest
@@ -14,7 +16,8 @@ def cli():
     ap.add_argument("--end", required=True)
     ap.add_argument("--interval", default="1d")
     ap.add_argument("--backtest", action="store_true")
-    ap.add_argument("--risk", type=float, default=0.01)
+    default_risk = float(os.getenv("RISK_PCT", "0.01"))
+    ap.add_argument("--risk", type=float, default=default_risk)
     ap.add_argument("--equity", type=float, default=1000.0)
     args = ap.parse_args()
 
