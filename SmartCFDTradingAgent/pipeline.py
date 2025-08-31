@@ -682,6 +682,12 @@ def run_cycle(
     if limits_hit:
         summary += " | limits: " + ",".join(sorted(limits_hit))
     safe_send(summary)
+    if not dry_run:
+        try:
+            from SmartCFDTradingAgent.walk_forward import retrain_from_trade_log
+            retrain_from_trade_log()
+        except Exception as e:  # pragma: no cover - best effort
+            log.error("Retraining failed: %s", e)
     return pnl, stats, summary
 
 def main():
