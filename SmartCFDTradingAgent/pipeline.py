@@ -395,6 +395,13 @@ def run_cycle(
     dry_run: bool = False,
 ):
     equity = qty
+    if broker is not None:
+        get_equity = getattr(broker, "get_equity", None)
+        if callable(get_equity):
+            try:
+                equity = float(get_equity())
+            except Exception as e:  # pragma: no cover - defensive
+                log.error("Failed to fetch equity from broker: %s", e)
     if not watch:
         log.info("Watchlist empty – skipping cycle.")
         return
@@ -583,14 +590,12 @@ def run_cycle(
 
         if per_trade_budget <= 0:
             limits_hit.add("risk")
-        qty = qty_from_atr(atr_val, equity, per_trade_risk)
-
         trade_qty = qty_from_atr(atr_val, equity, per_trade_risk)
 
         if broker is not None:
             try:
                 broker.submit_order(
-                    tkr, side, qty, entry=last, sl=sl, tp=tp,
+                    tkr, side, trade_qty, entry=last, sl=sl, tp=tp,
                     tif="day", dry_run=dry_run
                 )
             except Exception as e:
@@ -614,7 +619,7 @@ def run_cycle(
         )
         if trail_start is not None:
             line += f" | TR {trail_start:.2f}"
-        line += f" | Qty≈{qty} | ATR≈{atr_pct:.2f}% | R≈{r_multiple:.2f} | Risk≈€{risk_eur}"
+        line += f" | Qty≈{trade_qty} | ATR≈{atr_pct:.2f}% | R≈{r_multiple:.2f} | Risk≈€{risk_eur}"
 
         lines.append(
             f"{emoji} {tkr}  {side} | Px {last:.2f} | SL {sl:.2f} | TP {tp:.2f} | "
