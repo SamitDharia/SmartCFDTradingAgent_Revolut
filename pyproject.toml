@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "SmartCFDTradingAgent"
+version = "0.1.0"
+description = "Smart CFD Trading Agent"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{name = "SmartCFDTradingAgent Developers"}]
+license = {text = "MIT"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "pandas>=2.0",
+    "numpy>=1.26",
+    "yfinance>=0.2.40",
+    "requests>=2.32",
+    "pandas_market_calendars>=4.4",
+    "python-dotenv>=1.0",
+    "streamlit>=1.30",
+    "tzdata>=2024.1",
+]
+
+[tool.setuptools.packages.find]
+include = ["SmartCFDTradingAgent"]

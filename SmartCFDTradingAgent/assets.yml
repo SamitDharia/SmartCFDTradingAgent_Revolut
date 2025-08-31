@@ -1,0 +1,14 @@
+crypto:
+  - BTC-USD
+  - ETH-USD
+equity:
+  - SPY
+  - QQQ
+  - DIA
+  - IWM
+forex:
+  - EURUSD=X
+  - GBPUSD=X
+commodity:
+  - XAUUSD=X
+  - XAGUSD=X

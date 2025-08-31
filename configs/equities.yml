@@ -7,12 +7,17 @@ profiles:
       - IWM
     interval: "1d"
     use_params: true
+    interval_weights: ""
     adx: 8
+    ema_fast: 15
+    ema_slow: 30
+    macd_signal: 7
     risk: 0.01
     equity: 1000
     cooldown_min: 60
-    cap_equity: 2
-    cap_crypto: 0
+    class_caps:
+      equity: 2
+    class_risk_budget:
+      equity: 0.02
     max_trades: 2
-    risk_budget_equity: 0.02
     grace: 120

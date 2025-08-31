@@ -26,6 +26,20 @@ from SmartCFDTradingAgent.signals import generate_signals
 from SmartCFDTradingAgent.backtester import backtest
 from SmartCFDTradingAgent.position import qty_from_atr
 from SmartCFDTradingAgent.indicators import adx as _adx
+try:  # PyYAML may be missing in minimal environments
+    import yaml  # type: ignore
+except Exception:  # pragma: no cover - fallback for tests
+    yaml = None  # type: ignore
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover - hint only
+    from SmartCFDTradingAgent.ml_models import PriceDirectionModel
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover - hint only
+    from SmartCFDTradingAgent.ml_models import PriceDirectionModel
 
 log = get_logger()
 ROOT = Path(__file__).resolve().parent
@@ -39,12 +53,45 @@ def safe_send(msg: str) -> None:
     except Exception as e:
         log.error("Telegram send failed: %s", e)
 
-def is_crypto(t: str) -> bool:
-    t = (t or "").upper()
-    return t.endswith("-USD") and (t.startswith("BTC") or t.startswith("ETH") or t in ("BTC-USD", "ETH-USD"))
+# --- asset classification ---
+ASSET_MAP: dict[str, str] = {}
+
+
+def _load_asset_classes(path: Path | None = None) -> dict[str, str]:
+    """Load ticker -> class mapping from a YAML file.
+
+    The YAML may map classes to lists of tickers or tickers to classes.
+    Any tickers not present default to ``equity``.
+    """
+    if yaml is None:
+        return {}
+    path = path or ROOT / "assets.yml"
+    try:
+        data = yaml.safe_load(path.read_text()) or {}
+    except Exception:
+        return {}
+
+    mapping: dict[str, str] = {}
+    if isinstance(data, dict):
+        if all(isinstance(v, (list, tuple, set)) for v in data.values()):
+            for cls, tickers in data.items():
+                for t in tickers:
+                    mapping[str(t).upper()] = str(cls)
+        else:
+            for t, cls in data.items():
+                mapping[str(t).upper()] = str(cls)
+    return mapping
+
+
+ASSET_MAP = _load_asset_classes()
+
 
 def classify(t: str) -> str:
-    return "crypto" if is_crypto(t) else "equity"
+    return ASSET_MAP.get((t or "").upper(), "equity")
+
+
+def is_crypto(t: str) -> bool:
+    return classify(t) == "crypto"
 
 def _normalize_intervals(intervals) -> list[str]:
     """Accept list/tuple/set or comma-separated string; return clean list of strings."""
@@ -62,6 +109,67 @@ def _normalize_intervals(intervals) -> list[str]:
     # anything else -> single item
     s = str(intervals).strip()
     return [s] if s else []
+
+def _parse_interval_weights(weights) -> dict[str, float]:
+    """Parse interval weight mapping from a string or dict.
+
+    Accepts strings like "15m=1,1h=2" or a dict mapping interval to weight.
+    Returns a dict with float weights, defaulting to empty dict if parsing fails.
+    """
+    if not weights:
+        return {}
+    if isinstance(weights, dict):
+        out: dict[str, float] = {}
+        for k, v in weights.items():
+            try:
+                out[str(k).strip()] = float(v)
+            except (TypeError, ValueError):
+                continue
+        return out
+    if isinstance(weights, str):
+        out: dict[str, float] = {}
+        for part in weights.split(","):
+            part = part.strip()
+            if not part or "=" not in part:
+                continue
+            iv, w = part.split("=", 1)
+            try:
+                out[iv.strip()] = float(w)
+            except ValueError:
+                continue
+        return out
+    if isinstance(weights, (list, tuple)):
+        return _parse_interval_weights(",".join(map(str, weights)))
+    return {}
+
+
+def _parse_class_caps(caps) -> dict[str, int]:
+    """Parse class cap mapping from a string or dict."""
+    if not caps:
+        return {}
+    if isinstance(caps, dict):
+        out: dict[str, int] = {}
+        for k, v in caps.items():
+            try:
+                out[str(k).strip()] = int(v)
+            except (TypeError, ValueError):
+                continue
+        return out
+    if isinstance(caps, str):
+        out: dict[str, int] = {}
+        for part in caps.split(","):
+            part = part.strip()
+            if not part or "=" not in part:
+                continue
+            k, v = part.split("=", 1)
+            try:
+                out[k.strip()] = int(v)
+            except ValueError:
+                continue
+        return out
+    if isinstance(caps, (list, tuple)):
+        return _parse_class_caps(",".join(map(str, caps)))
+    return {}
 # -------------------------------------------
 
 def write_decision_log(rows: list[dict]):
@@ -143,13 +251,24 @@ def send_daily_summary(tz: str = "Europe/Dublin") -> str:
     safe_send(msg)
     return msg
 
-def vote_signals(maps: list[dict]) -> dict:
-    out = {}
-    keys = set().union(*[m.keys() for m in maps])
+def vote_signals(maps: dict[str, dict], weights: dict[str, float] | None = None) -> dict:
+    """Weighted majority vote across interval signal maps.
+
+    ``maps`` should map interval strings to signal dictionaries. ``weights``
+    assigns a numeric weight to each interval; unspecified intervals default to 1.
+    """
+    weights = weights or {}
+    out: dict = {}
+    if not maps:
+        return out
+    keys = set().union(*[m.keys() for m in maps.values()])
     for k in keys:
-        votes = [m.get(k, 'Hold') for m in maps]
-        # majority vote (change to consensus if you want stricter behavior)
-        out[k] = max(set(votes), key=votes.count)
+        tally: dict[str, float] = {}
+        for iv, m in maps.items():
+            side = m.get(k, "Hold")
+            w = weights.get(iv, 1.0)
+            tally[side] = tally.get(side, 0.0) + w
+        out[k] = max(tally, key=tally.get)
     return out
 
 def _max_lookback_days(iv: str) -> int:
@@ -230,10 +349,15 @@ def load_profile_config(path: str, profile: str) -> dict:
 
 def run_cycle(watch, size, grace, risk, equity,
               force=False, interval="1d", adx=15, tz="Europe/Dublin",
-              max_trades=999, intervals="", vote=False, use_params=False,
+
+              ema_fast=12, ema_slow=26, macd_signal=9,
+              ml_model: "PriceDirectionModel | None" = None, ml_threshold: float = 0.6,
+              max_trades=999, intervals="", interval_weights=None, vote=False, use_params=False,
+
               max_portfolio_risk=0.02, cooldown_min=30,
               cap_crypto=2, cap_equity=2, cap_per_ticker=1,
-              risk_budget_crypto=0.01, risk_budget_equity=0.01):
+              risk_budget_crypto=0.01, risk_budget_equity=0.01,
+              class_caps=None, class_risk_budget=None):
 
     # Market hours gate (skip if equity market closed unless it's crypto-only or --force)
     if not force and not (all(is_crypto(t) for t in watch) or market_open()):
@@ -251,25 +375,53 @@ def run_cycle(watch, size, grace, risk, equity,
     lookback_days = _max_lookback_days(interval)
     start = (dt.date.today() - dt.timedelta(days=lookback_days)).isoformat()
     price = get_price_data(tickers, start, end, interval=interval)
-    base_sig = generate_signals(price, adx_threshold=adx)
+    base_sig = generate_signals(
+        price,
+        adx_threshold=adx,
+        fast_span=ema_fast,
+        slow_span=ema_slow,
+        macd_signal=macd_signal,
+        ml_model=ml_model,
+        ml_threshold=ml_threshold,
+    )
     log.info("Signals: %s", base_sig)
 
     # Multi-interval voting (accept list OR string)
     if vote and intervals:
-        maps = [base_sig]
+        weights = _parse_interval_weights(interval_weights)
+        maps = {interval: base_sig}
         for itv in _normalize_intervals(intervals):
+            if itv in maps:
+                continue
             try:
                 lb_v = _max_lookback_days(itv)
                 start_v = (dt.date.today() - dt.timedelta(days=lb_v)).isoformat()
                 price_v = get_price_data(tickers, start_v, end, interval=itv)
-                maps.append(generate_signals(price_v, adx_threshold=adx))
+
+                maps[itv] = generate_signals(
+                    price_v,
+                    adx_threshold=adx,
+                    fast_span=ema_fast,
+                    slow_span=ema_slow,
+                    macd_signal=macd_signal,
+                    ml_model=ml_model,
+                    ml_threshold=ml_threshold,
+                )
+
             except Exception as e:
                 log.error("Voting interval %s failed: %s", itv, e)
-        base_sig = vote_signals(maps)
+        base_sig = vote_signals(maps, weights)
 
-    params = load_params()
+    params = load_params() if use_params else {}
     key_group = ",".join(sorted(watch)) + "|" + interval
-    defaults = {"adx": adx, "sl": 0.02, "tp": 0.04, "ema_fast": 12, "ema_slow": 26}
+    defaults = {
+        "adx": adx,
+        "sl": 0.02,
+        "tp": 0.04,
+        "ema_fast": ema_fast,
+        "ema_slow": ema_slow,
+        "macd_signal": macd_signal,
+    }
 
     header = f"PRE-TRADE {now_local:%Y-%m-%d %H:%M} {tz_label} (int={interval})"
     lines = [header]
@@ -277,8 +429,14 @@ def run_cycle(watch, size, grace, risk, equity,
     last_state = _load_last_signals()
     now_iso = now_local.isoformat(timespec="minutes")
 
-    c_crypto = 0; c_equity = 0; per_tkr = {}
-    candidates: list[tuple[str,str,str,dict]] = []
+    per_cls: Counter = Counter()
+    per_tkr: dict[str, int] = {}
+    candidates: list[tuple[str, str, str, dict]] = []
+
+    caps = _parse_class_caps(class_caps)
+    caps.setdefault("crypto", cap_crypto)
+    caps.setdefault("equity", cap_equity)
+    default_cap = caps.get("_", max_trades)
 
     # Filter candidates by caps and tuned ADX
     for tkr in tickers:
@@ -297,29 +455,36 @@ def run_cycle(watch, size, grace, risk, equity,
         except Exception:
             pass
 
-        if cls == "crypto":
-            if c_crypto >= cap_crypto:
-                log.info("Cap skip (crypto): %s", tkr); continue
-        else:
-            if c_equity >= cap_equity:
-                log.info("Cap skip (equity): %s", tkr); continue
+        if per_cls[cls] >= caps.get(cls, default_cap):
+            log.info("Cap skip (%s): %s", cls, tkr); continue
         if per_tkr.get(tkr, 0) >= cap_per_ticker:
             log.info("Cap skip (per-ticker): %s", tkr); continue
 
         candidates.append((tkr, side, cls, tuned))
-        if cls == "crypto": c_crypto += 1
-        else:               c_equity += 1
+        per_cls[cls] += 1
         per_tkr[tkr] = per_tkr.get(tkr, 0) + 1
         if len(candidates) >= max_trades:
             break
 
     # Risk budgeting per class
-    use_split = (risk_budget_crypto > 0 or risk_budget_equity > 0)
-    budget = {
-        "crypto": risk_budget_crypto if use_split else max_portfolio_risk / 2.0,
-        "equity": risk_budget_equity if use_split else max_portfolio_risk / 2.0,
-    }
-    planned_counts = Counter(cls for _,_,cls,_ in candidates)
+    planned_counts = Counter(cls for _, _, cls, _ in candidates)
+    classes = list(planned_counts.keys())
+    budgets_input = _parse_interval_weights(class_risk_budget)
+    if not budgets_input and (risk_budget_crypto > 0 or risk_budget_equity > 0):
+        budgets_input = {"crypto": risk_budget_crypto, "equity": risk_budget_equity}
+    if budgets_input:
+        specified_total = sum(budgets_input.get(cls, 0.0) for cls in classes)
+        unspecified = [c for c in classes if c not in budgets_input]
+        remaining_port = max(0.0, max_portfolio_risk - specified_total)
+        budget = {cls: budgets_input.get(cls, 0.0) for cls in classes}
+        if unspecified:
+            per_cls_budget = remaining_port / len(unspecified)
+            for c in unspecified:
+                budget[c] = per_cls_budget
+    else:
+        per_cls_budget = max_portfolio_risk / max(1, len(classes))
+        budget = {cls: per_cls_budget for cls in classes}
+
     remaining = planned_counts.copy()
     remaining_budget = budget.copy()
 
@@ -354,7 +519,7 @@ def run_cycle(watch, size, grace, risk, equity,
         per_trade_budget = max(0.0, remaining_budget[cls]) / planned_left
         per_trade_risk = min(per_trade_budget,  # honor class budget
                              risk)              # honor per-trade cap
-        qty = qty_from_atr(last, atr_val, equity, per_trade_risk)
+        qty = qty_from_atr(atr_val, equity, per_trade_risk)
 
         risk_eur = round(per_trade_risk * equity, 2)
         atr_pct = (atr_val / last) * 100.0 if last else 0.0
@@ -378,9 +543,10 @@ def run_cycle(watch, size, grace, risk, equity,
         last_state[key] = now_iso
 
     if len(lines) == 1:
+        caps_msg = ", ".join(f"{k}={v}" for k, v in caps.items()) or "none"
         lines.append(
             f"All alerts suppressed by caps/cooldown/filters "
-            f"(caps: crypto={cap_crypto}, equity={cap_equity}, per_ticker={cap_per_ticker}; cooldown={cooldown_min} min)."
+            f"(caps: {caps_msg}, per_ticker={cap_per_ticker}; cooldown={cooldown_min} min)."
         )
 
     txt = "\n".join(lines)
@@ -396,10 +562,14 @@ def run_cycle(watch, size, grace, risk, equity,
     time.sleep(max(0, grace))
 
     # Lightweight backtest preview on the same data slice
-    pnl = backtest(price, base_sig, max_hold=5, cost=0.0002,
-                   sl=defaults["sl"], tp=defaults["tp"], risk_pct=risk, equity=equity)
+    pnl, stats, _ = backtest(price, base_sig, max_hold=5, cost=0.0002,
+                             sl=defaults["sl"], tp=defaults["tp"], risk_pct=risk, equity=equity)
     last_cum = pnl["cum_return"].iloc[-1]
-    safe_send(f"Backtest cum return (1yr): {last_cum:.2f}x")
+    msg = ("Backtest cum return (1yr): "
+           f"{last_cum:.2f}x | Sharpe {stats['sharpe']:.2f} | "
+           f"Max DD {stats['max_drawdown']:.2%} | Win rate {stats['win_rate']:.2%}")
+    safe_send(msg)
+    return pnl, stats
 
 def main():
     ap = argparse.ArgumentParser()
@@ -411,7 +581,12 @@ def main():
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--interval", default="1d")
     ap.add_argument("--adx", type=int, default=15)
+    ap.add_argument("--ema-fast", type=int, default=12)
+    ap.add_argument("--ema-slow", type=int, default=26)
+    ap.add_argument("--macd-signal", type=int, default=9)
     ap.add_argument("--tz", default="Europe/Dublin")
+    ap.add_argument("--ml-model", help="Path to trained ML model for signal blending")
+    ap.add_argument("--ml-threshold", type=float, default=0.6, help="Probability threshold for ML override")
     # Caps & budgets
     ap.add_argument("--max-trades", type=int, default=999)
     ap.add_argument("--cap-crypto", type=int, default=2)
@@ -421,8 +596,11 @@ def main():
     ap.add_argument("--max-portfolio-risk", type=float, default=0.02)
     ap.add_argument("--risk-budget-crypto", type=float, default=0.01)
     ap.add_argument("--risk-budget-equity", type=float, default=0.01)
+    ap.add_argument("--class-caps", default="", help="Per-class caps, e.g. crypto=2,forex=1")
+    ap.add_argument("--class-risk-budget", default="", help="Per-class risk budgets, e.g. crypto=0.01,forex=0.005")
     # Voting / params
     ap.add_argument("--intervals", default="")
+    ap.add_argument("--interval-weights", default="", help="Weights for voting intervals, e.g. 15m=1,1h=2")
     ap.add_argument("--vote", action="store_true")
     ap.add_argument("--use-params", action="store_true")
     # Utility / reporting
@@ -451,6 +629,14 @@ def main():
             watch = watch.split()
         if not watch:
             print("Config missing 'watch' list."); sys.exit(2)
+        model_cfg = None
+        ml_path = cfg.get("ml_model", args.ml_model)
+        if ml_path:
+            try:
+                from SmartCFDTradingAgent.ml_models import PriceDirectionModel
+                model_cfg = PriceDirectionModel.load(ml_path)
+            except Exception as e:
+                log.error("Failed to load ML model from config: %s", e)
         run_cycle(
             watch=watch,
             size=int(cfg.get("size", args.size)),
@@ -461,8 +647,14 @@ def main():
             interval=cfg.get("interval", args.interval),
             adx=int(cfg.get("adx", args.adx)),
             tz=cfg.get("tz", args.tz),
+            ema_fast=int(cfg.get("ema_fast", args.ema_fast)),
+            ema_slow=int(cfg.get("ema_slow", args.ema_slow)),
+            macd_signal=int(cfg.get("macd_signal", args.macd_signal)),
+            ml_model=model_cfg,
+            ml_threshold=float(cfg.get("ml_threshold", args.ml_threshold)),
             max_trades=int(cfg.get("max_trades", args.max_trades)),
             intervals=cfg.get("intervals", args.intervals),  # list or string — handled inside run_cycle
+            interval_weights=cfg.get("interval_weights", args.interval_weights),
             vote=bool(cfg.get("vote", args.vote)),
             use_params=bool(cfg.get("use_params", args.use_params)),
             max_portfolio_risk=float(cfg.get("max_portfolio_risk", args.max_portfolio_risk)),
@@ -472,6 +664,8 @@ def main():
             cap_per_ticker=int(cfg.get("cap_per_ticker", args.cap_per_ticker)),
             risk_budget_crypto=float(cfg.get("risk_budget_crypto", args.risk_budget_crypto)),
             risk_budget_equity=float(cfg.get("risk_budget_equity", args.risk_budget_equity)),
+            class_caps=_parse_class_caps(cfg.get("class_caps", args.class_caps)),
+            class_risk_budget=_parse_interval_weights(cfg.get("class_risk_budget", args.class_risk_budget)),
         )
         return
 
@@ -479,13 +673,46 @@ def main():
         print("Error: --watch is required for normal run.")
         sys.exit(2)
 
+    model = None
+    if args.ml_model:
+        try:
+            from SmartCFDTradingAgent.ml_models import PriceDirectionModel
+            model = PriceDirectionModel.load(args.ml_model)
+        except Exception as e:
+            log.error("Failed to load ML model: %s", e)
+
     try:
-        run_cycle(args.watch, args.size, args.grace, args.risk, args.equity,
-                  args.force, args.interval, args.adx, args.tz,
-                  args.max_trades, args.intervals, args.vote, args.use_params,
-                  args.max_portfolio_risk, args.cooldown_min,
-                  args.cap_crypto, args.cap_equity, args.cap_per_ticker,
-                  args.risk_budget_crypto, args.risk_budget_equity)
+        run_cycle(
+            watch=args.watch,
+            size=args.size,
+            grace=args.grace,
+            risk=args.risk,
+            equity=args.equity,
+            force=args.force,
+            interval=args.interval,
+            adx=args.adx,
+            tz=args.tz,
+            ema_fast=args.ema_fast,
+            ema_slow=args.ema_slow,
+            macd_signal=args.macd_signal,
+            ml_model=model,
+            ml_threshold=args.ml_threshold,
+            max_trades=args.max_trades,
+            intervals=args.intervals,
+            interval_weights=args.interval_weights,
+            vote=args.vote,
+            use_params=args.use_params,
+            max_portfolio_risk=args.max_portfolio_risk,
+            cooldown_min=args.cooldown_min,
+            cap_crypto=args.cap_crypto,
+            cap_equity=args.cap_equity,
+            cap_per_ticker=args.cap_per_ticker,
+            risk_budget_crypto=args.risk_budget_crypto,
+            risk_budget_equity=args.risk_budget_equity,
+            class_caps=_parse_class_caps(args.class_caps),
+            class_risk_budget=_parse_interval_weights(args.class_risk_budget),
+        )
+
     except Exception as e:
         log.exception("Pipeline crashed: %s", e)
         safe_send(f"⚠️ SmartCFD crashed\n{e}")
