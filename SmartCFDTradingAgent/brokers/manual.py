@@ -48,7 +48,7 @@ class ManualBroker(Broker):
         except Exception as e:  # pragma: no cover - logging only
             self.log.error("Telegram send failed: %s", e)
 
-        fname = f"{dt.datetime.utcnow().isoformat().replace(':','-')}_{symbol}_{side}.json"
+        fname = f"{dt.datetime.now(dt.timezone.utc).isoformat().replace(':','-')}_{symbol}_{side}.json"
         path = self.ticket_dir / fname
         try:
             path.write_text(json.dumps(ticket), encoding="utf-8")
