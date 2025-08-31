@@ -395,7 +395,9 @@ def run_cycle(
     dry_run: bool = False,
 ):
     equity = qty
-    …
+    if not watch:
+        log.info("Watchlist empty – skipping cycle.")
+        return
 
 
     # Market hours gate (skip if equity market closed unless it's crypto-only or --force)
