@@ -1,2 +1,8 @@
 '/c' is not recognized as an internal or external command,
 operable program or batch file.
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\Projects\SmartCFDTradingAgent_Revolut\SmartCFDTradingAgent\pipeline.py", line 9, in <module>
+    from dotenv import load_dotenv
+ModuleNotFoundError: No module named 'dotenv'
