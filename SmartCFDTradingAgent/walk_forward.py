@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse, datetime as dt, json, sqlite3
+import logging
 from pathlib import Path
 import pandas as pd
 from SmartCFDTradingAgent.data_loader import get_price_data
@@ -15,6 +16,8 @@ except Exception:  # pragma: no cover - model training optional
 
 STORE = Path(__file__).resolve().parent / "storage"
 STORE.mkdir(exist_ok=True)
+
+log = logging.getLogger(__name__)
 
 
 log = get_logger()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 import argparse, csv, math, datetime as dt
+import logging
 from pathlib import Path
 import pandas as pd
 
@@ -10,7 +11,8 @@ STORE = ROOT / "storage"
 DECISIONS = STORE / "decision_log.csv"
 
 
-log = get_logger()
+log = logging.getLogger(__name__)
+
 
 def _load_decisions(day: str) -> pd.DataFrame:
     if not DECISIONS.exists():

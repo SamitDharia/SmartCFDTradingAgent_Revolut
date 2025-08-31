@@ -10,7 +10,8 @@ from dotenv import load_dotenv
 from SmartCFDTradingAgent.utils.logger import get_logger
 
 
-log = get_logger("telegram")
+log = logging.getLogger(__name__)
+
 
 API = "https://api.telegram.org/bot{token}/sendMessage"
 TIMEOUT = 10
@@ -58,7 +59,9 @@ def _post(text: str, token: str, chat_id: str) -> bool:
             r = requests.post(url, data=data, timeout=TIMEOUT)
         except Exception as e:
             if attempt == 3:
-                log.error("[telegram] request error: %s", e)
+
+                log.warning("[telegram] request error: %s", e)
+
                 return False
             time.sleep(1.5 * (attempt + 1))
             continue
