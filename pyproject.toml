@@ -7,7 +7,7 @@ name = "SmartCFDTradingAgent"
 version = "0.1.0"
 description = "Smart CFD Trading Agent"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.12"
 authors = [{name = "SmartCFDTradingAgent Developers"}]
 license = {text = "MIT"}
 classifiers = [
@@ -23,7 +23,7 @@ dependencies = [
     "pandas_market_calendars>=4.4",
     "python-dotenv>=1.0",
     "tzdata>=2024.1",
-    "alpaca-trade-api>=3.1",
+    "alpaca-trade-api>=3.2",
 ]
 
 [tool.setuptools.packages.find]

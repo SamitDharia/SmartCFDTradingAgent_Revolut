@@ -21,4 +21,5 @@ REM You can tweak symbols/ADX/interval as you like.
 set ARGS=--watch SPY QQQ DIA IWM --size 4 --interval 1d --adx 15 --max-trades 2 --grace 120 --risk 0.01 --equity 1000
 scripts\run_bot.cmd %ARGS% %* >> %LOGFILE% 2>&1
 
+
 endlocal

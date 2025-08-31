@@ -13,3 +13,4 @@ fi
 
 scripts/run_bot.sh --watch SPY QQQ DIA IWM --size 4 --interval 1d --adx 15 \
   --max-trades 2 --grace 120 --risk 0.01 --equity 1000 "$@"
+
