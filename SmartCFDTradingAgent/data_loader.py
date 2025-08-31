@@ -1,5 +1,4 @@
 from __future__ import annotations
-import SmartCFDTradingAgent.utils.no_ssl  # ensure SSL bypass before yfinance usage
 
 import hashlib
 import os
