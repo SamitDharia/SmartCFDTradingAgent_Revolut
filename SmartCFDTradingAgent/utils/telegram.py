@@ -1,20 +1,19 @@
 from __future__ import annotations
-import os, time, json
+import os, time, json, logging
 import requests
 from dotenv import load_dotenv
 
 load_dotenv()
-BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
-CHAT_ID   = os.getenv("CHAT_ID", "").strip()
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+
+log = logging.getLogger("telegram")
 
 API = "https://api.telegram.org/bot{token}/sendMessage"
 TIMEOUT = 10
 MAX_LEN = 4096  # Telegram hard limit
 
 def _post(text: str) -> bool:
-    if not BOT_TOKEN or not CHAT_ID:
-        print("[telegram] BOT_TOKEN/CHAT_ID missing – message skipped.")
-        return False
     url = API.format(token=BOT_TOKEN)
     data = {
         "chat_id": CHAT_ID,
@@ -52,7 +51,7 @@ def _post(text: str) -> bool:
             body = r.json()
         except Exception:
             body = r.text
-        print(f"[telegram] HTTP {r.status_code} {body}")
+        log.error("HTTP %s %s", r.status_code, body)
         return False
     return False
 
@@ -80,13 +79,15 @@ def _chunks(text: str, max_len: int = MAX_LEN):
         yield buf
 
 def send(text: str) -> bool:
+    if not BOT_TOKEN or not CHAT_ID:
+        log.warning("Telegram bot token or chat id not set; skipping message")
+        return False
+
     ok_all = True
     for part in _chunks(text):
         ok = _post(part)
         ok_all = ok_all and ok
         if not ok:
-            # stop early to avoid spamming errors
             break
-        # tiny pacing to be gentle with API
         time.sleep(0.2)
     return ok_all
