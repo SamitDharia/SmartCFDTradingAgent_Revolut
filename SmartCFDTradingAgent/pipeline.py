@@ -359,21 +359,41 @@ def _load_default_config() -> dict:
     except Exception:
         return {}
 
-def run_cycle(watch, size, grace, risk, equity,
-              force=False, interval="1d", adx=20, tz="Europe/Dublin",
-
-              ema_fast=20, ema_slow=50, macd_signal=9,
-              ml_model: "PriceDirectionModel | None" = None, ml_threshold: float = 0.6,
-              max_trades=999, intervals="", interval_weights=None, vote=False, use_params=False,
-
-              max_portfolio_risk=0.02, cooldown_min=30,
-              cap_crypto=2, cap_equity=2, cap_per_ticker=1,
-              risk_budget_crypto=0.01, risk_budget_equity=0.01,
-              class_caps=None, class_risk_budget=None,
-
-              sl_atr=2.0, tp_atr=4.0, trail_atr=0.0):
-              broker: "Broker | None" = None,
-              dry_run: bool = False):
+def run_cycle(
+    watch,
+    size,
+    grace,
+    risk,
+    qty,
+    force=False,
+    interval="1d",
+    adx=20,
+    tz="Europe/Dublin",
+    ema_fast=20,
+    ema_slow=50,
+    macd_signal=9,
+    ml_model: "PriceDirectionModel | None" = None,
+    ml_threshold: float = 0.6,
+    max_trades=999,
+    intervals="",
+    interval_weights=None,
+    vote=False,
+    use_params=False,
+    max_portfolio_risk=0.02,
+    cooldown_min=30,
+    cap_crypto=2,
+    cap_equity=2,
+    cap_per_ticker=1,
+    risk_budget_crypto=0.01,
+    risk_budget_equity=0.01,
+    class_caps=None,
+    class_risk_budget=None,
+    sl_atr=2.0,
+    tp_atr=4.0,
+    trail_atr=0.0,
+    broker: "Broker | None" = None,
+    dry_run: bool = False,
+):
 
     equity = qty
 
@@ -582,8 +602,7 @@ def run_cycle(watch, size, grace, risk, equity,
         )
         if trail_start is not None:
             line += f" | TR {trail_start:.2f}"
-        line += (
-            f" | Qty≈{qty} | ATR≈{atr_pct:.2f}% | R≈{r_multiple:.2f} | Risk≈€{risk_eur}"
+        line += f" | Qty≈{qty} | ATR≈{atr_pct:.2f}% | R≈{r_multiple:.2f} | Risk≈€{risk_eur}"
 
         lines.append(
             f"{emoji} {tkr}  {side} | Px {last:.2f} | SL {sl:.2f} | TP {tp:.2f} | "
