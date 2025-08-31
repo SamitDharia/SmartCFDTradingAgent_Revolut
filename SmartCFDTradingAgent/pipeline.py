@@ -348,6 +348,17 @@ def load_profile_config(path: str, profile: str) -> dict:
     return _expand(cfg)
 # -------------------------------
 
+
+def _load_default_config() -> dict:
+    """Load configuration overrides from ``config.yaml`` if present."""
+    path = ROOT / "config.yaml"
+    if yaml is None or not path.exists():
+        return {}
+    try:
+        return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return {}
+
 def run_cycle(watch, size, grace, risk, equity,
               force=False, interval="1d", adx=20, tz="Europe/Dublin",
 
@@ -442,6 +453,8 @@ def run_cycle(watch, size, grace, risk, equity,
     caps.setdefault("equity", cap_equity)
     default_cap = caps.get("_", max_trades)
 
+    limits_hit: set[str] = set()
+
     # Filter candidates by caps and tuned ADX
     for tkr in tickers:
         side = base_sig.get(tkr, {}).get("action", "Hold")
@@ -460,7 +473,9 @@ def run_cycle(watch, size, grace, risk, equity,
             pass
 
         if per_cls[cls] >= caps.get(cls, default_cap):
-            log.info("Cap skip (%s): %s", cls, tkr); continue
+            log.info("Cap skip (%s): %s", cls, tkr)
+            limits_hit.add("max positions")
+            continue
         if per_tkr.get(tkr, 0) >= cap_per_ticker:
             log.info("Cap skip (per-ticker): %s", tkr); continue
 
@@ -533,6 +548,11 @@ def run_cycle(watch, size, grace, risk, equity,
         per_trade_budget = max(0.0, remaining_budget[cls]) / planned_left
         per_trade_risk = min(per_trade_budget,  # honor class budget
                              risk)              # honor per-trade cap
+
+        if per_trade_budget <= 0:
+            limits_hit.add("risk")
+        qty = qty_from_atr(atr_val, equity, per_trade_risk)
+
         trade_qty = qty_from_atr(atr_val, equity, per_trade_risk)
 
         if broker is not None:
@@ -614,7 +634,12 @@ def run_cycle(watch, size, grace, risk, equity,
            f"{last_cum:.2f}x | Sharpe {stats['sharpe']:.2f} | "
            f"Max DD {stats['max_drawdown']:.2%} | Win rate {stats['win_rate']:.2%}")
     safe_send(msg)
-    return pnl, stats
+
+    summary = f"Summary: signals={len(base_sig)}, orders={len(rows)}"
+    if limits_hit:
+        summary += " | limits: " + ",".join(sorted(limits_hit))
+    safe_send(summary)
+    return pnl, stats, summary
 
 def main():
     ap = argparse.ArgumentParser()
@@ -662,6 +687,27 @@ def main():
     # New: config profiles
     ap.add_argument("--config", help="Path to .yml/.yaml or .json config file")
     ap.add_argument("--profile", help="Profile name inside the config (e.g., crypto_1h)")
+
+    defaults = {a.dest: a.default for a in ap._actions if a.dest != "help"}
+    cfg_defaults = {k: v for k, v in _load_default_config().items() if k in defaults}
+    if cfg_defaults:
+        ap.set_defaults(**cfg_defaults)
+    env_defaults: dict[str, object] = {}
+    for k, v in defaults.items():
+        env_val = os.getenv(k.upper())
+        if env_val is None:
+            continue
+        try:
+            if isinstance(v, bool):
+                env_defaults[k] = str(env_val).lower() in {"1", "true", "yes", "on"}
+            elif isinstance(v, list):
+                env_defaults[k] = str(env_val).split()
+            else:
+                env_defaults[k] = type(v)(env_val)
+        except Exception:
+            env_defaults[k] = env_val
+    if env_defaults:
+        ap.set_defaults(**env_defaults)
 
     args = ap.parse_args()
     from SmartCFDTradingAgent.brokers import get_broker
