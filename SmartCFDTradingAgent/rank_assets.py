@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import logging
 from typing import Iterable, List
 
 import pandas as pd
@@ -10,6 +11,8 @@ from SmartCFDTradingAgent.data_loader import get_price_data
 from SmartCFDTradingAgent.utils.logger import get_logger
 
 log = get_logger()
+
+log = logging.getLogger(__name__)
 
 
 def top_n(
@@ -36,8 +39,12 @@ def top_n(
     try:
         df = get_price_data(tickers, start, end, interval="1d")
     except Exception as e:
+
+        log.error(
+            "daily ranking failed (%s); returning unranked first %s.",
         log.warning(
             "[rank_assets] daily ranking failed (%s); returning unranked first %s.",
+
             e,
             n,
         )

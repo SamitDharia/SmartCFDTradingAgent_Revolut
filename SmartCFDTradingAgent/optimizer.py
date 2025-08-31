@@ -1,5 +1,6 @@
 from __future__ import annotations
 import argparse, json, datetime as dt
+import logging
 from pathlib import Path
 import numpy as np, pandas as pd
 from SmartCFDTradingAgent.data_loader import get_price_data
@@ -11,7 +12,8 @@ STORE.mkdir(exist_ok=True)
 log = get_logger()
 
 
-log = get_logger()
+log = logging.getLogger(__name__)
+
 
 def backtest_simple(df: pd.DataFrame, adx_th: int, sl=0.02, tp=0.04, max_hold=5,
                     ema_fast=12, ema_slow=26) -> float:
