@@ -1,11 +1,14 @@
 from __future__ import annotations
-import argparse, csv, math, datetime as dt
+import argparse, math, datetime as dt
 from pathlib import Path
 import pandas as pd
+
+from SmartCFDTradingAgent.utils.logger import get_logger
 
 ROOT = Path(__file__).resolve().parent
 STORE = ROOT / "storage"
 DECISIONS = STORE / "decision_log.csv"
+log = get_logger()
 
 def _load_decisions(day: str) -> pd.DataFrame:
     if not DECISIONS.exists():
@@ -45,9 +48,7 @@ def _nearest_trade(trades: pd.DataFrame, tkr: str, side: str, t_ref: pd.Timestam
     return subset.sort_values("diff_min").iloc[0]
 
 def recon(csv_path: str, day: str, window_min: int = 90, to_telegram: bool = False) -> Path:
-    from SmartCFDTradingAgent.utils.logger import get_logger
     from SmartCFDTradingAgent.utils.telegram import send as tg_send
-    log = get_logger()
     dec = _load_decisions(day)
     trd = _load_revolut_csv(csv_path)
     trd = trd[trd["date"] == day]
@@ -86,7 +87,7 @@ def main():
     else:
         day = args.day
     out = recon(args.csv, day, args.window_min, args.to_telegram)
-    print("Saved", out)
+    log.info("Saved %s", out)
 
 if __name__ == "__main__":
     main()

@@ -6,6 +6,7 @@ import pandas as pd
 from SmartCFDTradingAgent.data_loader import get_price_data
 from SmartCFDTradingAgent.indicators import ema, macd, adx
 from SmartCFDTradingAgent.utils import trade_logger
+from SmartCFDTradingAgent.utils.logger import get_logger
 
 try:  # optional dependency
     from SmartCFDTradingAgent.ml_models import PriceDirectionModel
@@ -14,6 +15,7 @@ except Exception:  # pragma: no cover - model training optional
 
 STORE = Path(__file__).resolve().parent / "storage"
 STORE.mkdir(exist_ok=True)
+log = get_logger()
 
 
 def _tz_naive_index(idx: pd.DatetimeIndex) -> pd.DatetimeIndex:
@@ -232,12 +234,12 @@ def main():
             best = optimize_walk_forward(one, args.train_months, args.test_months)
             key = f"{t}|{args.interval}"
             obj[key] = best
-            print("Walk-forward (per-ticker) saved:", key, "=>", best)
+            log.info("Walk-forward (per-ticker) saved: %s => %s", key, best)
     else:
         best = optimize_walk_forward(df, args.train_months, args.test_months)
         key = ",".join(sorted(args.watch)) + "|" + args.interval
         obj[key] = best
-        print("Walk-forward (group) saved:", key, "=>", best)
+        log.info("Walk-forward (group) saved: %s => %s", key, best)
 
     params_path.write_text(json.dumps(obj, indent=2), encoding="utf-8")
 
