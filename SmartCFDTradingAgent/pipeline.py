@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-# Must be first: force yfinance to use safe downloader (no SSL issues)
-import SmartCFDTradingAgent.utils.no_ssl  # noqa: F401
-
 import os
-os.environ.setdefault("CURL_CA_BUNDLE", "")
-os.environ.setdefault("YF_DISABLE_CURL", "1")
+
+if os.getenv("SKIP_SSL_VERIFY") == "1":
+    import SmartCFDTradingAgent.utils.no_ssl  # noqa: F401
 
 import argparse, time, datetime as dt, csv, sys, json
 from dotenv import load_dotenv
@@ -35,11 +33,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover - hint only
     from SmartCFDTradingAgent.ml_models import PriceDirectionModel
-
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:  # pragma: no cover - hint only
-    from SmartCFDTradingAgent.ml_models import PriceDirectionModel
+    from SmartCFDTradingAgent.brokers.base import Broker
 
 log = get_logger()
 ROOT = Path(__file__).resolve().parent
@@ -355,9 +349,9 @@ def load_profile_config(path: str, profile: str) -> dict:
 # -------------------------------
 
 def run_cycle(watch, size, grace, risk, equity,
-              force=False, interval="1d", adx=15, tz="Europe/Dublin",
+              force=False, interval="1d", adx=20, tz="Europe/Dublin",
 
-              ema_fast=12, ema_slow=26, macd_signal=9,
+              ema_fast=20, ema_slow=50, macd_signal=9,
               ml_model: "PriceDirectionModel | None" = None, ml_threshold: float = 0.6,
               max_trades=999, intervals="", interval_weights=None, vote=False, use_params=False,
 
@@ -365,7 +359,12 @@ def run_cycle(watch, size, grace, risk, equity,
               cap_crypto=2, cap_equity=2, cap_per_ticker=1,
               risk_budget_crypto=0.01, risk_budget_equity=0.01,
               class_caps=None, class_risk_budget=None,
+
               sl_atr=2.0, tp_atr=4.0, trail_atr=0.0):
+              broker: "Broker | None" = None,
+              dry_run: bool = False):
+
+    equity = qty
 
     # Market hours gate (skip if equity market closed unless it's crypto-only or --force)
     if not force and not (all(is_crypto(t) for t in watch) or market_open()):
@@ -386,18 +385,15 @@ def run_cycle(watch, size, grace, risk, equity,
     base_sig = generate_signals(
         price,
         adx_threshold=adx,
-        fast_span=ema_fast,
-        slow_span=ema_slow,
-        macd_signal=macd_signal,
-        ml_model=ml_model,
-        ml_threshold=ml_threshold,
+        ema_fast=ema_fast,
+        ema_slow=ema_slow,
     )
     log.info("Signals: %s", base_sig)
 
     # Multi-interval voting (accept list OR string)
     if vote and intervals:
         weights = _parse_interval_weights(interval_weights)
-        maps = {interval: base_sig}
+        maps = {interval: {t: d["action"] for t, d in base_sig.items()}}
         for itv in _normalize_intervals(intervals):
             if itv in maps:
                 continue
@@ -406,19 +402,18 @@ def run_cycle(watch, size, grace, risk, equity,
                 start_v = (dt.date.today() - dt.timedelta(days=lb_v)).isoformat()
                 price_v = get_price_data(tickers, start_v, end, interval=itv)
 
-                maps[itv] = generate_signals(
+                sig_v = generate_signals(
                     price_v,
                     adx_threshold=adx,
-                    fast_span=ema_fast,
-                    slow_span=ema_slow,
-                    macd_signal=macd_signal,
-                    ml_model=ml_model,
-                    ml_threshold=ml_threshold,
+                    ema_fast=ema_fast,
+                    ema_slow=ema_slow,
                 )
+                maps[itv] = {t: d["action"] for t, d in sig_v.items()}
 
             except Exception as e:
                 log.error("Voting interval %s failed: %s", itv, e)
-        base_sig = vote_signals(maps, weights)
+        voted = vote_signals(maps, weights)
+        base_sig = {t: {"action": s, "confidence": 1.0} for t, s in voted.items()}
 
     params = load_params() if use_params else {}
     key_group = ",".join(sorted(watch)) + "|" + interval
@@ -449,7 +444,7 @@ def run_cycle(watch, size, grace, risk, equity,
 
     # Filter candidates by caps and tuned ADX
     for tkr in tickers:
-        side = base_sig.get(tkr, "Hold")
+        side = base_sig.get(tkr, {}).get("action", "Hold")
         if side == "Hold":
             continue
         tkr = tkr.replace(" ", "").replace("\u00A0", "")
@@ -538,7 +533,16 @@ def run_cycle(watch, size, grace, risk, equity,
         per_trade_budget = max(0.0, remaining_budget[cls]) / planned_left
         per_trade_risk = min(per_trade_budget,  # honor class budget
                              risk)              # honor per-trade cap
-        qty = qty_from_atr(atr_val, equity, per_trade_risk)
+        trade_qty = qty_from_atr(atr_val, equity, per_trade_risk)
+
+        if broker is not None:
+            try:
+                broker.submit_order(
+                    tkr, side, qty, entry=last, sl=sl, tp=tp,
+                    tif="day", dry_run=dry_run
+                )
+            except Exception as e:
+                log.error("Broker submit failed for %s: %s", tkr, e)
 
         risk_eur = round(per_trade_risk * equity, 2)
         atr_pct = (atr_val / last) * 100.0 if last else 0.0
@@ -560,6 +564,10 @@ def run_cycle(watch, size, grace, risk, equity,
             line += f" | TR {trail_start:.2f}"
         line += (
             f" | Qty≈{qty} | ATR≈{atr_pct:.2f}% | R≈{r_multiple:.2f} | Risk≈€{risk_eur}"
+
+        lines.append(
+            f"{emoji} {tkr}  {side} | Px {last:.2f} | SL {sl:.2f} | TP {tp:.2f} | "
+            f"Qty≈{trade_qty} | ATR≈{atr_pct:.2f}% | R≈{r_multiple:.2f} | Risk≈€{risk_eur}"
         )
         lines.append(line)
         rows.append({
@@ -592,9 +600,15 @@ def run_cycle(watch, size, grace, risk, equity,
     time.sleep(max(0, grace))
 
     # Lightweight backtest preview on the same data slice
+
     pnl, stats, _ = backtest(price, base_sig, max_hold=5, cost=0.0002,
                              sl_atr=defaults["sl_atr"], tp_atr=defaults["tp_atr"],
                              trail_atr=defaults["trail_atr"], risk_pct=risk, equity=equity)
+
+    sig_map = {k: v["action"] for k, v in base_sig.items()}
+    pnl, stats, _ = backtest(price, sig_map, max_hold=5, cost=0.0002,
+                             sl=defaults["sl"], tp=defaults["tp"], risk_pct=risk, equity=equity)
+
     last_cum = pnl["cum_return"].iloc[-1]
     msg = ("Backtest cum return (1yr): "
            f"{last_cum:.2f}x | Sharpe {stats['sharpe']:.2f} | "
@@ -612,15 +626,18 @@ def main():
     ap.add_argument("--sl-atr", type=float, default=2.0, help="Stop loss ATR multiple (0 disables)")
     ap.add_argument("--tp-atr", type=float, default=4.0, help="Take profit ATR multiple (0 disables)")
     ap.add_argument("--trail-atr", type=float, default=0.0, help="Trailing stop ATR multiple (0 disables)")
+    ap.add_argument("--qty", type=float, default=1000.0)
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--interval", default="1d")
-    ap.add_argument("--adx", type=int, default=15)
-    ap.add_argument("--ema-fast", type=int, default=12)
-    ap.add_argument("--ema-slow", type=int, default=26)
+    ap.add_argument("--adx", type=int, default=20)
+    ap.add_argument("--ema-fast", type=int, default=20)
+    ap.add_argument("--ema-slow", type=int, default=50)
     ap.add_argument("--macd-signal", type=int, default=9)
     ap.add_argument("--tz", default="Europe/Dublin")
     ap.add_argument("--ml-model", help="Path to trained ML model for signal blending")
     ap.add_argument("--ml-threshold", type=float, default=0.6, help="Probability threshold for ML override")
+    ap.add_argument("--broker", choices=["manual", "alpaca"], default="manual")
+    ap.add_argument("--dry-run", action="store_true")
     # Caps & budgets
     ap.add_argument("--max-trades", type=int, default=999)
     ap.add_argument("--cap-crypto", type=int, default=2)
@@ -646,6 +663,8 @@ def main():
     ap.add_argument("--profile", help="Profile name inside the config (e.g., crypto_1h)")
 
     args = ap.parse_args()
+    from SmartCFDTradingAgent.brokers import get_broker
+    broker = get_broker(args.broker) if args.broker else None
 
     if args.show_decisions > 0:
         rows = read_last_decisions(args.show_decisions)
@@ -675,8 +694,8 @@ def main():
             watch=watch,
             size=int(cfg.get("size", args.size)),
             grace=int(cfg.get("grace", args.grace)),
+            qty=float(cfg.get("qty", args.qty)),
             risk=float(cfg.get("risk", args.risk)),
-            equity=float(cfg.get("equity", args.equity)),
             force=(args.force or bool(cfg.get("force", False))),
             interval=cfg.get("interval", args.interval),
             adx=int(cfg.get("adx", args.adx)),
@@ -703,6 +722,8 @@ def main():
             sl_atr=float(cfg.get("sl_atr", args.sl_atr)),
             tp_atr=float(cfg.get("tp_atr", args.tp_atr)),
             trail_atr=float(cfg.get("trail_atr", args.trail_atr)),
+            broker=broker,
+            dry_run=args.dry_run,
         )
         return
 
@@ -723,8 +744,8 @@ def main():
             watch=args.watch,
             size=args.size,
             grace=args.grace,
+            qty=args.qty,
             risk=args.risk,
-            equity=args.equity,
             force=args.force,
             interval=args.interval,
             adx=args.adx,
@@ -751,6 +772,8 @@ def main():
             sl_atr=args.sl_atr,
             tp_atr=args.tp_atr,
             trail_atr=args.trail_atr,
+            broker=broker,
+            dry_run=args.dry_run,
         )
 
     except Exception as e:

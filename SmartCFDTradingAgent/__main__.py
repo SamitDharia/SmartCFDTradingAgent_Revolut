@@ -1,4 +1,10 @@
 from __future__ import annotations
+
+import os
+
+if os.getenv("SKIP_SSL_VERIFY") == "1":
+    import SmartCFDTradingAgent.utils.no_ssl  # noqa: F401
+
 import argparse, datetime as dt
 from SmartCFDTradingAgent.data_loader import get_price_data
 from SmartCFDTradingAgent.signals import generate_signals
@@ -23,7 +29,8 @@ def cli():
     log.info("Signals: %s", sig)
 
     if args.backtest:
-        pnl = backtest(price, sig, risk_pct=args.risk, equity=args.equity)
+        sig_map = {k: v["action"] for k, v in sig.items()}
+        pnl = backtest(price, sig_map, risk_pct=args.risk, equity=args.equity)
         log.info("Cumulative return: %.2fx", pnl["cum_return"].iloc[-1])
 
 if __name__ == "__main__":
