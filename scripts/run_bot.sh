@@ -8,4 +8,8 @@ if [[ -z "$VIRTUAL_ENV" && -f "venv/bin/activate" ]]; then
 fi
 export CURL_CA_BUNDLE=
 export YF_DISABLE_CURL=1
+if ! command -v python >/dev/null 2>&1; then
+  echo "Error: Python executable not found. Please install Python and ensure it is in your PATH." >&2
+  exit 1
+fi
 python -m SmartCFDTradingAgent.pipeline "$@"

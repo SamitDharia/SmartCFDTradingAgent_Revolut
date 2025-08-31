@@ -2,8 +2,10 @@
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.."
-# shellcheck disable=SC1091
-source venv/bin/activate
+if [[ -z "$VIRTUAL_ENV" && -f "venv/bin/activate" ]]; then
+  # shellcheck disable=SC1091
+  source venv/bin/activate
+fi
 
 # Walk-forward (equities per-ticker, daily)
 python -m SmartCFDTradingAgent.walk_forward --watch SPY QQQ DIA IWM --interval 1d --years 3 --train-months 6 --test-months 1 --per-ticker
