@@ -22,7 +22,6 @@ dependencies = [
     "requests>=2.32",
     "pandas_market_calendars>=4.4",
     "python-dotenv>=1.0",
-    "streamlit>=1.30",
     "tzdata>=2024.1",
     "alpaca-trade-api>=3.1",
 ]
