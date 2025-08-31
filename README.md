@@ -129,6 +129,16 @@ tail -n 20 SmartCFDTradingAgent/storage/decision_log.csv
 
 The `scripts` directory contains Unix-friendly `.sh` helpers mirroring the Windows `.cmd` files.
 
+Both `market_loop.cmd` and `market_loop.sh` forward any extra CLI flags to the
+underlying `run_bot` call and include `--dry-run` by default to avoid placing
+real orders. Remove `--dry-run` if you intend to trade live and pass additional
+options at invocation time, for example:
+
+```
+scripts/market_loop.cmd --force
+scripts/market_loop.sh --force
+```
+
 ### Cron (Unix)
 Schedule runs with `crontab -e`. For example, to execute the market loop at 14:30 UTC every weekday:
 
