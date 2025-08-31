@@ -28,6 +28,26 @@ Additional optional settings are available in `.env.example` such as
 `SKIP_SSL_VERIFY`, `RISK_PCT`, `MAX_POSITIONS`, `MAX_DAILY_LOSS_PCT`,
 `MARKET_GATE`, and `ALLOW_FRACTIONAL`.
 
+### Scheduler environments
+When running from Windows Task Scheduler or cron, ensure the job starts in the
+project root so the `.env` file is discovered.  These schedulers launch with a
+minimal environment, so credentials may need to be exported explicitly.
+
+Example cron entry invoking a one-off Telegram test:
+
+```
+* * * * * cd /path/to/SmartCFDTradingAgent_Revolut && \
+TELEGRAM_BOT_TOKEN=123456:ABC-XYZ TELEGRAM_CHAT_ID=123456789 \
+python -c "from SmartCFDTradingAgent.utils.telegram import send; send('test')"
+```
+
+Windows Task Scheduler users can set **Start in** to the project root and
+include environment variables in the command:
+
+```
+cmd /c "set TELEGRAM_BOT_TOKEN=123456:ABC-XYZ && set TELEGRAM_CHAT_ID=123456789 && python -c \"from SmartCFDTradingAgent.utils.telegram import send; send('test')\""
+```
+
 ## Asset categories
 Tickers are grouped into asset classes in `SmartCFDTradingAgent/assets.yml` (e.g. `crypto`, `equity`, `forex`, `commodity`).
 These categories drive per-class alert caps and risk budgets via the `class_caps` and
