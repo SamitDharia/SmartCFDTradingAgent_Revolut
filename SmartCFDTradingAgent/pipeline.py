@@ -359,23 +359,23 @@ def _load_default_config() -> dict:
     except Exception:
         return {}
 
-def run_cycle(watch, size, grace, risk, equity,
-              force=False, interval="1d", adx=20, tz="Europe/Dublin",
-
-              ema_fast=20, ema_slow=50, macd_signal=9,
-              ml_model: "PriceDirectionModel | None" = None, ml_threshold: float = 0.6,
-              max_trades=999, intervals="", interval_weights=None, vote=False, use_params=False,
-
-              max_portfolio_risk=0.02, cooldown_min=30,
-              cap_crypto=2, cap_equity=2, cap_per_ticker=1,
-              risk_budget_crypto=0.01, risk_budget_equity=0.01,
-              class_caps=None, class_risk_budget=None,
-
-              sl_atr=2.0, tp_atr=4.0, trail_atr=0.0):
-              broker: "Broker | None" = None,
-              dry_run: bool = False):
-
+def run_cycle(
+    watch, size, grace, risk, qty,
+    force=False, interval="1d", adx=20, tz="Europe/Dublin",
+    ema_fast=20, ema_slow=50, macd_signal=9,
+    ml_model: "PriceDirectionModel | None" = None, ml_threshold: float = 0.6,
+    max_trades=999, intervals="", interval_weights=None, vote=False, use_params=False,
+    max_portfolio_risk=0.02, cooldown_min=30,
+    cap_crypto=2, cap_equity=2, cap_per_ticker=1,
+    risk_budget_crypto=0.01, risk_budget_equity=0.01,
+    class_caps=None, class_risk_budget=None,
+    sl_atr=2.0, tp_atr=4.0, trail_atr=0.0,
+    broker: "Broker | None" = None,
+    dry_run: bool = False,
+):
     equity = qty
+    …
+
 
     # Market hours gate (skip if equity market closed unless it's crypto-only or --force)
     if not force and not (all(is_crypto(t) for t in watch) or market_open()):
