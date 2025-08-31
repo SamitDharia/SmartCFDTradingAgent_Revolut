@@ -10,7 +10,6 @@ import pandas as pd
 from SmartCFDTradingAgent.data_loader import get_price_data
 from SmartCFDTradingAgent.utils.logger import get_logger
 
-
 log = get_logger()
 
 log = logging.getLogger(__name__)

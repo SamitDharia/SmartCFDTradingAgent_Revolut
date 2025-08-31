@@ -9,6 +9,7 @@ from SmartCFDTradingAgent.utils.logger import get_logger
 
 STORE = Path(__file__).resolve().parent / "storage"
 STORE.mkdir(exist_ok=True)
+log = get_logger()
 
 
 log = logging.getLogger(__name__)

@@ -16,6 +16,7 @@ except Exception:  # pragma: no cover - model training optional
 
 STORE = Path(__file__).resolve().parent / "storage"
 STORE.mkdir(exist_ok=True)
+log = get_logger()
 
 log = logging.getLogger(__name__)
 

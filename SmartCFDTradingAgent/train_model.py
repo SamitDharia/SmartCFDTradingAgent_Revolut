@@ -13,6 +13,7 @@ log = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parent
 STORE = ROOT / "storage"
+log = get_logger()
 
 
 log = get_logger()

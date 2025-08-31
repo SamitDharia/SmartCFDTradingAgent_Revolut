@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 import argparse, csv, math, datetime as dt
 import logging
+
 from pathlib import Path
 import pandas as pd
 
@@ -9,6 +11,7 @@ from SmartCFDTradingAgent.utils.logger import get_logger
 ROOT = Path(__file__).resolve().parent
 STORE = ROOT / "storage"
 DECISIONS = STORE / "decision_log.csv"
+log = get_logger()
 
 
 log = logging.getLogger(__name__)
