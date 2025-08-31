@@ -3,7 +3,7 @@ from typing import Dict, List, Tuple
 
 import pandas as pd, numpy as np
 
-from SmartCFDTradingAgent.indicators import atr
+from SmartCFDTradingAgent.calculator import atr
 
 def _sig_to_pos(sig: str) -> int:
     return {"Buy": 1, "Sell": -1}.get(sig, 0)

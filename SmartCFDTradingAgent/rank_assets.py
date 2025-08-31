@@ -1,5 +1,4 @@
 from __future__ import annotations
-import SmartCFDTradingAgent.utils.no_ssl  # must be first
 
 import argparse
 import datetime as dt
