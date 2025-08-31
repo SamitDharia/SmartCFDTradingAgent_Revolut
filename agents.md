@@ -1,18 +1,34 @@
-# AGENTS.md
+# Developer Guidance
+
 ## Setup
-- Python 3.11+
-- Windows: py -m venv venv && venv\Scripts\activate && pip install -r requirements.txt
-- Unix/WSL: python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+- **Windows CMD**
+  ```cmd
+  python -m venv .venv
+  .venv\Scripts\activate
+  pip install -r requirements.txt
+  ```
+- **WSL/Linux**
+  ```bash
+  python -m venv .venv
+  source .venv/bin/activate
+  pip install -r requirements.txt
+  ```
 
-## Secrets
-- Use env vars: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, ALPACA_KEY, ALPACA_SECRET
-- Never commit .env
+## Lint
+- `ruff .`
 
-## Commands
-- Lint: ruff check .
-- Tests: pytest -q
-- Smoke: python -m SmartCFDTradingAgent.__main__ --help
-- Backtest: python -m SmartCFDTradingAgent.__main__ --tickers ETH BTC --start 2023-01-01 --end 2025-08-31 --backtest
+## Format
+- `black .` (or `black --check .`)
 
-## Code style
-- Black + Ruff, type hints where touched, small focused PRs.
+## Tests
+- `pytest`
+
+## Smoke/Backtest
+- **Windows CMD**
+  ```cmd
+  python -m SmartCFDTradingAgent --tickers SPY --start 2024-01-01 --end 2024-02-01 --backtest
+  ```
+- **WSL/Linux**
+  ```bash
+  python -m SmartCFDTradingAgent --tickers SPY --start 2024-01-01 --end 2024-02-01 --backtest
+  ```
