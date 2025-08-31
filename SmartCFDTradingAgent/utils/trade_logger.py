@@ -2,7 +2,7 @@ import csv
 import sqlite3
 from pathlib import Path
 from typing import Any, Dict
-from datetime import datetime
+from datetime import datetime, timezone
 
 STORE = Path(__file__).resolve().parent.parent / "storage"
 STORE.mkdir(exist_ok=True)
@@ -59,7 +59,7 @@ def log_trade(row: Dict[str, Any]) -> None:
     """
     data = {k: row.get(k) for k in FIELDS}
     if not data.get("time"):
-        data["time"] = datetime.utcnow().isoformat(timespec="seconds")
+        data["time"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     # CSV
     new_file = not CSV_PATH.exists()
