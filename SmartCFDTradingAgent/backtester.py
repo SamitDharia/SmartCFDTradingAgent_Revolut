@@ -5,7 +5,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 import pandas as pd
 
-from SmartCFDTradingAgent.calculator import atr
+from SmartCFDTradingAgent.indicators import atr
 
 
 def _sig_to_pos(sig: str) -> int:
