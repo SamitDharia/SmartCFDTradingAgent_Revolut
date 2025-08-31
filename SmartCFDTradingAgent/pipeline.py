@@ -23,7 +23,7 @@ from SmartCFDTradingAgent.data_loader import get_price_data
 from SmartCFDTradingAgent.signals import generate_signals
 from SmartCFDTradingAgent.backtester import backtest
 from SmartCFDTradingAgent.position import qty_from_atr
-from SmartCFDTradingAgent.indicators import adx as _adx
+from SmartCFDTradingAgent.indicators import adx as _adx, atr as _atr
 try:  # PyYAML may be missing in minimal environments
     import yaml  # type: ignore
 except Exception:  # pragma: no cover - fallback for tests
@@ -564,7 +564,6 @@ def run_cycle(
 
         last = float(price[tkr]["Close"].iloc[-1])
 
-        from SmartCFDTradingAgent.indicators import atr as _atr
         high = price[tkr]["High"].dropna().tail(15)
         low  = price[tkr]["Low"].dropna().tail(15)
         cls_px  = price[tkr]["Close"].dropna().tail(15)
