@@ -765,8 +765,10 @@ def main():
 
     if args.show_decisions > 0:
         rows = read_last_decisions(args.show_decisions)
-        msg = format_decisions(rows); print(msg)
-        if args.to_telegram: safe_send(msg)
+        msg = format_decisions(rows)
+        log.info(msg)
+        if args.to_telegram:
+            safe_send(msg)
         return
     if args.daily_summary:
         send_daily_summary(args.tz); return
@@ -778,7 +780,8 @@ def main():
         if isinstance(watch, str):
             watch = watch.split()
         if not watch:
-            print("Config missing 'watch' list."); sys.exit(2)
+            log.error("Config missing 'watch' list.")
+            sys.exit(2)
         model_cfg = None
         ml_path = cfg.get("ml_model", args.ml_model)
         if ml_path:
@@ -825,7 +828,7 @@ def main():
         return
 
     if not args.watch:
-        print("Error: --watch is required for normal run.")
+        log.error("Error: --watch is required for normal run.")
         sys.exit(2)
 
     model = None

@@ -1,5 +1,6 @@
 import csv
 import sqlite3
+import sys
 import pandas as pd
 
 from SmartCFDTradingAgent import pipeline
@@ -71,3 +72,13 @@ def test_dry_run_cycle_logging_and_summary(monkeypatch, tmp_path):
     cur.execute("SELECT ticker FROM trades")
     assert cur.fetchone()[0] == "AAA"
     conn.close()
+
+
+def test_show_decisions_logs(monkeypatch, caplog):
+    monkeypatch.setattr(pipeline, "read_last_decisions", lambda n: [])
+    monkeypatch.setattr(pipeline, "format_decisions", lambda rows: "No decisions")
+    monkeypatch.setattr(pipeline, "safe_send", lambda msg: None)
+    monkeypatch.setattr(sys, "argv", ["prog", "--show-decisions", "1"])
+    with caplog.at_level("INFO"):
+        pipeline.main()
+    assert "No decisions" in caplog.text
