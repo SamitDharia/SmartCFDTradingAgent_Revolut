@@ -30,7 +30,8 @@ def _make_price_df():
 def test_backtester_metrics():
     price_df = _make_price_df()
     pnl, stats, trades = backtest(price_df, {'AAA': 'Buy'}, delay=0,
-                                  max_hold=1, cost=0.0, sl=0.5, tp=0.5,
+                                  max_hold=1, cost=0.0,
+                                  sl_atr=0.0, tp_atr=0.0, trail_atr=0.0,
                                   risk_pct=0.01, equity=100000)
 
     daily = pnl['total'].fillna(0)
