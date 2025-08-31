@@ -427,7 +427,12 @@ def run_cycle(
     # Multi-interval voting (accept list OR string)
     if vote and intervals:
         weights = _parse_interval_weights(interval_weights)
-        maps = {interval: {t: d["action"] for t, d in base_sig.items()}}
+        maps = {
+            interval: {
+                t: (d["action"] if isinstance(d, dict) else d)
+                for t, d in base_sig.items()
+            }
+        }
         for itv in _normalize_intervals(intervals):
             if itv in maps:
                 continue
@@ -442,7 +447,10 @@ def run_cycle(
                     ema_fast=ema_fast,
                     ema_slow=ema_slow,
                 )
-                maps[itv] = {t: d["action"] for t, d in sig_v.items()}
+                maps[itv] = {
+                    t: (d["action"] if isinstance(d, dict) else d)
+                    for t, d in sig_v.items()
+                }
 
             except Exception as e:
                 log.error("Voting interval %s failed: %s", itv, e)
@@ -480,7 +488,8 @@ def run_cycle(
 
     # Filter candidates by caps and tuned ADX
     for tkr in tickers:
-        side = base_sig.get(tkr, {}).get("action", "Hold")
+        sig = base_sig.get(tkr, "Hold")
+        side = sig.get("action", "Hold") if isinstance(sig, dict) else sig
         if side == "Hold":
             continue
         tkr = tkr.replace(" ", "").replace("\u00A0", "")
@@ -642,14 +651,21 @@ def run_cycle(
     time.sleep(max(0, grace))
 
     # Lightweight backtest preview on the same data slice
-
-    pnl, stats, _ = backtest(price, base_sig, max_hold=5, cost=0.0002,
-                             sl_atr=defaults["sl_atr"], tp_atr=defaults["tp_atr"],
-                             trail_atr=defaults["trail_atr"], risk_pct=risk, equity=equity)
-
-    sig_map = {k: v["action"] for k, v in base_sig.items()}
-    pnl, stats, _ = backtest(price, sig_map, max_hold=5, cost=0.0002,
-                             sl=defaults["sl"], tp=defaults["tp"], risk_pct=risk, equity=equity)
+    sig_map = {
+        k: (v["action"] if isinstance(v, dict) else v)
+        for k, v in base_sig.items()
+    }
+    pnl, stats, _ = backtest(
+        price,
+        sig_map,
+        max_hold=5,
+        cost=0.0002,
+        sl_atr=defaults["sl_atr"],
+        tp_atr=defaults["tp_atr"],
+        trail_atr=defaults["trail_atr"],
+        risk_pct=risk,
+        equity=equity,
+    )
 
     last_cum = pnl["cum_return"].iloc[-1]
     msg = ("Backtest cum return (1yr): "
