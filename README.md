@@ -2,37 +2,9 @@
 
 Rank assets, generate signals, and send manual execution alerts via Telegram (with SL/TP).
 
-## Installation
+## Developer setup
 
-### Windows (CMD)
-
-```cmd
-git clone <repo-url>
-cd SmartCFDTradingAgent_Revolut
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-pip install -e .
-```
-
-### WSL/Linux
-
-```bash
-git clone <repo-url>
-cd SmartCFDTradingAgent_Revolut
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-pip install -e .
-```
-
-## Development workflow
-
-With the package installed, run the test suite using the standard package imports:
-
-```bash
-pytest
-```
+See [AGENTS.md](AGENTS.md) for environment setup, linting, formatting, testing, and smoke/backtest instructions.
 
 ## .env configuration
 Create a bot with @BotFather and copy `.env.example` to `.env` (do not commit):
