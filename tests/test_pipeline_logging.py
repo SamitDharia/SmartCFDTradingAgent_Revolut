@@ -45,12 +45,9 @@ sys.modules.setdefault(
     "SmartCFDTradingAgent.position",
     types.SimpleNamespace(qty_from_atr=lambda *a, **k: 1),
 )
-sys.modules.setdefault(
-    "SmartCFDTradingAgent.indicators",
-    types.SimpleNamespace(
-        adx=lambda *a, **k: FakeSeries([30]),
-        atr=lambda *a, **k: FakeSeries([1, 1]),
-    ),
+sys.modules["SmartCFDTradingAgent.indicators"] = types.SimpleNamespace(
+    adx=lambda *a, **k: FakeSeries([30]),
+    atr=lambda *a, **k: FakeSeries([1, 1]),
 )
 
 from SmartCFDTradingAgent import pipeline
