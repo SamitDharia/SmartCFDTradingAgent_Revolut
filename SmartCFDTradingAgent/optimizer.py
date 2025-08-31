@@ -10,6 +10,9 @@ STORE = Path(__file__).resolve().parent / "storage"
 STORE.mkdir(exist_ok=True)
 log = get_logger()
 
+
+log = get_logger()
+
 def backtest_simple(df: pd.DataFrame, adx_th: int, sl=0.02, tp=0.04, max_hold=5,
                     ema_fast=12, ema_slow=26) -> float:
     close = df.xs("Close", level=1, axis=1)

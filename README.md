@@ -6,9 +6,9 @@ Rank assets, generate signals, and send manual execution alerts via Telegram (wi
 
 See [AGENTS.md](AGENTS.md) for environment setup, linting, formatting, testing, and smoke/backtest instructions.
 
-This project targets Python 3.11–3.12 where pre-built pandas wheels are available.
-Windows users running Python 3.13 must install MSVC Build Tools to compile pandas or
-downgrade Python to 3.12/3.11.
+This project targets Python 3.10–3.11 where pre-built pandas wheels are available.
+Windows users running Python 3.12+ must install MSVC Build Tools to compile pandas or
+downgrade Python to 3.11/3.10.
 
 ## .env configuration
 Create a bot with @BotFather and copy `.env.example` to `.env` (do not commit):
@@ -128,6 +128,16 @@ tail -n 20 SmartCFDTradingAgent/storage/decision_log.csv
 ## Automation
 
 The `scripts` directory contains Unix-friendly `.sh` helpers mirroring the Windows `.cmd` files.
+
+Both `market_loop.cmd` and `market_loop.sh` forward any extra CLI flags to the
+underlying `run_bot` call and include `--dry-run` by default to avoid placing
+real orders. Remove `--dry-run` if you intend to trade live and pass additional
+options at invocation time, for example:
+
+```
+scripts/market_loop.cmd --force
+scripts/market_loop.sh --force
+```
 
 ### Cron (Unix)
 Schedule runs with `crontab -e`. For example, to execute the market loop at 14:30 UTC every weekday:

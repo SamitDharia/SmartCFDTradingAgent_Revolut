@@ -10,6 +10,9 @@ STORE = ROOT / "storage"
 DECISIONS = STORE / "decision_log.csv"
 log = get_logger()
 
+
+log = get_logger()
+
 def _load_decisions(day: str) -> pd.DataFrame:
     if not DECISIONS.exists():
         raise SystemExit("decision_log.csv not found.")

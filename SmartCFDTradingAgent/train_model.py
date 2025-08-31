@@ -13,6 +13,9 @@ STORE = ROOT / "storage"
 log = get_logger()
 
 
+log = get_logger()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Train ML model for SmartCFD signals")
     parser.add_argument("csv", help="Path to CSV file containing historical price data")

@@ -18,6 +18,9 @@ STORE.mkdir(exist_ok=True)
 log = get_logger()
 
 
+log = get_logger()
+
+
 def _tz_naive_index(idx: pd.DatetimeIndex) -> pd.DatetimeIndex:
     try:
         return idx.tz_localize(None) if getattr(idx, "tz", None) is not None else idx
