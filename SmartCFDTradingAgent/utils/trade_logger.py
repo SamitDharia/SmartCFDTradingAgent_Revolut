@@ -77,3 +77,47 @@ def log_trade(row: Dict[str, Any]) -> None:
             [data[k] for k in FIELDS],
         )
     conn.close()
+
+
+def aggregate_trade_stats() -> Dict[str, int]:
+    """Return counts of wins, losses and open trades.
+
+    A trade is considered "open" when its ``exit`` field is ``NULL``.  Closed
+    trades are split into wins and losses based on whether the exit price was
+    favourable relative to the entry price for the given trade ``side``.
+    """
+
+    conn = _ensure_db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT
+                SUM(
+                    CASE
+                        WHEN exit IS NOT NULL AND entry IS NOT NULL
+                             AND ((side = 'buy' AND exit > entry)
+                                  OR (side = 'sell' AND exit < entry))
+                        THEN 1 ELSE 0
+                    END
+                ) AS wins,
+                SUM(
+                    CASE
+                        WHEN exit IS NOT NULL AND entry IS NOT NULL
+                             AND ((side = 'buy' AND exit <= entry)
+                                  OR (side = 'sell' AND exit >= entry))
+                        THEN 1 ELSE 0
+                    END
+                ) AS losses,
+                SUM(CASE WHEN exit IS NULL THEN 1 ELSE 0 END) AS open
+            FROM trades
+            """,
+        )
+        wins, losses, open_trades = cur.fetchone()
+        return {
+            "wins": int(wins or 0),
+            "losses": int(losses or 0),
+            "open": int(open_trades or 0),
+        }
+    finally:
+        conn.close()
