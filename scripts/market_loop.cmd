@@ -1,9 +1,18 @@
 @echo off
-setlocal
-cd /d C:\Projects\SmartCFDTradingAgent_Revolut
+setlocal enabledelayedexpansion
+cd /d %~dp0\..
 
-REM Activate venv
-call venv\Scripts\activate
+REM Optionally activate virtual environment
+if not defined VIRTUAL_ENV (
+  if exist venv\Scripts\activate.bat call venv\Scripts\activate.bat
+)
+
+REM Ensure Python is available
+where python >nul 2>&1
+if errorlevel 1 (
+  echo Python could not be located. Please install Python or ensure it is on your PATH.
+  exit /b 1
+)
 
 REM Run equities during market window (Sharpe top-4, cap 2 suggestions)
 REM You can tweak symbols/ADX/interval as you like.
