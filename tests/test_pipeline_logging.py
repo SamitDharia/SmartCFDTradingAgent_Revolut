@@ -45,12 +45,9 @@ sys.modules.setdefault(
     "SmartCFDTradingAgent.position",
     types.SimpleNamespace(qty_from_atr=lambda *a, **k: 1),
 )
-sys.modules.setdefault(
-    "SmartCFDTradingAgent.indicators",
-    types.SimpleNamespace(
-        adx=lambda *a, **k: FakeSeries([30]),
-        atr=lambda *a, **k: FakeSeries([1, 1]),
-    ),
+sys.modules["SmartCFDTradingAgent.indicators"] = types.SimpleNamespace(
+    adx=lambda *a, **k: FakeSeries([30]),
+    atr=lambda *a, **k: FakeSeries([1, 1]),
 )
 
 from SmartCFDTradingAgent import pipeline
@@ -84,6 +81,7 @@ def test_dry_run_cycle_logging_and_summary(monkeypatch, tmp_path, caplog):
     monkeypatch.setattr(pipeline, "generate_signals", lambda price, **k: {list(price.keys())[0]: "Buy"})
     monkeypatch.setattr(pipeline, "qty_from_atr", lambda atr, equity, risk: 1)
     monkeypatch.setattr(pipeline, "_adx", lambda *a, **k: FakeSeries([30]))
+    monkeypatch.setattr(pipeline, "_atr", lambda *a, **k: FakeSeries([1, 1]), raising=False)
 
     def fake_backtest(price, base_sig, **kwargs):
         pnl = {"cum_return": FakeSeries([1, 1.1])}
