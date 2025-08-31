@@ -4,16 +4,20 @@ Rank assets, generate signals, and send manual execution alerts via Telegram (wi
 
 ## Installation
 
+
 Requires Python 3.10 or 3.11 (`>=3.10,<3.12`). Python 3.13 is unsupported because pandas wheels are unavailable.
 
 ## Developer setup
 
+
 See [AGENTS.md](AGENTS.md) for environment setup, linting, formatting, testing, and smoke/backtest instructions.
 
 
-This project targets Python 3.10–3.11 where pre-built pandas wheels are available.
-Windows users running Python 3.12+ must install MSVC Build Tools to compile pandas or
-downgrade Python to 3.11/3.10.
+
+Only Python 3.10–3.11 are supported where pre-built pandas wheels are available.
+Python 3.13 requires building pandas from source, which this project does not document.
+
+
 
 ## .env configuration
 Create a bot with @BotFather and copy `.env.example` to `.env` (do not commit):

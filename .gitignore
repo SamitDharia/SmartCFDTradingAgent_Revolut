@@ -15,6 +15,7 @@ SmartCFDTradingAgent/logs/
 SmartCFDTradingAgent/storage/
 SmartCFDTradingAgent/storage/decision_log.csv
 pnl_log.csv
+market_loop.log
 SmartCFDTradingAgent/storage/cache/
 market_loop.log
 crypto_loop.log
