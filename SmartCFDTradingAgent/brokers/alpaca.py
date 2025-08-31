@@ -39,11 +39,11 @@ class AlpacaBroker(Broker):
         except Exception as e:  # pragma: no cover - runtime logging
             self.log.error("Account retrieval failed: %s", e)
             return None
-
         try:
             return float(getattr(acct, "equity", 0.0))
-        except Exception:
-            return 0.0
+        except Exception as e:  # pragma: no cover - runtime logging
+            self.log.error("Invalid account equity: %s", e)
+            return None
 
     def submit_order(
         self,
