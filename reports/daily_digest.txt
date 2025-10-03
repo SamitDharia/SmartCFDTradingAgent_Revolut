@@ -1,4 +1,4 @@
-Daily Trading Digest | Friday 03 October 2025 19:07
+Daily Trading Digest | Friday 03 October 2025 19:11
 ========================================================================
 
 SCOREBOARD
@@ -23,7 +23,7 @@ QUICK ACTIONS
 1. Pick the setups that match your plan and size the trade from the stop distance.
 2. Make a one-line note on why you traded or passed.
 
-WORD BANK (GLOSSARY)
+WORD BANK (Glossary)
 - Stop-loss: a pre-set exit that limits how much the trade can hurt you.
 - Target: a price where we choose to lock in gains.
 - Reward versus risk: how much the idea could earn compared with what it could lose.
