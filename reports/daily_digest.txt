@@ -1,32 +1,30 @@
-Daily Trading Digest | Friday 03 October 2025 19:11
+Daily Trading Digest | Friday 03 October 2025 19:21
 ========================================================================
 
-SCOREBOARD
-- Wins to date: 0
-- Losses to date: 0
-- Open positions: 0
+How did we do yesterday?
+- Overall: wins 0, losses 0, open 0
+- Yesterday: no trades were closed.
+- What this means: ATR (Average True Range) keeps risk steady -- bigger ATR automatically means smaller trade size.
 
-YESTERDAY
-- No trades were closed yesterday.
-
-IF PLANS RAN AS DRAWN
-- No trade plans were logged yesterday.
-
-FRESH IDEAS ON THE RADAR
+Fresh trade ideas
 - BCH-USD: Buy near 608.87 | stop 601.09 | target 624.42 | timeframe 1h | trend guide 10
 - BTC-USD: Buy near 122600.58 | stop 121031.55 | target 125738.65 | timeframe 1h | trend guide 10
 - BCH-USD: Buy near 604.63 | stop 595.59 | target 622.71 | timeframe 1h | trend guide 10
 - BTC-USD: Buy near 122145.4 | stop 120567.3 | target 125301.6 | timeframe 1h | trend guide 10
 - BCH-USD: Buy near 604.25 | stop 595.21 | target 622.33 | timeframe 1h | trend guide 10
 
-QUICK ACTIONS
-1. Pick the setups that match your plan and size the trade from the stop distance.
-2. Make a one-line note on why you traded or passed.
+If every plan hit its targets
+- No trade plans were logged yesterday.
 
-WORD BANK (Glossary)
-- Stop-loss: a pre-set exit that limits how much the trade can hurt you.
-- Target: a price where we choose to lock in gains.
-- Reward versus risk: how much the idea could earn compared with what it could lose.
-- Trend guide (ADX): a number showing how strong the price move is right now.
+Next steps
+1. Open your broker and place any ideas you like (with stop & target).
+2. Prefer to watch? Explore the dashboard: http://localhost:8501
+3. Keep notes on anything interesting for future review.
 
-Questions? Reply to this email and we will help.
+Word bank (Glossary)
+- ATR: measures typical price movement; bigger ATR means smaller position size.
+- Stop-loss: automatic exit if price moves against us.
+- Target: automatic exit when price hits the goal.
+- ADX: trend strength indicator; higher values usually mean a stronger trend.
+
+Questions? Reply to this email and we'll help you out.
