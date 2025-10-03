@@ -1,10 +1,12 @@
-Daily Trading Digest | Friday 03 October 2025 19:22
+Daily Trading Digest | Friday 03 October 2025 19:28
 ========================================================================
 
-How did we do yesterday?
-- Overall: wins 0, losses 0, open 0
+Scoreboard
+- Wins 0, losses 0, open 0
 - Yesterday: no trades were closed.
-- What this means: ATR (Average True Range) keeps risk steady -- bigger ATR automatically means smaller trade size.
+
+If plans ran as drawn
+- No trade plans were logged yesterday.
 
 Fresh trade ideas
 - BCH-USD: Buy near 608.87 | stop 601.09 | target 624.42 | timeframe 1h | trend guide 10
@@ -13,13 +15,9 @@ Fresh trade ideas
 - BTC-USD: Buy near 122145.4 | stop 120567.3 | target 125301.6 | timeframe 1h | trend guide 10
 - BCH-USD: Buy near 604.25 | stop 595.21 | target 622.33 | timeframe 1h | trend guide 10
 
-If every plan hit its targets
-- No trade plans were logged yesterday.
-
 Next steps
 1. Open your broker and place any ideas you like (with stop & target).
-2. Prefer to watch? Explore the dashboard: http://localhost:8501
-3. Keep notes on anything interesting for future review.
+2. Keep a one-line note explaining why you traded or passed.
 
 Word bank (Glossary)
 - ATR: measures typical price movement; bigger ATR means smaller position size.
