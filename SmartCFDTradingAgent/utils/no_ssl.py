@@ -1,8 +1,9 @@
 # SmartCFDTradingAgent/utils/no_ssl.py
 # Force yfinance to use requests (not libcurl) and ignore corporate MITM certs.
 from __future__ import annotations
-import os, ssl, requests
+import os, ssl, requests, urllib3
 ssl._create_default_https_context = ssl._create_unverified_context
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 print("[no_ssl] SSL verification disabled for Yahoo requests.")
 
 # Must be set BEFORE yfinance is imported anywhere
@@ -51,5 +52,6 @@ else:
         return _orig_request(self, *args, **kwargs)
 
     requests.Session.request = _unsafe_request
+
 
 
