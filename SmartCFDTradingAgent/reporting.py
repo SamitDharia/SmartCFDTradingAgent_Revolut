@@ -3,12 +3,12 @@ from __future__ import annotations
 import datetime as dt
 import json
 from pathlib import Path
-from typing import Iterable, Tuple, Optional
+from typing import Iterable, Optional, Tuple
 
-import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import pandas as pd
 
 from SmartCFDTradingAgent.pipeline import read_last_decisions
 from SmartCFDTradingAgent.utils.trade_logger import aggregate_trade_stats
@@ -145,7 +145,6 @@ class Digest:
         snapshot = self.yesterday_snapshot()
         chart_path = self.save_snapshot_chart(snapshot)
 
-        # Plain text (fallback)
         plain_lines: list[str] = []
         plain_lines.append(f"Daily Trading Digest — {now}")
         plain_lines.append("")
@@ -159,11 +158,8 @@ class Digest:
             )
         else:
             plain_lines.append("- Yesterday: no closed trades recorded.")
-        plain_lines.append(
-            "- What this means: ATR (Average True Range) keeps risk steady — bigger ATR automatically means smaller trade size."
-        )
+        plain_lines.append("- What this means: ATR (Average True Range) keeps risk steady — bigger ATR automatically means smaller trade size.")
         plain_lines.append("")
-
         plain_lines.append("Fresh trade ideas:")
         if rows:
             for row in rows:
@@ -171,13 +167,11 @@ class Digest:
         else:
             plain_lines.append("- No new trade ideas yet. We'll alert you when one appears.")
         plain_lines.append("")
-
         plain_lines.append("Next steps:")
         plain_lines.append("1. Open your broker and place any ideas you like (with stop & target).")
         plain_lines.append("2. Prefer to watch? Visit the dashboard: http://localhost:8501")
         plain_lines.append("3. Keep notes on what interests you for future review.")
         plain_lines.append("")
-
         plain_lines.append("Glossary:")
         plain_lines.append("- ATR: measures how much the price usually moves; bigger ATR = smaller position size.")
         plain_lines.append("- Stop-loss: automatic exit if price moves against us too far.")
@@ -189,12 +183,10 @@ class Digest:
         plain_text = "
 ".join(plain_lines)
 
-        # HTML styling
         css = """
         <style>
         body {{background:#f4f6fb;font-family:'Segoe UI',Arial,sans-serif;color:#0f172a;margin:0;padding:24px;}}
-        .wrapper {{max-width:720px;margin:auto;background:#ffffff;border-radius:16px;padding:32px;
-                   box-shadow:0 22px 40px rgba(15,23,42,0.12);}}
+        .wrapper {{max-width:720px;margin:auto;background:#ffffff;border-radius:16px;padding:32px;box-shadow:0 22px 40px rgba(15,23,42,0.12);}}
         h2 {{margin-top:0;font-weight:700;color:#0f172a;}}
         .section {{margin-bottom:24px;}}
         .card {{background:#f8fafc;border-radius:12px;padding:16px;margin-top:12px;}}
@@ -202,24 +194,28 @@ class Digest:
         .metric span.icon {{font-size:18px;}}
         .ideas li {{margin-bottom:8px;}}
         .footer {{font-size:12px;color:#64748b;margin-top:32px;}}
+        a {{color:#2563eb;text-decoration:none;}}
         </style>
         """
 
         chart_html = (
-            f"<div class='card'><strong>Yesterday chart</strong><br /><img src='cid:daily_chart' alt='Yesterday results chart' style='max-width:360px;border-radius:8px;margin-top:8px;'/></div>"
+            "<div class='card'><strong>Yesterday chart</strong><br /><img src='cid:daily_chart' alt='Yesterday results chart' "
+            "style='max-width:360px;border-radius:8px;margin-top:8px;'/></div>"
             if chart_path
             else "<div class='card'><strong>Yesterday chart</strong><br /><span style='color:#94a3b8;'>No closed trades yesterday.</span></div>"
         )
 
         ideas_html = "".join(
-            f"<li>🥇 <strong>{row.get('ticker')}</strong> — {FRIENDLY_SIDE.get(row.get('side',''), row.get('side',''))} near {row.get('price','?')}"             f" <span style='color:#64748b;'>SL {row.get('sl','-')} · TP {row.get('tp','-')} · TF {row.get('interval','1d')} · ADX {row.get('adx','?')}</span></li>"
+            f"<li>🥇 <strong>{row.get('ticker')}</strong> — {FRIENDLY_SIDE.get(row.get('side',''), row.get('side',''))} near {row.get('price','?')} "
+            f"<span style='color:#64748b;'>SL {row.get('sl','-')} · TP {row.get('tp','-')} · TF {row.get('interval','1d')} · ADX {row.get('adx','?')}</span></li>"
             for row in rows
         ) if rows else "<li>No new trade ideas yet. We'll alert you when one appears.</li>"
 
         snapshot_html = (
             f"<div class='card'><div class='metric'><span class='icon'>📊</span><div><strong>Yesterday</strong><br />"
             f"{snapshot['total']} closed · Wins {snapshot['wins']} · Losses {snapshot['losses']} · Open {snapshot['open']} · Net P/L <strong>{snapshot['pnl']:+.2f}</strong></div></div></div>"
-            if snapshot else "<div class='card'><div class='metric'><span class='icon'>📊</span><div><strong>Yesterday</strong><br />No closed trades recorded.</div></div></div>"
+            if snapshot
+            else "<div class='card'><div class='metric'><span class='icon'>📊</span><div><strong>Yesterday</strong><br />No closed trades recorded.</div></div></div>"
         )
 
         html = f"""
@@ -236,15 +232,13 @@ class Digest:
               </div>
               <div class='section'>
                 <p><strong>💡 Fresh trade ideas</strong></p>
-                <ul class='ideas'>
-                  {ideas_html}
-                </ul>
+                <ul class='ideas'>{ideas_html}</ul>
               </div>
               <div class='section'>
                 <p><strong>🧭 Next steps</strong></p>
                 <ol>
                   <li>Open your broker and place any ideas you like (with stop & target).</li>
-                  <li>Prefer to watch? Visit the dashboard: <a href='http://localhost:8501' style='color:#2563eb;'>http://localhost:8501</a></li>
+                  <li>Prefer to watch? Visit the dashboard: <a href='http://localhost:8501'>http://localhost:8501</a></li>
                   <li>Keep notes on what interests you for future review.</li>
                 </ol>
               </div>
@@ -282,7 +276,7 @@ class Digest:
         if rows:
             for row in rows:
                 lines.append(
-                    f"• {row.get('ticker')} {row.get('side','Hold')} @ {row.get('price')} (SL {row.get('sl','-')} / TP {row.get('tp','-')})"
+                    f"• {row.get('ticker')} {row.get('side','Hold')} @ {row.get('price') " + "} (SL {row.get('sl','-')} / TP {row.get('tp','-')})"
                 )
         else:
             lines.append("• No new trades yet")
