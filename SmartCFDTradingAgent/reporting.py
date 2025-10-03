@@ -136,6 +136,10 @@ class Digest:
                 "avg_reward": None,
                 "best_tp": None,
                 "worst_sl": None,
+                "total_reward": None,
+                "total_risk": None,
+                "reward_to_risk_ratio": None,
+                "breakeven_win_rate": None,
             }
 
         def _to_float(value: object) -> float | None:
@@ -212,6 +216,13 @@ class Digest:
                 }
             )
 
+        total_risk_distance = sum(risk_values) if risk_values else 0.0
+        total_reward_distance = sum(reward_values) if reward_values else 0.0
+        reward_to_risk_ratio = (total_reward_distance / total_risk_distance) if total_risk_distance else None
+        breakeven_numerator = total_risk_distance
+        breakeven_denominator = total_risk_distance + total_reward_distance
+        breakeven_rate = (breakeven_numerator / breakeven_denominator * 100) if breakeven_denominator else None
+
         return {
             "date": target_date,
             "items": items,
@@ -225,6 +236,10 @@ class Digest:
             "avg_reward": float(round(sum(reward_values) / len(reward_values), 2)) if reward_values else None,
             "best_tp": float(round(max(reward_values), 2)) if reward_values else None,
             "worst_sl": float(round(min(sl_values), 2)) if sl_values else None,
+            "total_reward": float(round(total_reward_distance, 2)) if total_reward_distance else None,
+            "total_risk": float(round(total_risk_distance, 2)) if total_risk_distance else None,
+            "reward_to_risk_ratio": float(round(reward_to_risk_ratio, 2)) if reward_to_risk_ratio else None,
+            "breakeven_win_rate": float(round(breakeven_rate, 2)) if breakeven_rate is not None else None,
         }
 
     def save_snapshot_chart(self, snapshot: dict[str, float] | None) -> Optional[Path]:
@@ -327,6 +342,14 @@ class Digest:
                 best_txt = f"{best_val:+.2f}" if best_val is not None else "n/a"
                 worst_txt = f"{worst_val:+.2f}" if worst_val is not None else "n/a"
                 plain_lines.append(f"- Per-plan range: best {best_txt} | worst {worst_txt}")
+            if simulation.get("total_risk") is not None:
+                plain_lines.append(f"- Combined stop distance: {simulation['total_risk']:.2f}")
+            if simulation.get("total_reward") is not None:
+                plain_lines.append(f"- Combined target distance: {simulation['total_reward']:.2f}")
+            if simulation.get("reward_to_risk_ratio") is not None:
+                plain_lines.append(f"- Aggregate reward/risk: {simulation['reward_to_risk_ratio']:.2f}")
+            if simulation.get("breakeven_win_rate") is not None:
+                plain_lines.append(f"- Breakeven win rate: {simulation['breakeven_win_rate']:.2f}%")
             for item in simulation["items"][:3]:
                 entry_txt = _fmt_price(item.get("entry"))
                 tp_txt = _fmt_signed(item.get("pnl_tp"))
@@ -406,6 +429,14 @@ class Digest:
                 best_txt = f"{best_val:+.2f}" if best_val is not None else "n/a"
                 worst_txt = f"{worst_val:+.2f}" if worst_val is not None else "n/a"
                 sim_summary_parts.append(f"<p class='muted'>Per-plan range: best {best_txt} | worst {worst_txt}</p>")
+            if simulation.get("total_risk") is not None:
+                sim_summary_parts.append(f"<p class='muted'>Combined stop distance: {simulation['total_risk']:.2f}</p>")
+            if simulation.get("total_reward") is not None:
+                sim_summary_parts.append(f"<p class='muted'>Combined target distance: {simulation['total_reward']:.2f}</p>")
+            if simulation.get("reward_to_risk_ratio") is not None:
+                sim_summary_parts.append(f"<p class='muted'>Aggregate reward/risk: {simulation['reward_to_risk_ratio']:.2f}</p>")
+            if simulation.get("breakeven_win_rate") is not None:
+                sim_summary_parts.append(f"<p class='muted'>Breakeven win rate: {simulation['breakeven_win_rate']:.2f}%</p>")
             sim_summary_html = "".join(sim_summary_parts)
             item_rows: list[str] = []
             for item in simulation["items"][:4]:
@@ -500,6 +531,12 @@ class Digest:
                 best_txt = f"{best_val:+.2f}" if best_val is not None else "n/a"
                 worst_txt = f"{worst_val:+.2f}" if worst_val is not None else "n/a"
                 lines.append(f"Range: best {best_txt} | worst {worst_txt}")
+            if simulation.get("total_risk") is not None:
+                lines.append(f"Total risk distance: {simulation['total_risk']:.2f}")
+            if simulation.get("total_reward") is not None:
+                lines.append(f"Total target distance: {simulation['total_reward']:.2f}")
+            if simulation.get("breakeven_win_rate") is not None:
+                lines.append(f"Breakeven win rate: {simulation['breakeven_win_rate']:.2f}%")
         lines.append("Ideas:")
         if rows:
             for row in rows:
