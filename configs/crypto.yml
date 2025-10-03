@@ -1,4 +1,4 @@
-﻿profiles:
+profiles:
   crypto_1h:
     watch: [BTC-USD, ETH-USD, SOL-USD, ADA-USD, XRP-USD, LTC-USD]
     interval: "1h"
