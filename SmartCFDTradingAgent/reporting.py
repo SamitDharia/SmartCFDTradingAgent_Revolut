@@ -145,6 +145,9 @@ class Digest:
         total_sl = 0.0
         count_with_levels = 0
         r_values: list[float] = []
+        risk_values: list[float] = []
+        reward_values: list[float] = []
+        sl_values: list[float] = []
 
         for row in subset.itertuples():
             entry = _to_float(getattr(row, "price", None))
@@ -181,10 +184,14 @@ class Digest:
 
             if pnl_tp is not None:
                 total_tp += pnl_tp
+                reward_values.append(pnl_tp)
             if pnl_sl is not None:
                 total_sl += pnl_sl
+                sl_values.append(pnl_sl)
             if r_multiple is not None:
                 r_values.append(r_multiple)
+            if risk is not None:
+                risk_values.append(risk)
 
             items.append(
                 {
@@ -207,6 +214,11 @@ class Digest:
             "total_tp": float(round(total_tp, 2)),
             "total_sl": float(round(total_sl, 2)),
             "average_r": float(round(sum(r_values) / len(r_values), 2)) if r_values else None,
+            "median_r": float(round(statistics.median(r_values), 2)) if r_values else None,
+            "avg_risk": float(round(sum(risk_values) / len(risk_values), 2)) if risk_values else None,
+            "avg_reward": float(round(sum(reward_values) / len(reward_values), 2)) if reward_values else None,
+            "best_tp": float(round(max(reward_values), 2)) if reward_values else None,
+            "worst_sl": float(round(min(sl_values), 2)) if sl_values else None,
         }
 
     def save_snapshot_chart(self, snapshot: dict[str, float] | None) -> Optional[Path]:
