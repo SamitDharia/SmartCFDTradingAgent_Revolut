@@ -1,7 +1,7 @@
-🌅 Daily Trading Digest - Friday 03 October 2025 18:44
+Daily Trading Digest - Friday 03 October 2025 18:55
 
 Yesterday at a glance
-- All-time totals: 0 wins | 0 losses | 0 open
+- All-time totals: wins 0, losses 0, open 0
 - No trades were closed yesterday.
 
 If every plan hit its targets
@@ -18,10 +18,10 @@ Quick actions
 1. Pick the setups that match your plan and size positions from the stop distance.
 2. Make a quick note explaining why you chose to trade or pass.
 
-Word bank
+Word bank (Glossary)
 - Stop-loss: a pre-set exit that limits how much the trade can hurt you.
 - Target: a price where we choose to lock in gains.
-- Reward vs. risk: how much the idea could earn compared with what it could lose.
+- Reward versus risk: how much the idea could earn compared with what it could lose.
 - Trend guide (ADX): a number showing how strong the price move is right now.
 
 Questions? Reply to this email and we will help.

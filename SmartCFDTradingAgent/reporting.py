@@ -434,11 +434,11 @@ class Digest:
                 return "n/a"
 
         plain_lines: list[str] = []
-        plain_lines.append(f"🌅 Daily Trading Digest - {now}")
+        plain_lines.append(f"Daily Trading Digest - {now}")
         plain_lines.append("")
         plain_lines.append("Yesterday at a glance")
         plain_lines.append(
-            f"- All-time totals: {stats.get('wins', 0)} wins | {stats.get('losses', 0)} losses | {stats.get('open', 0)} open"
+            f"- All-time totals: wins {stats.get('wins', 0)}, losses {stats.get('losses', 0)}, open {stats.get('open', 0)}"
         )
         if snapshot:
             plain_lines.append(
@@ -461,7 +461,7 @@ class Digest:
                 plain_lines.append(f"- Distance to targets: {simulation['total_reward']:.2f}")
             if simulation.get("reward_to_risk_ratio") is not None:
                 plain_lines.append(
-                    f"- Reward vs. risk ratio: {simulation['reward_to_risk_ratio']:.2f}"
+                    f"- Reward versus risk ratio: {simulation['reward_to_risk_ratio']:.2f}"
                 )
             if simulation.get("breakeven_win_rate") is not None:
                 plain_lines.append(
@@ -473,7 +473,7 @@ class Digest:
                 sl_txt = _fmt_signed(item.get("pnl_sl"))
                 r_txt = f", R {item['r_multiple']:.2f}" if item.get("r_multiple") is not None else ""
                 plain_lines.append(
-                    f"   -> {item.get('ticker', '?')} {item.get('side', '?')} near {entry_txt} (target move {tp_txt}, stop move {sl_txt}{r_txt})"
+                    f"  -> {item.get('ticker', '?')} {item.get('side', '?')} near {entry_txt} (target move {tp_txt}, stop move {sl_txt}{r_txt})"
                 )
         else:
             plain_lines.append("- No trade plans were logged yesterday.")
@@ -497,12 +497,11 @@ class Digest:
         plain_lines.append("Word bank (Glossary)")
         plain_lines.append("- Stop-loss: a pre-set exit that limits how much the trade can hurt you.")
         plain_lines.append("- Target: a price where we choose to lock in gains.")
-        plain_lines.append("- Reward vs. risk: how much the idea could earn compared with what it could lose.")
+        plain_lines.append("- Reward versus risk: how much the idea could earn compared with what it could lose.")
         plain_lines.append("- Trend guide (ADX): a number showing how strong the price move is right now.")
 
         plain_lines.append("")
         plain_lines.append("Questions? Reply to this email and we will help.")
-
         plain_text = "\n".join(plain_lines)
 
         css = """
@@ -676,7 +675,7 @@ class Digest:
         self.backfill_simulated_crypto_trades(target_date, simulation)
         snapshot = self.yesterday_snapshot()
 
-        lines = [f"🌅 Daily Digest {now}"]
+        lines = [f"Daily Trading Digest {now}"]
         lines.append(
             f"Totals â–¸ wins {stats.get('wins', 0)}, losses {stats.get('losses', 0)}, open {stats.get('open', 0)}"
         )
