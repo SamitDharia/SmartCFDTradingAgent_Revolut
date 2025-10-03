@@ -172,8 +172,8 @@ class Digest:
                 risk = abs(entry - sl)
 
             r_multiple = None
-            if pnl_tp is not None and risk not in (None, 0):
-                r_multiple = pnl_tp / risk if risk else None
+            if pnl_tp is not None and risk:
+                r_multiple = pnl_tp / risk
 
             if tp is not None and sl is not None:
                 count_with_levels += 1
@@ -326,8 +326,7 @@ class Digest:
         plain_lines.append("")
         plain_lines.append("Questions? Reply to this email and we will help.")
 
-        plain_text = "
-".join(plain_lines)
+        plain_text = "\n".join(plain_lines)
 
         css = """
         <style>
@@ -474,4 +473,5 @@ class Digest:
 
 
 __all__ = ["Digest", "CHART_PATH"]
+
 
