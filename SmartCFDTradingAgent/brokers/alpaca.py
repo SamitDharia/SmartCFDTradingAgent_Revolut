@@ -4,6 +4,23 @@ import logging
 import os
 from typing import Any, Dict
 
+TRUTHY = {"1", "true", "yes", "on"}
+
+
+def _env_first(*names: str) -> str | None:
+    for name in names:
+        value = os.getenv(name)
+        if value:
+            return value
+    return None
+
+
+def _env_flag(*names: str) -> bool | None:
+    for name in names:
+        if name in os.environ:
+            return os.getenv(name, "").strip().lower() in TRUTHY
+    return None
+
 try:  # pragma: no cover - handled in tests via monkeypatch
     import alpaca_trade_api as tradeapi
 except Exception:  # pragma: no cover
@@ -24,10 +41,21 @@ class AlpacaBroker(Broker):
         if tradeapi is None:  # pragma: no cover - dependency missing
             raise RuntimeError("alpaca-trade-api package required")
         self.log = logging.getLogger("alpaca-broker")
+        resolved_key = key_id or _env_first("APCA_API_KEY_ID", "ALPACA_API_KEY", "ALPACA_API_KEY_ID")
+        resolved_secret = secret_key or _env_first("APCA_API_SECRET_KEY", "ALPACA_API_SECRET", "ALPACA_API_SECRET_KEY")
+        resolved_base = base_url or _env_first("APCA_API_BASE_URL", "ALPACA_API_BASE_URL")
+        if resolved_base is None:
+            paper_flag = _env_flag("APCA_PAPER", "ALPACA_PAPER")
+            if paper_flag is False:
+                resolved_base = "https://api.alpaca.markets"
+            else:
+                resolved_base = "https://paper-api.alpaca.markets"
+        if not resolved_key or not resolved_secret:
+            self.log.warning("Alpaca credentials missing; REST client may be unauthorized.")
         self.api = tradeapi.REST(
-            key_id or os.getenv("APCA_API_KEY_ID"),
-            secret_key or os.getenv("APCA_API_SECRET_KEY"),
-            base_url or os.getenv("APCA_API_BASE_URL", "https://paper-api.alpaca.markets"),
+            resolved_key,
+            resolved_secret,
+            resolved_base,
             api_version="v2",
         )
 

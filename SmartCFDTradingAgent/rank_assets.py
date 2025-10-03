@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-import logging
 from typing import Iterable, List
 
 import pandas as pd
@@ -12,8 +11,6 @@ from SmartCFDTradingAgent.utils.logger import get_logger
 
 log = get_logger()
 
-log = logging.getLogger(__name__)
-
 
 def top_n(
     tickers: Iterable[str],
@@ -22,11 +19,11 @@ def top_n(
     lookback: int = 60,
     min_dollar_volume: float = 0.0,
 ) -> List[str]:
-    """Rank tickers by simple return-based score and return the top ``n``.
+    """Rank tickers by return-based score and return the top ``n``.
 
-    The score is defined as ``mean(returns) / std(returns)`` over the last
-    ``lookback`` bars. Tickers whose median dollar volume over the same period
-    falls below ``min_dollar_volume`` are excluded before ranking.
+    The score is ``mean(returns) / std(returns)`` over the last ``lookback`` bars.
+    Tickers whose median dollar volume over the same window is below
+    ``min_dollar_volume`` are excluded before ranking.
     """
 
     tickers = list(dict.fromkeys(tickers))
@@ -39,12 +36,8 @@ def top_n(
     try:
         df = get_price_data(tickers, start, end, interval="1d")
     except Exception as e:
-
-        log.error(
-            "daily ranking failed (%s); returning unranked first %s.",
         log.warning(
             "[rank_assets] daily ranking failed (%s); returning unranked first %s.",
-
             e,
             n,
         )
@@ -111,4 +104,3 @@ def main(argv: Iterable[str] | None = None) -> None:
 
 if __name__ == "__main__":
     main()
-
