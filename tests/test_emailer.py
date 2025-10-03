@@ -1,9 +1,15 @@
-﻿import SmartCFDTradingAgent.emailer as emailer
+﻿import os
+import tempfile
+
+import SmartCFDTradingAgent.emailer as emailer
 
 
 class DummySMTP:
     def __init__(self, *args, **kwargs):
-        self.called = False
+        self.args = args
+        self.kwargs = kwargs
+        self.logged_in = False
+        self.sent = None
 
     def __enter__(self):
         return self
@@ -18,24 +24,25 @@ class DummySMTP:
         pass
 
     def login(self, user, pwd):
-        self.called = True
+        self.logged_in = True
 
     def sendmail(self, sender, recipients, msg):
-        self.sent = (sender, tuple(recipients))
+        self.sent = (sender, tuple(recipients), msg)
 
 
 class DummySMTPSSL(DummySMTP):
     pass
 
 
-def test_send_email(monkeypatch):
+def test_send_email_plain(monkeypatch):
     monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
     monkeypatch.setenv("SMTP_PORT", "587")
     monkeypatch.setenv("SMTP_USER", "user@example.com")
     monkeypatch.setenv("SMTP_PASSWORD", "secret")
     monkeypatch.setenv("SMTP_SENDER", "digest@example.com")
+    monkeypatch.setenv("DIGEST_EMAILS", "a@example.com")
+
     dummy = DummySMTP()
-    monkeypatch.setenv("DIGEST_EMAILS", "a@example.com,b@example.com")
 
     def fake_smtp(host, port):
         assert host == "smtp.example.com"
@@ -45,19 +52,39 @@ def test_send_email(monkeypatch):
     monkeypatch.setattr(emailer, "smtplib", type("_", (), {"SMTP": fake_smtp, "SMTP_SSL": DummySMTPSSL}))
     result = emailer.send_email("Subject", "Body", None)
     assert result is True
-    assert dummy.called is True
+    assert dummy.logged_in is True
+    assert dummy.sent[0] == "digest@example.com"
 
 
-def test_send_email_without_recipients(monkeypatch):
-    monkeypatch.delenv("DIGEST_EMAILS", raising=False)
-    result = emailer.send_email("Sub", "Body", [])
-    assert result is False
+def test_send_email_html_with_attachment(monkeypatch, tmp_path):
+    monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("SMTP_PORT", "587")
+    monkeypatch.setenv("SMTP_USER", "user@example.com")
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+    monkeypatch.setenv("SMTP_SENDER", "digest@example.com")
+
+    dummy = DummySMTP()
+
+    def fake_smtp(host, port):
+        return dummy
+
+    monkeypatch.setattr(emailer, "smtplib", type("_", (), {"SMTP": fake_smtp, "SMTP_SSL": DummySMTPSSL}))
+    attachment = tmp_path / "chart.png"
+    attachment.write_bytes(b"fake")
+    result = emailer.send_email(
+        "Subject",
+        "Plain",
+        ["x@example.com"],
+        html_body="<b>HTML</b>",
+        attachments=[attachment],
+    )
+    assert result is True
+    assert dummy.sent is not None
 
 
 def test_send_email_requires_credentials(monkeypatch):
-    monkeypatch.delenv("SMTP_HOST", raising=False)
-    monkeypatch.delenv("SMTP_USER", raising=False)
-    monkeypatch.delenv("SMTP_PASSWORD", raising=False)
+    for key in ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_SENDER"]:
+        monkeypatch.delenv(key, raising=False)
     try:
         emailer.send_email("Sub", "Body", ["x@example.com"])
     except RuntimeError as exc:

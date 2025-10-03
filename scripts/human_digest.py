@@ -14,14 +14,13 @@ if str(ROOT) not in sys.path:
 
 from dotenv import load_dotenv
 
-from SmartCFDTradingAgent.reporting import Digest
+from SmartCFDTradingAgent.reporting import Digest, CHART_PATH
 from SmartCFDTradingAgent.utils.telegram import send
 from SmartCFDTradingAgent.emailer import send_email, default_recipients
 
 
 DEFAULT_OUT = Path("reports") / "daily_digest.txt"
 DEFAULT_JSON = Path("reports") / "daily_digest.json"
-CHART_PATH = Path("reports") / "daily_digest.png"
 
 
 def _parse_extra_addresses(raw: str) -> list[str]:
@@ -40,31 +39,33 @@ def main(argv: list[str] | None = None) -> int:
 
     load_dotenv()
     digest = Digest()
-    text = digest.generate_text(decisions=args.decisions)
+    plain_text, html_text, chart_path = digest.build_email_content(decisions=args.decisions)
 
-    digest.save_digest(text, args.out)
+    digest.save_digest(plain_text, args.out)
     digest.dump_json(digest.latest_decisions(args.decisions), args.json)
 
     print(f"Digest saved to {args.out}")
-    if CHART_PATH.exists():
-        print(f"Chart saved to {CHART_PATH}")
+    if chart_path:
+        print(f"Chart saved to {chart_path}")
     else:
         print("No snapshot chart generated (no closed trades yesterday).")
 
     if args.to_telegram:
-        if send(text):
-            print("Digest sent to Telegram")
+        telegram_msg = digest.build_telegram_message(decisions=min(args.decisions, 3))
+        if send(telegram_msg):
+            print("Digest summary sent to Telegram")
         else:
             print("Warning: Telegram send failed. Check your .env settings.", file=sys.stderr)
 
     if args.email:
         recipients = default_recipients()
         extra = _parse_extra_addresses(args.email_to)
-        recipients = list(dict.fromkeys(recipients + extra))  # deduplicate preserve order
+        recipients = list(dict.fromkeys(recipients + extra))
         if recipients:
             subject = f"Daily Trading Digest - {dt.datetime.now():%Y-%m-%d}"
+            attachments = [chart_path] if chart_path else None
             try:
-                send_email(subject, text, recipients)
+                send_email(subject, plain_text, recipients, html_body=html_text, attachments=attachments)
                 print(f"Digest emailed to: {', '.join(recipients)}")
             except RuntimeError as exc:
                 print(f"Warning: {exc}", file=sys.stderr)
