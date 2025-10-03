@@ -14,6 +14,10 @@ log = get_logger("telegram")
 API = "https://api.telegram.org/bot{token}/sendMessage"
 TIMEOUT = 10
 MAX_LEN = 4096  # Telegram hard limit
+def _skip_verify() -> bool:
+    def _truthy(name: str) -> bool:
+        return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+    return _truthy("SKIP_SSL_VERIFY") or _truthy("TELEGRAM_SKIP_VERIFY")
 
 
 def _load_creds() -> tuple[str, str]:
@@ -54,7 +58,7 @@ def _post(text: str, token: str, chat_id: str) -> bool:
     # small retry loop (handles 429 / transient)
     for attempt in range(4):
         try:
-            r = requests.post(url, data=data, timeout=TIMEOUT)
+            r = requests.post(url, data=data, timeout=TIMEOUT, verify=not _skip_verify())
         except Exception as e:
             if attempt == 3:
 
@@ -123,3 +127,5 @@ def send(text: str) -> bool:
             break
         time.sleep(0.2)
     return ok_all
+
+
