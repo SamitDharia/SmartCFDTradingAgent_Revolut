@@ -1,26 +1,24 @@
-Daily Trading Digest — Friday 03 October 2025 16:43
+Daily Trading Digest — Friday 03 October 2025 16:57
 
-How are we doing?
-- Total closed trades so far: Wins 0, Losses 0, Open 0
-- What this means: the agent keeps risk small by using ATR (Average True Range), which measures a market's typical wiggle. Bigger ATR means the system automatically places smaller trades.
+How did we do yesterday?
+- Overall: Wins 0, Losses 0, Open 0
 - Yesterday: no closed trades recorded.
+- What this means: ATR (Average True Range) keeps risk steady — bigger ATR automatically means smaller trade size.
 
-Fresh trade ideas to review:
+Fresh trade ideas:
 - BTC-USD: Sell near 108484.97 | Stop 110654.67 | Target 104145.57 | Timeframe 1h | Trend filter ADX 10
 - BTC-USD: Buy near 121358.71 | Stop 120367.78 | Target 123340.56 | Timeframe 1h | Trend filter ADX 10
 - BCH-USD: Buy near 603.47 | Stop 597.05 | Target 616.3 | Timeframe 1h | Trend filter ADX 10
 - SOL-USD: Buy near 233.55 | Stop 229.09 | Target 242.46 | Timeframe 1h | Trend filter ADX 10
 - ETH-USD: Buy near 4502.19 | Stop 4433.99 | Target 4638.57 | Timeframe 1h | Trend filter ADX 10
 
-Next steps for you:
-1. Open your broker app. Place any trade you like from the list above, including stop-loss and target.
-2. Prefer to watch? Just log in later and check the digest for updates.
-3. Any alerts about data issues? They simply mean the data feed was busy. The next run re-tries automatically.
+Next steps:
+1. Open your broker and place any ideas you like (with stop & target).
+2. Prefer to watch? Check the dashboard: http://localhost:8501
+3. Keep notes on what interests you for future review.
 
-Glossary (plain language):
-- ATR: measures how much the price usually moves; bigger ATR = smaller position size.
-- Stop-loss: automatic exit if price moves against us too far.
-- Take-profit: automatic exit when price hits our goal.
+Glossary:
+- ATR: measures typical price movement; bigger ATR → smaller position size.
+- Stop-loss: automatic exit if price goes too far against us.
+- Take-profit: automatic exit when price reaches the goal.
 - ADX: trend strength indicator; higher values usually mean a stronger trend.
-
-Questions? Reply to this Telegram message and we’ll help you out.
