@@ -422,26 +422,39 @@ class Digest:
         """
 
         return plain_text, html, chart_path
+
     def build_telegram_message(self, decisions: int = 3) -> str:
         now = dt.datetime.now().strftime("%d %b %H:%M")
         stats = self.trade_stats()
         rows = self.latest_decisions(decisions)
         snapshot = self.yesterday_snapshot()
+        simulation = self.simulate_recommended_trades()
 
-        lines = [f"Crypto Digest {now}"]
-        lines.append(f"Wins {stats.get('wins',0)} / Losses {stats.get('losses',0)} / Open {stats.get('open',0)}")
+        lines = [f"Trading Digest {now}"]
+        lines.append(
+            f"Wins {stats.get('wins', 0)} | Losses {stats.get('losses', 0)} | Open {stats.get('open', 0)}"
+        )
         if snapshot:
-            lines.append(f"Yesterday: {snapshot['total']} closed | PnL {snapshot['pnl']:+.2f}")
+            lines.append(
+                f"Closed yesterday: {snapshot['total']} | Net P/L {snapshot['pnl']:+.2f}"
+            )
         else:
-            lines.append("Yesterday: no closed trades")
+            lines.append("Closed yesterday: none")
+        if simulation and simulation.get("count", 0) > 0:
+            lines.append(f"Simulated TP: {simulation['total_tp']:+.2f}")
+            if simulation.get("count_with_levels", 0) > 0:
+                lines.append(f"Simulated SL: {simulation['total_sl']:+.2f}")
         lines.append("Ideas:")
         if rows:
             for row in rows:
-                lines.append(
-                    f"• {row.get('ticker')} {row.get('side','Hold')} @ {row.get('price') " + "} (SL {row.get('sl','-')} / TP {row.get('tp','-')})"
-                )
+                ticker = row.get("ticker", "?")
+                side = row.get("side", "Hold")
+                price = row.get("price", "?")
+                sl = row.get("sl", "-")
+                tp = row.get("tp", "-")
+                lines.append(f"- {ticker} {side} @ {price} (SL {sl} / TP {tp})")
         else:
-            lines.append("• No new trades yet")
+            lines.append("- No new trade ideas yet.")
         return "
 ".join(lines)
 
