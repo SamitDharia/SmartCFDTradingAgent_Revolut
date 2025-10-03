@@ -15,6 +15,9 @@ from SmartCFDTradingAgent.utils.logger import get_logger
 INTRADAY = {"1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h"}
 FIELDS_ORDER = ["Open", "High", "Low", "Close", "Adj Close", "Volume"]
 
+USE_ALPACA_CRYPTO = os.getenv("USE_ALPACA_CRYPTO", "").strip().lower() in {"1", "true", "yes", "on"}
+ALPACA_CRYPTO_EXCHANGES = [ex.strip().upper() for ex in os.getenv("ALPACA_CRYPTO_EXCHANGES", "CBSE").split(",") if ex.strip()]
+
 # --- Configurable defaults ---
 DEFAULT_WORKERS = int(os.getenv("DATA_WORKERS", "4"))
 DEFAULT_CACHE_EXPIRY = float(os.getenv("DATA_CACHE_EXPIRY", "3600"))  # seconds
@@ -92,6 +95,88 @@ def _normalize_to_ticker_field(df: pd.DataFrame, tickers: List[str]) -> pd.DataF
         pass
 
     return out
+
+
+
+def _is_crypto_symbol(ticker: str) -> bool:
+    return '-' in (ticker or '')
+
+
+def _ensure_utc(ts: pd.Timestamp) -> pd.Timestamp:
+    if ts.tzinfo is None:
+        return ts.tz_localize('UTC')
+    return ts.tz_convert('UTC')
+
+
+def _alpaca_timeframe(interval: str):
+    interval = (interval or '1h').lower()
+    try:
+        from alpaca_trade_api.rest import TimeFrame, TimeFrameUnit
+    except Exception as exc:  # pragma: no cover - optional dependency
+        raise RuntimeError('alpaca-trade-api package is required for Alpaca data provider') from exc
+    mapping: dict[str, TimeFrame] = {
+        '1m': TimeFrame(1, TimeFrameUnit.Minute),
+        '5m': TimeFrame(5, TimeFrameUnit.Minute),
+        '15m': TimeFrame(15, TimeFrameUnit.Minute),
+        '30m': TimeFrame(30, TimeFrameUnit.Minute),
+        '1h': TimeFrame(1, TimeFrameUnit.Hour),
+        '60m': TimeFrame(1, TimeFrameUnit.Hour),
+        '1d': TimeFrame(1, TimeFrameUnit.Day),
+    }
+    if interval not in mapping:
+        raise ValueError(f'Interval {interval} not supported by Alpaca crypto feed.')
+    return mapping[interval]
+
+
+def _get_crypto_data_alpaca(tickers: list[str], start: str, end: str, interval: str) -> pd.DataFrame:
+    try:
+        import alpaca_trade_api as tradeapi
+    except Exception as exc:  # pragma: no cover - optional dependency
+        raise RuntimeError('alpaca-trade-api package required for Alpaca crypto loader') from exc
+
+    key = os.getenv('ALPACA_API_KEY') or os.getenv('APCA_API_KEY_ID')
+    secret = os.getenv('ALPACA_API_SECRET') or os.getenv('APCA_API_SECRET_KEY')
+    base_url = os.getenv('APCA_API_BASE_URL', 'https://paper-api.alpaca.markets')
+    if not key or not secret:
+        raise RuntimeError('Alpaca API credentials missing (ALPACA_API_KEY / ALPACA_API_SECRET)')
+
+    client = tradeapi.REST(key, secret, base_url, api_version='v2')
+
+    timeframe = _alpaca_timeframe(interval)
+    start_ts = _ensure_utc(pd.Timestamp(start))
+    end_ts = _ensure_utc(pd.Timestamp(end)) + pd.Timedelta(days=1)
+
+    symbols = [ticker.replace('-', '/').upper() for ticker in tickers]
+    exchanges = ALPACA_CRYPTO_EXCHANGES or None
+    bars = client.get_crypto_bars(symbols, timeframe, start_ts.isoformat(), end_ts.isoformat(), exchanges=exchanges, limit=10000)
+    df = bars.df
+    if df is None or df.empty:
+        raise RuntimeError(f'No data returned for {tickers} via Alpaca.')
+
+    frames: list[pd.DataFrame] = []
+    for symbol in df.index.get_level_values('symbol').unique():
+        sub = df.xs(symbol, level='symbol')[['open', 'high', 'low', 'close', 'volume']].copy()
+        sub.index = pd.to_datetime(sub.index)
+        if getattr(sub.index, 'tz', None) is not None:
+            sub.index = sub.index.tz_convert('UTC').tz_localize(None)
+        else:
+            sub.index = sub.index.tz_localize(None)
+        sub = sub.rename(columns={
+            'open': 'Open',
+            'high': 'High',
+            'low': 'Low',
+            'close': 'Close',
+            'volume': 'Volume',
+        })
+        sub = sub[['Open', 'High', 'Low', 'Close', 'Volume']]
+        sym = symbol.replace('/', '-').upper()
+        frames.append(pd.concat({sym: sub}, axis=1))
+
+    if not frames:
+        raise RuntimeError(f'No data returned for {tickers} via Alpaca.')
+    result = pd.concat(frames, axis=1)
+    result = result.sort_index()
+    return result
 
 
 def _download(
@@ -239,3 +324,4 @@ def get_price_data(
     if missing:
         raise RuntimeError(f"No data returned for {missing}.")
     raise RuntimeError(f"Failed to download data: {last_err}")
+
