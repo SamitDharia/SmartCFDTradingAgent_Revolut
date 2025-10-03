@@ -21,6 +21,7 @@ from SmartCFDTradingAgent.emailer import send_email, default_recipients
 
 DEFAULT_OUT = Path("reports") / "daily_digest.txt"
 DEFAULT_JSON = Path("reports") / "daily_digest.json"
+CHART_PATH = Path("reports") / "daily_digest.png"
 
 
 def _parse_extra_addresses(raw: str) -> list[str]:
@@ -45,6 +46,10 @@ def main(argv: list[str] | None = None) -> int:
     digest.dump_json(digest.latest_decisions(args.decisions), args.json)
 
     print(f"Digest saved to {args.out}")
+    if CHART_PATH.exists():
+        print(f"Chart saved to {CHART_PATH}")
+    else:
+        print("No snapshot chart generated (no closed trades yesterday).")
 
     if args.to_telegram:
         if send(text):

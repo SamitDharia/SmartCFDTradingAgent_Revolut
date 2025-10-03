@@ -6,6 +6,9 @@ from pathlib import Path
 from typing import Iterable
 
 import pandas as pd
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 from SmartCFDTradingAgent.pipeline import read_last_decisions
 from SmartCFDTradingAgent.utils.trade_logger import aggregate_trade_stats
@@ -23,7 +26,7 @@ FRIENDLY_SIDE = {
 
 
 class Digest:
-    """Utility to produce plain-language summaries for non-traders."""
+    """Produce plain-language summaries for non-traders."""
 
     def __init__(self, timezone: str = "Europe/Dublin") -> None:
         self.timezone = timezone
@@ -50,6 +53,7 @@ class Digest:
             return None
         if df.empty or "time" not in df.columns:
             return None
+
         today = dt.datetime.now().date()
         yday = today - dt.timedelta(days=1)
         df = df.dropna(subset=["time"])
@@ -97,6 +101,29 @@ class Digest:
             "pnl": float(round(pnl, 2)),
         }
 
+    def save_snapshot_chart(self, snapshot: dict[str, float] | None, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not snapshot:
+            if path.exists():
+                try:
+                    path.unlink()
+                except Exception:
+                    pass
+            return
+
+        labels = ["Wins", "Losses", "Open"]
+        values = [snapshot.get("wins", 0), snapshot.get("losses", 0), snapshot.get("open", 0)]
+        fig, ax = plt.subplots(figsize=(4, 3))
+        colors = ["#2ca02c", "#d62728", "#1f77b4"]
+        ax.bar(labels, values, color=colors)
+        ax.set_ylabel("Count of trades")
+        ax.set_title("Yesterday's results")
+        ax.grid(axis="y", linestyle="--", alpha=0.2)
+        ax.text(0.5, -0.25, f"Net P/L: {snapshot.get('pnl', 0.0):+.2f}", ha="center", transform=ax.transAxes)
+        fig.tight_layout()
+        fig.savefig(path, dpi=150)
+        plt.close(fig)
+
     def describe_decision(self, row: dict[str, str]) -> str:
         side = FRIENDLY_SIDE.get(row.get("side", ""), row.get("side", ""))
         price = row.get("price", "?")
@@ -113,7 +140,9 @@ class Digest:
         now = dt.datetime.now().strftime("%A %d %B %Y %H:%M")
         stats = self.trade_stats()
         rows = self.latest_decisions(decisions)
-        yesterday = self.yesterday_snapshot()
+        snapshot = self.yesterday_snapshot()
+        chart_path = REPORTS_DIR / "daily_digest.png"
+        self.save_snapshot_chart(snapshot, chart_path)
 
         parts: list[str] = []
         parts.append(f"Daily Trading Digest — {now}")
@@ -127,13 +156,14 @@ class Digest:
             "- What this means: the agent keeps risk small by using ATR (Average True Range), "
             "which measures a market's typical wiggle. Bigger ATR means the system automatically places smaller trades."
         )
-        if yesterday:
+        if snapshot:
             parts.append(
-                f"- Yesterday: {yesterday['total']} closed (Wins {yesterday['wins']} | Losses {yesterday['losses']} | Open {yesterday['open']}) — Net P/L {yesterday['pnl']:+.2f}"
+                f"- Yesterday: {snapshot['total']} closed (Wins {snapshot['wins']} | Losses {snapshot['losses']} | Open {snapshot['open']}) — Net P/L {snapshot['pnl']:+.2f}"
             )
-            win_bar = '#' * yesterday['wins'] or '·'
-            loss_bar = '#' * yesterday['losses'] or '·'
+            win_bar = '█' * max(snapshot['wins'], 1)
+            loss_bar = '█' * max(snapshot['losses'], 1)
             parts.append(f"  Wins [{win_bar}]  Losses [{loss_bar}]")
+            parts.append(f"  Chart saved to {chart_path}")
         else:
             parts.append("- Yesterday: no closed trades recorded.")
         parts.append("")
@@ -149,9 +179,7 @@ class Digest:
         parts.append("Next steps for you:")
         parts.append("1. Open your broker app. Place any trade you like from the list above, including stop-loss and target.")
         parts.append("2. Prefer to watch? Just log in later and check the digest for updates.")
-        parts.append(
-            "3. Any alerts about data issues? They simply mean the data feed was busy. The next run re-tries automatically."
-        )
+        parts.append("3. Any alerts about data issues? They simply mean the data feed was busy. The next run re-tries automatically.")
         parts.append("")
 
         parts.append("Glossary (plain language):")

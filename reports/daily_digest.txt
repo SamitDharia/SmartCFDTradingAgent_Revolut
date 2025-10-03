@@ -1,25 +1,26 @@
-Daily Trading Digest — Friday 03 October 2025 15:47
+Daily Trading Digest — Friday 03 October 2025 16:40
 
 How are we doing?
-- Wins: 0 | Losses: 0 | Open positions: 0
-- What this means: the agent keeps risk small by using ATR (Average True Range), which measures a market's typical wiggle. Bigger ATR → smaller position size.
+- Total closed trades so far: Wins 0, Losses 0, Open 0
+- What this means: the agent keeps risk small by using ATR (Average True Range), which measures a market's typical wiggle. Bigger ATR means the system automatically places smaller trades.
+- Yesterday: no closed trades recorded.
 
 Fresh trade ideas to review:
-• ETH-USD → Sell (go short) around 4351.59. Stop 4438.63, target 4177.53. Timeframe: 1h, ADX filter 12.
-• ETH-USD → Buy (go long) around 4461.28. Stop 4372.06, target 4639.74. Timeframe: 1h, ADX filter 10.
-• ETH-USD → Buy (go long) around 4461.28. Stop 4372.06, target 4639.74. Timeframe: 1h, ADX filter 10.
-• ETH-USD → Buy (go long) around 4465.69. Stop 4376.38, target 4644.32. Timeframe: 1h, ADX filter 10.
-• BTC-USD → Sell (go short) around 108484.97. Stop 110654.67, target 104145.57. Timeframe: 1h, ADX filter 10.
+- ETH-USD: Buy near 4461.28 | Stop 4372.06 | Target 4639.74 | Timeframe 1h | Trend filter ADX 10
+- ETH-USD: Buy near 4465.69 | Stop 4376.38 | Target 4644.32 | Timeframe 1h | Trend filter ADX 10
+- BTC-USD: Sell near 108484.97 | Stop 110654.67 | Target 104145.57 | Timeframe 1h | Trend filter ADX 10
+- BTC-USD: Buy near 121358.71 | Stop 120367.78 | Target 123340.56 | Timeframe 1h | Trend filter ADX 10
+- BCH-USD: Buy near 603.47 | Stop 597.05 | Target 616.3 | Timeframe 1h | Trend filter ADX 10
 
 Next steps for you:
-1. Open your broker dashboard. Confirm the entry price and set the stop-loss and target shown above.
-2. If this is paper trading only, simply observe how the positions behave and take notes.
-3. Got an alert that says 'Data download failed'? That just means the data feed was busy. The next scheduled run will try again automatically.
+1. Open your broker app. Place any trade you like from the list above, including stop-loss and target.
+2. Prefer to watch? Just log in later and check the digest for updates.
+3. Any alerts about data issues? They simply mean the data feed was busy. The next run re-tries automatically.
 
 Glossary (plain language):
-- ATR: tells us how much the price tends to move. Bigger ATR → we buy fewer shares.
-- Stop-loss: automatic exit if price goes the wrong way, keeps losses capped.
-- Take-profit: automatic exit when the price reaches the goal.
-- ADX: measures trend strength. Higher number usually means a stronger trend.
+- ATR: measures how much the price usually moves; bigger ATR = smaller position size.
+- Stop-loss: automatic exit if price moves against us too far.
+- Take-profit: automatic exit when price hits our goal.
+- ADX: trend strength indicator; higher values usually mean a stronger trend.
 
-Questions or need help? Reply to this Telegram message and we’ll walk you through the setup.
+Questions? Reply to this Telegram message and we’ll help you out.
