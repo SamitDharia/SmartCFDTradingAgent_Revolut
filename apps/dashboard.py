@@ -13,12 +13,12 @@ st.title("SmartCFD Trading Dashboard")
 st.caption("Friendly view for non-traders – updated by the automated agent")
 
 if DECISIONS_CSV.exists():
-    decisions = pd.read_csv(DECISIONS_CSV)
+    decisions = pd.read_csv(DECISIONS_CSV, on_bad_lines='skip', engine='python')
 else:
     decisions = pd.DataFrame()
 
 if TRADE_LOG.exists():
-    trades = pd.read_csv(TRADE_LOG)
+    trades = pd.read_csv(TRADE_LOG, on_bad_lines='skip', engine='python')
 else:
     trades = pd.DataFrame()
 
@@ -103,3 +103,4 @@ Need help? Run `scripts\\test_telegram.cmd` to confirm alerts or check the paper
 
 last_updated = datetime.now().strftime("%Y-%m-%d %H:%M")
 st.caption(f"Last refreshed: {last_updated}")
+
