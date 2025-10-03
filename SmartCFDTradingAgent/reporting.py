@@ -507,10 +507,10 @@ class Digest:
         .header-icon {{font-size:30px;line-height:1;}}
         .header h1 {{margin:0;font-size:22px;font-weight:700;color:#111827;}}
         .header p {{margin:4px 0 0;font-size:14px;color:#475569;}}
-        .summary-grid {{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px;}}
-        .summary-card {display:grid;grid-template-columns:auto 1fr;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:#f6f8ff;border:1px solid rgba(99,102,241,0.18);}{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:14px;background:#f6f8ff;border:1px solid rgba(99,102,241,0.18);}}
-        .summary-card span.icon {{font-size:18px;margin-top:2px;}}
-        .summary-card div.content { display:flex; flex-direction:column; gap:2px; }{font-size:14px;line-height:1.45;color:#0f172a;}}
+        }
+        {display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:14px;background:#f6f8ff;border:1px solid rgba(99,102,241,0.18);}}
+        }
+        {font-size:14px;line-height:1.45;color:#0f172a;}}
         .section {{margin-bottom:18px;}}
         .section h2 {{margin:0 0 10px;font-size:15px;text-transform:uppercase;letter-spacing:0.08em;color:#6b7280;display:flex;align-items:center;gap:8px;}}
         .section ul {{margin:0;padding-left:18px;}}
@@ -523,22 +523,22 @@ class Digest:
         """
 
         summary_cards = []
-        summary_cards.append(
-            f"<div class='summary-card'><div class='icon'>✅</div><div class='content'><strong>Overall</strong><br/>Wins {stats.get('wins',0)}, losses {stats.get('losses',0)}, open {stats.get('open',0)}</div></div>"
-        )
-        if snapshot:
-            summary_cards.append(
-                f"<div class='summary-card'><div class='icon'>📆</div><div class='content'><strong>Yesterday</strong><br/>{snapshot['total']} closed | net {snapshot['pnl']:+.2f}</div></div>"
-            )
-        else:
-            summary_cards.append(
-                "<div class='summary-card'><div class='icon'>📆</div><div class='content'><strong>Yesterday</strong><br/>No trades were closed.</div></div>"
-            )
-        summary_cards.append(
-            "<div class='summary-card'><div class='icon'>ℹ️</div><div class='content'><strong>ATR insight</strong><br/>ATR keeps risk steady — higher ATR automatically means smaller trade size.</div></div>"
-        )
-        summary_html = "<div class='summary-grid'>" + "".join(summary_cards) + "</div>"
-
+        summary_html = f"""
+        <table class='summary-table'>
+          <tr>
+            <td class='icon'>✅</td>
+            <td><strong>Overall</strong><br/>Wins {stats.get('wins',0)}, losses {stats.get('losses',0)}, open {stats.get('open',0)}</td>
+          </tr>
+          <tr>
+            <td class='icon'>📆</td>
+            <td>{f"<strong>Yesterday</strong><br/>{snapshot['total']} closed | net {snapshot['pnl']:+.2f}" if snapshot else '<strong>Yesterday</strong><br/>No trades were closed.'}</td>
+          </tr>
+          <tr>
+            <td class='icon'>ℹ️</td>
+            <td><strong>ATR insight</strong><br/>ATR keeps risk steady — higher ATR automatically means smaller trade size.</td>
+          </tr>
+        </table>
+        """
         plan_items: list[str] = []
         if simulation and simulation.get("count", 0) > 0:
             plan_items.append(
@@ -689,6 +689,7 @@ class Digest:
 
 
 __all__ = ["Digest", "CHART_PATH"]
+
 
 
 
