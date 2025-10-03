@@ -1,6 +1,6 @@
 ﻿profiles:
   crypto_1h:
-    watch: [BTC-USD, ETH-USD]
+    watch: [BTC-USD, ETH-USD, SOL-USD, ADA-USD, LTC-USD, BCH-USD]
     interval: "1h"
     intervals: "15m,1h"
     interval_weights: "15m=1,1h=2"
