@@ -2,15 +2,13 @@ from __future__ import annotations
 
 import os
 import time
-import json
-
 import requests
 from dotenv import load_dotenv
 
 from SmartCFDTradingAgent.utils.logger import get_logger
 
 
-log = logging.getLogger(__name__)
+log = get_logger("telegram")
 
 
 API = "https://api.telegram.org/bot{token}/sendMessage"
