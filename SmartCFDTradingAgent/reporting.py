@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 from pathlib import Path
-from typing import Iterable, Optional, Tuple
+from typing import Any, Iterable, Optional, Tuple
 
 import matplotlib
 matplotlib.use("Agg")
@@ -99,6 +99,115 @@ class Digest:
             "pnl": float(round(pnl, 2)),
         }
 
+    def simulate_recommended_trades(self, target_date: Optional[dt.date] | None = None) -> dict[str, object] | None:
+        decision_log = STORE / "decision_log.csv"
+        if not decision_log.exists():
+            return None
+        try:
+            df = pd.read_csv(decision_log)
+        except Exception:
+            return None
+        if df.empty or "ts" not in df.columns:
+            return None
+
+        df["ts"] = pd.to_datetime(df["ts"], errors="coerce")
+        df = df.dropna(subset=["ts", "price"])
+        if df.empty:
+            return None
+
+        if target_date is None:
+            target_date = dt.datetime.now().date() - dt.timedelta(days=1)
+
+        df["date"] = df["ts"].dt.date
+        subset = df[df["date"] == target_date]
+        if subset.empty:
+            return {
+                "date": target_date,
+                "items": [],
+                "count": 0,
+                "count_with_levels": 0,
+                "total_tp": 0.0,
+                "total_sl": 0.0,
+                "average_r": None,
+            }
+
+        def _to_float(value: object) -> float | None:
+            if pd.isna(value):
+                return None
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return None
+
+        items: list[dict[str, object]] = []
+        total_tp = 0.0
+        total_sl = 0.0
+        count_with_levels = 0
+        r_values: list[float] = []
+
+        for row in subset.itertuples():
+            entry = _to_float(getattr(row, "price", None))
+            tp = _to_float(getattr(row, "tp", None))
+            sl = _to_float(getattr(row, "sl", None))
+            side = str(getattr(row, "side", "")).strip().lower()
+
+            pnl_tp = None
+            pnl_sl = None
+            risk = None
+
+            if entry is not None and tp is not None:
+                if side == "sell":
+                    pnl_tp = entry - tp
+                else:
+                    pnl_tp = tp - entry
+            if entry is not None and sl is not None:
+                if side == "sell":
+                    pnl_sl = entry - sl
+                else:
+                    pnl_sl = sl - entry
+
+            if pnl_sl is not None:
+                risk = abs(pnl_sl)
+            elif entry is not None and sl is not None:
+                risk = abs(entry - sl)
+
+            r_multiple = None
+            if pnl_tp is not None and risk not in (None, 0):
+                r_multiple = pnl_tp / risk if risk else None
+
+            if tp is not None and sl is not None:
+                count_with_levels += 1
+
+            if pnl_tp is not None:
+                total_tp += pnl_tp
+            if pnl_sl is not None:
+                total_sl += pnl_sl
+            if r_multiple is not None:
+                r_values.append(r_multiple)
+
+            items.append(
+                {
+                    "ticker": getattr(row, "ticker", "?"),
+                    "side": getattr(row, "side", "?"),
+                    "entry": entry,
+                    "tp": tp,
+                    "sl": sl,
+                    "pnl_tp": pnl_tp,
+                    "pnl_sl": pnl_sl,
+                    "r_multiple": r_multiple,
+                }
+            )
+
+        return {
+            "date": target_date,
+            "items": items,
+            "count": int(len(subset)),
+            "count_with_levels": int(count_with_levels),
+            "total_tp": float(round(total_tp, 2)),
+            "total_sl": float(round(total_sl, 2)),
+            "average_r": float(round(sum(r_values) / len(r_values), 2)) if r_values else None,
+        }
+
     def save_snapshot_chart(self, snapshot: dict[str, float] | None) -> Optional[Path]:
         CHART_PATH.parent.mkdir(parents=True, exist_ok=True)
         if not snapshot:
@@ -143,123 +252,157 @@ class Digest:
         stats = self.trade_stats()
         rows = self.latest_decisions(decisions)
         snapshot = self.yesterday_snapshot()
+        simulation = self.simulate_recommended_trades()
         chart_path = self.save_snapshot_chart(snapshot)
 
         plain_lines: list[str] = []
-        plain_lines.append(f"Daily Trading Digest — {now}")
+        plain_lines.append(f"Daily Trading Digest {now}")
         plain_lines.append("")
-        plain_lines.append("How did we do yesterday?")
+        plain_lines.append("Yesterday's scorecard:")
         plain_lines.append(
-            f"- Overall totals: Wins {stats.get('wins', 0)}, Losses {stats.get('losses', 0)}, Open {stats.get('open', 0)}"
+            f"- Lifetime totals: Wins {stats.get('wins', 0)}, Losses {stats.get('losses', 0)}, Open {stats.get('open', 0)}"
         )
         if snapshot:
             plain_lines.append(
-                f"- Yesterday: {snapshot['total']} closed (Wins {snapshot['wins']} | Losses {snapshot['losses']} | Open {snapshot['open']}) — Net P/L {snapshot['pnl']:+.2f}"
+                f"- Closed yesterday: {snapshot['total']} (Wins {snapshot['wins']} | Losses {snapshot['losses']} | Still open {snapshot['open']}) | Net P/L {snapshot['pnl']:+.2f}"
             )
         else:
-            plain_lines.append("- Yesterday: no closed trades recorded.")
-        plain_lines.append("- What this means: ATR (Average True Range) keeps risk steady — bigger ATR automatically means smaller trade size.")
+            plain_lines.append("- Closed yesterday: no trades were logged.")
+        plain_lines.append("")
+        plain_lines.append("Simulated execution (based on yesterday's plans):")
+        if simulation and simulation.get("count", 0) > 0:
+            plain_lines.append(
+                f"- Plans logged: {simulation['count']} (with both exits set: {simulation['count_with_levels']})"
+            )
+            plain_lines.append(f"- If every target filled: {simulation['total_tp']:+.2f}")
+            if simulation.get("count_with_levels", 0) > 0:
+                plain_lines.append(f"- If every stop triggered: {simulation['total_sl']:+.2f}")
+            if simulation.get("average_r") is not None:
+                plain_lines.append(f"- Average reward-to-risk: {simulation['average_r']:.2f}R")
+            for item in simulation["items"][:3]:
+                entry_txt = f"{item['entry']:.2f}" if item.get("entry") is not None else "?"
+                tp_txt = f"{item['pnl_tp']:+.2f}" if item.get("pnl_tp") is not None else "n/a"
+                sl_txt = f"{item['pnl_sl']:+.2f}" if item.get("pnl_sl") is not None else "n/a"
+                r_txt = f", R {item['r_multiple']:.2f}" if item.get("r_multiple") is not None else ""
+                plain_lines.append(
+                    f"  * {item.get('ticker', '?')} {item.get('side', '?')} @ {entry_txt} -> TP {tp_txt} / SL {sl_txt}{r_txt}"
+                )
+        else:
+            plain_lines.append("- No trade plans were logged yesterday.")
         plain_lines.append("")
         plain_lines.append("Fresh trade ideas:")
         if rows:
             for row in rows:
                 plain_lines.append(self.describe_decision(row))
         else:
-            plain_lines.append("- No new trade ideas yet. We'll alert you when one appears.")
+            plain_lines.append("- No new trade ideas yet.")
         plain_lines.append("")
         plain_lines.append("Next steps:")
-        plain_lines.append("1. Open your broker and place any ideas you like (with stop & target).")
-        plain_lines.append("2. Prefer to watch? Visit the dashboard: http://localhost:8501")
-        plain_lines.append("3. Keep notes on what interests you for future review.")
+        plain_lines.append("1. Pick the setups that match your plan and size the position from the stop distance.")
+        plain_lines.append("2. Update your journal once orders are placed or skipped.")
         plain_lines.append("")
         plain_lines.append("Glossary:")
-        plain_lines.append("- ATR: measures how much the price usually moves; bigger ATR = smaller position size.")
-        plain_lines.append("- Stop-loss: automatic exit if price moves against us too far.")
-        plain_lines.append("- Take-profit: automatic exit when price hits the goal.")
-        plain_lines.append("- ADX: trend strength indicator; higher values usually mean a stronger trend.")
+        plain_lines.append("- ATR: measures recent price movement; larger ATR implies smaller position size.")
+        plain_lines.append("- Stop-loss: exit level that caps risk if price moves against the trade.")
+        plain_lines.append("- Take-profit: exit level that locks in gains when price reaches the objective.")
+        plain_lines.append("- R-multiple: reward divided by risk, used to compare setups.")
         plain_lines.append("")
-        plain_lines.append("Questions? Reply to this email and we'll help you out.")
+        plain_lines.append("Questions? Reply to this email and we will help.")
 
-        plain_text = "
-".join(plain_lines)
+        plain_text = "\n".join(plain_lines)
 
         css = """
         <style>
-        body {{background:#f4f6fb;font-family:'Segoe UI',Arial,sans-serif;color:#0f172a;margin:0;padding:24px;}}
-        .wrapper {{max-width:720px;margin:auto;background:#ffffff;border-radius:16px;padding:32px;box-shadow:0 22px 40px rgba(15,23,42,0.12);}}
-        h2 {{margin-top:0;font-weight:700;color:#0f172a;}}
-        .section {{margin-bottom:24px;}}
-        .card {{background:#f8fafc;border-radius:12px;padding:16px;margin-top:12px;}}
-        .metric {{display:flex;gap:12px;align-items:center;margin:6px 0;}}
-        .metric span.icon {{font-size:18px;}}
-        .ideas li {{margin-bottom:8px;}}
-        .footer {{font-size:12px;color:#64748b;margin-top:32px;}}
-        a {{color:#2563eb;text-decoration:none;}}
+        body {background:#f4f6fb;font-family:Segoe UI,Arial,sans-serif;color:#0f172a;margin:0;padding:24px;}
+        .wrapper {max-width:720px;margin:auto;background:#ffffff;border-radius:16px;padding:32px;box-shadow:0 22px 40px rgba(15,23,42,0.12);}
+        h2 {margin-top:0;font-weight:700;color:#0f172a;}
+        .section {margin-bottom:24px;}
+        .card {background:#f8fafc;border-radius:12px;padding:16px;margin-top:12px;}
+        .muted {color:#64748b;font-size:14px;}
+        .list li {margin-bottom:8px;}
+        .steps li {margin-bottom:6px;}
+        .footer {font-size:12px;color:#64748b;margin-top:32px;}
         </style>
         """
 
+        snapshot_html = (
+            "<div class='card'><strong>Closed trades yesterday</strong>"
+            f"<p class='muted'>Total {snapshot['total']} | Wins {snapshot['wins']} | Losses {snapshot['losses']} | Still open {snapshot['open']} | Net P/L {snapshot['pnl']:+.2f}</p></div>"
+        ) if snapshot else "<div class='card'><strong>Closed trades yesterday</strong><p class='muted'>No trades were closed yesterday.</p></div>"
+
         chart_html = (
-            "<div class='card'><strong>Yesterday chart</strong><br /><img src='cid:daily_chart' alt='Yesterday results chart' "
-            "style='max-width:360px;border-radius:8px;margin-top:8px;'/></div>"
+            "<div class='card'><strong>Yesterday chart</strong><br /><img src='cid:daily_chart' alt='Yesterday results chart' style='max-width:360px;border-radius:8px;margin-top:8px;'/></div>"
             if chart_path
-            else "<div class='card'><strong>Yesterday chart</strong><br /><span style='color:#94a3b8;'>No closed trades yesterday.</span></div>"
+            else "<div class='card'><strong>Yesterday chart</strong><p class='muted'>No closed trades yesterday.</p></div>"
         )
+
+        if simulation and simulation.get("count", 0) > 0:
+            sim_summary_parts = [
+                f"<p class='muted'>Plans logged: {simulation['count']} (with both exits: {simulation['count_with_levels']})</p>",
+                f"<p class='muted'>If every target filled: {simulation['total_tp']:+.2f}</p>",
+            ]
+            if simulation.get("count_with_levels", 0) > 0:
+                sim_summary_parts.append(f"<p class='muted'>If every stop triggered: {simulation['total_sl']:+.2f}</p>")
+            if simulation.get("average_r") is not None:
+                sim_summary_parts.append(f"<p class='muted'>Average reward-to-risk: {simulation['average_r']:.2f}R</p>")
+            sim_summary_html = "".Join('', sim_summary_parts)
+            items_html = "".join(
+                f"<li><strong>{item.get('ticker', '?')}</strong> {item.get('side', '?')} @ "
+                f"{item['entry']:.2f if item.get('entry') is not None else '?'} "
+                f"<span class='muted'>TP {item['pnl_tp']:+.2f if item.get('pnl_tp') is not None else 'n/a'} | "
+                f"SL {item['pnl_sl']:+.2f if item.get('pnl_sl') is not None else 'n/a'}"
+                f"{(f" | R {item['r_multiple']:.2f}" if item.get('r_multiple') is not None else '')}</span></li>"
+                for item in simulation["items"][:4]
+            )
+            simulation_block = f"<div class='card'><strong>Simulated execution</strong>{sim_summary_html}<ul class='list'>{items_html}</ul></div>"
+        else:
+            simulation_block = "<div class='card'><strong>Simulated execution</strong><p class='muted'>No trade plans were logged yesterday.</p></div>"
 
         ideas_html = "".join(
-            f"<li>🥇 <strong>{row.get('ticker')}</strong> — {FRIENDLY_SIDE.get(row.get('side',''), row.get('side',''))} near {row.get('price','?')} "
-            f"<span style='color:#64748b;'>SL {row.get('sl','-')} · TP {row.get('tp','-')} · TF {row.get('interval','1d')} · ADX {row.get('adx','?')}</span></li>"
+            f"<li><strong>{row.get('ticker', '?')}</strong> {FRIENDLY_SIDE.get(row.get('side', ''), row.get('side', ''))} near {row.get('price', '?')} "
+            f"<span class='muted'>Stop {row.get('sl', '-')} | Target {row.get('tp', '-')} | Timeframe {row.get('interval', '1d')} | ADX {row.get('adx', '?')}</span></li>"
             for row in rows
-        ) if rows else "<li>No new trade ideas yet. We'll alert you when one appears.</li>"
-
-        snapshot_html = (
-            f"<div class='card'><div class='metric'><span class='icon'>📊</span><div><strong>Yesterday</strong><br />"
-            f"{snapshot['total']} closed · Wins {snapshot['wins']} · Losses {snapshot['losses']} · Open {snapshot['open']} · Net P/L <strong>{snapshot['pnl']:+.2f}</strong></div></div></div>"
-            if snapshot
-            else "<div class='card'><div class='metric'><span class='icon'>📊</span><div><strong>Yesterday</strong><br />No closed trades recorded.</div></div></div>"
-        )
+        ) if rows else "<li>No new trade ideas yet.</li>"
 
         html = f"""
         <html>
           <head><meta charset='utf-8'/>{css}</head>
           <body>
             <div class='wrapper'>
-              <h2>📈 Daily Trading Digest — {now}</h2>
+              <h2>Daily Trading Digest - {now}</h2>
               <div class='section'>
-                <div class='metric'><span class='icon'>✅</span><div><strong>Overall totals</strong><br/>Wins {stats.get('wins',0)}, Losses {stats.get('losses',0)}, Open {stats.get('open',0)}</div></div>
-                <div class='metric'><span class='icon'>🛡️</span><div><strong>What this means</strong><br/>ATR keeps risk steady — bigger ATR automatically means smaller trade size.</div></div>
+                <div class='card'><strong>Lifetime totals</strong><p class='muted'>Wins {stats.get('wins',0)} | Losses {stats.get('losses',0)} | Open {stats.get('open',0)}</p></div>
                 {snapshot_html}
                 {chart_html}
+                {simulation_block}
               </div>
               <div class='section'>
-                <p><strong>💡 Fresh trade ideas</strong></p>
-                <ul class='ideas'>{ideas_html}</ul>
+                <p><strong>Fresh trade ideas</strong></p>
+                <ul class='list'>{ideas_html}</ul>
               </div>
               <div class='section'>
-                <p><strong>🧭 Next steps</strong></p>
-                <ol>
-                  <li>Open your broker and place any ideas you like (with stop & target).</li>
-                  <li>Prefer to watch? Visit the dashboard: <a href='http://localhost:8501'>http://localhost:8501</a></li>
-                  <li>Keep notes on what interests you for future review.</li>
+                <p><strong>Next steps</strong></p>
+                <ol class='steps'>
+                  <li>Pick the setups that match your plan and size the position from the stop distance.</li>
+                  <li>Update your journal once orders are placed or skipped.</li>
                 </ol>
               </div>
               <div class='section'>
-                <p><strong>📘 Glossary</strong></p>
-                <ul>
-                  <li><strong>ATR</strong>: measures how much the price usually moves; bigger ATR = smaller position size.</li>
-                  <li><strong>Stop-loss</strong>: automatic exit if price moves against us.</li>
-                  <li><strong>Take-profit</strong>: automatic exit when price hits the goal.</li>
-                  <li><strong>ADX</strong>: trend strength indicator; higher values usually mean a stronger trend.</li>
+                <p><strong>Glossary</strong></p>
+                <ul class='list'>
+                  <li><strong>ATR</strong>: measures recent price movement; larger ATR implies smaller position size.</li>
+                  <li><strong>Stop-loss</strong>: exit level that caps risk if price moves against the trade.</li>
+                  <li><strong>Take-profit</strong>: exit level that locks in gains when price reaches the objective.</li>
+                  <li><strong>R-multiple</strong>: reward divided by risk, used to compare setups.</li>
                 </ul>
               </div>
-              <p class='footer'>Questions? Reply to this email and we’ll help you out.</p>
+              <p class='footer'>Questions? Reply to this email and we will help.</p>
             </div>
           </body>
         </html>
         """
 
         return plain_text, html, chart_path
-
-    # ---------------------------------------------------------- telegram digest
     def build_telegram_message(self, decisions: int = 3) -> str:
         now = dt.datetime.now().strftime("%d %b %H:%M")
         stats = self.trade_stats()
@@ -299,3 +442,4 @@ class Digest:
 
 
 __all__ = ["Digest", "CHART_PATH"]
+
