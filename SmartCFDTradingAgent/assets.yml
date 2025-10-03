@@ -1,8 +1,7 @@
-crypto:
+﻿crypto:
   - BTC-USD
   - ETH-USD
   - SOL-USD
-  - XRP-USD
   - ADA-USD
   - LTC-USD
   - BNB-USD
