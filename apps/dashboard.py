@@ -1,8 +1,6 @@
-﻿import datetime as dt
-from pathlib import Path
-
-import pandas as pd
+﻿import pandas as pd
 import streamlit as st
+import altair as alt
 
 STORE = Path(__file__).resolve().parents[1] / "SmartCFDTradingAgent" / "storage"
 DECISIONS_CSV = STORE / "decision_log.csv"
@@ -24,19 +22,43 @@ else:
 
 col1, col2, col3 = st.columns(3)
 
-if not trades.empty:
-    wins = (trades["exit"].notnull() & (trades["exit"] > trades["entry"]) & (trades["side"].str.lower() == "buy")) | (
-        trades["exit"].notnull() & (trades["exit"] < trades["entry"]) & (trades["side"].str.lower() == "sell")
-    )
-    losses = (trades["exit"].notnull()) & (~wins)
-    open_positions = trades["exit"].isnull()
-    col1.metric("Closed wins", int(wins.sum()))
-    col2.metric("Closed losses", int(losses.sum()))
-    col3.metric("Open trades", int(open_positions.sum()))
+if not trades.empty and {'entry', 'exit', 'time', 'side'}.issubset(trades.columns):
+    trades['time'] = pd.to_datetime(trades['time'], errors='coerce')
+    closed = trades.dropna(subset=['exit', 'entry', 'time'])
+    def pnl(row):
+        entry = float(row['entry'])
+        exit_ = float(row['exit'])
+        side = str(row['side']).lower()
+        return (exit_ - entry) if side != 'sell' else (entry - exit_)
+    closed['pnl'] = closed.apply(pnl, axis=1)
+    closed = closed.sort_values('time')
+    closed['cum_pnl'] = closed['pnl'].cumsum()
+    col1.metric("Closed wins", int((closed['pnl'] > 0).sum()))
+    col2.metric("Closed losses", int((closed['pnl'] < 0).sum()))
+    col3.metric("Open trades", int(trades['exit'].isna().sum()))
 else:
     col1.metric("Closed wins", 0)
     col2.metric("Closed losses", 0)
-    col3.metric("Open trades", 0)
+    col3.metric("Open trades", int(trades['exit'].isna().sum() if 'exit' in trades else 0))
+
+st.subheader("Performance Timeline")
+if not trades.empty and {'entry', 'exit', 'time', 'side'}.issubset(trades.columns):
+    timeline = closed[['time', 'cum_pnl']]
+    timeline = timeline.set_index('time')
+    st.line_chart(timeline)
+else:
+    st.info("No closed trades yet. Once trades close you'll see a P&L timeline here.")
+
+st.subheader("Trade Outcomes")
+if not trades.empty and {'time', 'side', 'exit', 'entry', 'ticker'}.issubset(trades.columns):
+    filter_ticker = st.selectbox("Filter by ticker", options=['All'] + sorted(trades['ticker'].dropna().unique().tolist()))
+    view = trades.copy()
+    if filter_ticker != 'All':
+        view = view[view['ticker'] == filter_ticker]
+    view['time'] = pd.to_datetime(view['time'], errors='coerce')
+    st.dataframe(view.sort_values('time', ascending=False).head(50))
+else:
+    st.info("No trades recorded yet.")
 
 st.subheader("Latest Trade Ideas")
 if decisions.empty:
@@ -64,16 +86,7 @@ else:
             "adx": "Trend strength (ADX)",
         }
     )
-    st.table(latest)
-
-st.subheader("Trade Log (paper/live)")
-if trades.empty:
-    st.info("No trades recorded yet. Live or manual trades will appear here.")
-else:
-    trades_display = trades.copy()
-    trades_display["time"] = pd.to_datetime(trades_display["time"], errors="coerce")
-    trades_display = trades_display.sort_values("time", ascending=False).head(20)
-    st.dataframe(trades_display)
+    st.dataframe(latest)
 
 st.markdown(
     """
