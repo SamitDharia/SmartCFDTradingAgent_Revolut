@@ -246,125 +246,125 @@ class Digest:
         }
 
 
-def backfill_simulated_crypto_trades(
-    self,
-    target_date: Optional[dt.date] | None = None,
-    simulation: Optional[dict[str, Any]] = None,
-) -> int:
-    """Persist simulated crypto trades into the trade log for metrics.
+    def backfill_simulated_crypto_trades(
+        self,
+        target_date: Optional[dt.date] | None = None,
+        simulation: Optional[dict[str, Any]] = None,
+    ) -> int:
+        """Persist simulated crypto trades into the trade log for metrics.
 
-    For manually executed crypto trades (no broker integration), we assume the
-    recommended take-profit was hit so the digest can display hypothetical
-    results. Entries are tagged via ``broker="manual-simulated"`` so real
-    executions can override them later.
-    """
+        For manually executed crypto trades (no broker integration), we assume the
+        recommended take-profit was hit so the digest can display hypothetical
+        results. Entries are tagged via ``broker="manual-simulated"`` so real
+        executions can override them later.
+        """
 
-    target_date = target_date or (dt.datetime.now().date() - dt.timedelta(days=1))
-    if simulation is None:
-        simulation = self.simulate_recommended_trades(target_date)
-    if not simulation or simulation.get("count", 0) == 0:
-        return 0
-
-    try:
-        existing_df = pd.read_csv(CSV_PATH)
-    except Exception:
-        existing_df = pd.DataFrame()
-
-    recorded_ids: set[str] = set()
-    real_pairs: set[tuple[str, dt.date]] = set()
-    if not existing_df.empty:
-        if "order_id" in existing_df.columns:
-            recorded_ids = {
-                str(x) for x in existing_df["order_id"].dropna().astype(str)
-            }
-        if {"ticker", "time", "broker"}.issubset(existing_df.columns):
-            times = pd.to_datetime(existing_df["time"], errors="coerce")
-            brokers = existing_df["broker"].fillna("").astype(str)
-            tickers = existing_df["ticker"].fillna("").astype(str).str.upper()
-            for ticker, ts_value, broker in zip(tickers, times, brokers):
-                if pd.isna(ts_value):
-                    continue
-                day = ts_value.date()
-                if day != target_date:
-                    continue
-                if broker.lower() != "manual-simulated":
-                    real_pairs.add((ticker, day))
-
-    saved = 0
-    items = simulation.get("items", [])
-
-    def _resolve_dt(value: Any, fallback_date: dt.date, offset_minutes: int) -> dt.datetime:
-        if isinstance(value, dt.datetime):
-            return value
-        if isinstance(value, pd.Timestamp):
-            if pd.isna(value):
-                pass
-            else:
-                return value.to_pydatetime()
-        if isinstance(value, str):
-            try:
-                return dt.datetime.fromisoformat(value)
-            except ValueError:
-                pass
-        return dt.datetime.combine(fallback_date, dt.time(9, 0)) + dt.timedelta(minutes=offset_minutes)
-
-    for idx, item in enumerate(items):
-        ticker = str(item.get("ticker") or "").upper()
-        if not ticker or not is_crypto(ticker):
-            continue
-        if (ticker, target_date) in real_pairs:
-            continue
-
-        entry = item.get("entry")
-        tp = item.get("tp")
-        if entry is None or tp is None:
-            continue
-
-        decision_dt = _resolve_dt(item.get("decision_ts"), target_date, idx)
-        order_id = f"SIM-{ticker}-{decision_dt:%Y%m%d%H%M%S}-{idx}"
-        if order_id in recorded_ids:
-            continue
-
-        sl = item.get("sl")
-        pnl_tp = item.get("pnl_tp") or 0.0
-        risk_abs = item.get("risk")
-        if not risk_abs and entry is not None and sl is not None:
-            try:
-                risk_abs = abs(float(entry) - float(sl))
-            except (TypeError, ValueError):
-                risk_abs = None
-        r_multiple = item.get("r_multiple")
-        if r_multiple is None and risk_abs not in (None, 0):
-            try:
-                r_multiple = float(pnl_tp) / float(risk_abs) if risk_abs else None
-            except (TypeError, ValueError):
-                r_multiple = None
-
-        trade_row = {
-            "time": decision_dt.isoformat(),
-            "ticker": ticker,
-            "side": item.get("side"),
-            "entry": entry,
-            "sl": sl,
-            "tp": tp,
-            "exit": tp,
-            "exit_reason": "simulated_tp",
-            "atr": item.get("atr"),
-            "r_multiple": r_multiple,
-            "fees": 0.0,
-            "broker": "manual-simulated",
-            "order_id": order_id,
-        }
+        target_date = target_date or (dt.datetime.now().date() - dt.timedelta(days=1))
+        if simulation is None:
+            simulation = self.simulate_recommended_trades(target_date)
+        if not simulation or simulation.get("count", 0) == 0:
+            return 0
 
         try:
-            log_trade(trade_row)
+            existing_df = pd.read_csv(CSV_PATH)
         except Exception:
-            continue
+            existing_df = pd.DataFrame()
 
-        recorded_ids.add(order_id)
-        saved += 1
+        recorded_ids: set[str] = set()
+        real_pairs: set[tuple[str, dt.date]] = set()
+        if not existing_df.empty:
+            if "order_id" in existing_df.columns:
+                recorded_ids = {
+                    str(x) for x in existing_df["order_id"].dropna().astype(str)
+                }
+            if {"ticker", "time", "broker"}.issubset(existing_df.columns):
+                times = pd.to_datetime(existing_df["time"], errors="coerce")
+                brokers = existing_df["broker"].fillna("").astype(str)
+                tickers = existing_df["ticker"].fillna("").astype(str).str.upper()
+                for ticker, ts_value, broker in zip(tickers, times, brokers):
+                    if pd.isna(ts_value):
+                        continue
+                    day = ts_value.date()
+                    if day != target_date:
+                        continue
+                    if broker.lower() != "manual-simulated":
+                        real_pairs.add((ticker, day))
 
-    return saved
+        saved = 0
+        items = simulation.get("items", [])
+
+        def _resolve_dt(value: Any, fallback_date: dt.date, offset_minutes: int) -> dt.datetime:
+            if isinstance(value, dt.datetime):
+                return value
+            if isinstance(value, pd.Timestamp):
+                if pd.isna(value):
+                    pass
+                else:
+                    return value.to_pydatetime()
+            if isinstance(value, str):
+                try:
+                    return dt.datetime.fromisoformat(value)
+                except ValueError:
+                    pass
+            return dt.datetime.combine(fallback_date, dt.time(9, 0)) + dt.timedelta(minutes=offset_minutes)
+
+        for idx, item in enumerate(items):
+            ticker = str(item.get("ticker") or "").upper()
+            if not ticker or not is_crypto(ticker):
+                continue
+            if (ticker, target_date) in real_pairs:
+                continue
+
+            entry = item.get("entry")
+            tp = item.get("tp")
+            if entry is None or tp is None:
+                continue
+
+            decision_dt = _resolve_dt(item.get("decision_ts"), target_date, idx)
+            order_id = f"SIM-{ticker}-{decision_dt:%Y%m%d%H%M%S}-{idx}"
+            if order_id in recorded_ids:
+                continue
+
+            sl = item.get("sl")
+            pnl_tp = item.get("pnl_tp") or 0.0
+            risk_abs = item.get("risk")
+            if not risk_abs and entry is not None and sl is not None:
+                try:
+                    risk_abs = abs(float(entry) - float(sl))
+                except (TypeError, ValueError):
+                    risk_abs = None
+            r_multiple = item.get("r_multiple")
+            if r_multiple is None and risk_abs not in (None, 0):
+                try:
+                    r_multiple = float(pnl_tp) / float(risk_abs) if risk_abs else None
+                except (TypeError, ValueError):
+                    r_multiple = None
+
+            trade_row = {
+                "time": decision_dt.isoformat(),
+                "ticker": ticker,
+                "side": item.get("side"),
+                "entry": entry,
+                "sl": sl,
+                "tp": tp,
+                "exit": tp,
+                "exit_reason": "simulated_tp",
+                "atr": item.get("atr"),
+                "r_multiple": r_multiple,
+                "fees": 0.0,
+                "broker": "manual-simulated",
+                "order_id": order_id,
+            }
+
+            try:
+                log_trade(trade_row)
+            except Exception:
+                continue
+
+            recorded_ids.add(order_id)
+            saved += 1
+
+        return saved
 
     def save_snapshot_chart(self, snapshot: dict[str, float] | None) -> Optional[Path]:
         CHART_PATH.parent.mkdir(parents=True, exist_ok=True)
