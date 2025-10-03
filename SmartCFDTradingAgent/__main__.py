@@ -29,7 +29,11 @@ def cli():
     ap.add_argument("--equity", type=float, default=1000.0)
     args = ap.parse_args()
 
-    price = get_price_data(args.tickers, args.start, args.end, args.interval)
+    try:
+        price = get_price_data(args.tickers, args.start, args.end, args.interval)
+    except Exception as exc:
+        log.warning("Data fetch failed for %s: %s", args.tickers, exc)
+        return
 
     if not isinstance(price, pd.DataFrame) or price.empty:
         log.warning("No market data returned for %s between %s and %s.", args.tickers, args.start, args.end)
