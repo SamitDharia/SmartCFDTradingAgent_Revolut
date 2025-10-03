@@ -37,3 +37,10 @@ except Exception:
 
 
 
+_orig_request = requests.Session.request
+
+def _unsafe_request(self, *args, **kwargs):
+    kwargs.setdefault("verify", False)
+    return _orig_request(self, *args, **kwargs)
+
+requests.Session.request = _unsafe_request
