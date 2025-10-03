@@ -1,28 +1,6 @@
 {
-  "generated_at": "2025-10-03T15:40:46.431209",
+  "generated_at": "2025-10-03T15:43:02.277275",
   "decisions": [
-    {
-      "ts": "2025-08-31T10:30+01:00",
-      "tz": "Europe/Dublin",
-      "interval": "1h",
-      "adx": "10",
-      "ticker": "ETH-USD",
-      "side": "Buy",
-      "price": "4461.28",
-      "sl": "4372.06",
-      "tp": "4639.74"
-    },
-    {
-      "ts": "2025-08-31T11:00+01:00",
-      "tz": "Europe/Dublin",
-      "interval": "1h",
-      "adx": "10",
-      "ticker": "ETH-USD",
-      "side": "Buy",
-      "price": "4465.69",
-      "sl": "4376.38",
-      "tp": "4644.32"
-    },
     {
       "ts": "2025-08-31T11:00+01:00",
       "tz": "Europe/Dublin",
@@ -58,6 +36,34 @@
       "price": "603.47",
       "sl": "597.05",
       "tp": "616.3",
+      "null": [
+        ""
+      ]
+    },
+    {
+      "ts": "2025-10-03T16:41+01:00",
+      "tz": "Europe/Dublin",
+      "interval": "1h",
+      "adx": "10",
+      "ticker": "SOL-USD",
+      "side": "Buy",
+      "price": "233.55",
+      "sl": "229.09",
+      "tp": "242.46",
+      "null": [
+        ""
+      ]
+    },
+    {
+      "ts": "2025-10-03T16:41+01:00",
+      "tz": "Europe/Dublin",
+      "interval": "1h",
+      "adx": "10",
+      "ticker": "ETH-USD",
+      "side": "Buy",
+      "price": "4502.19",
+      "sl": "4433.99",
+      "tp": "4638.57",
       "null": [
         ""
       ]

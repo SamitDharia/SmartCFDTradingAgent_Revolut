@@ -1,4 +1,4 @@
-Daily Trading Digest — Friday 03 October 2025 16:40
+Daily Trading Digest — Friday 03 October 2025 16:43
 
 How are we doing?
 - Total closed trades so far: Wins 0, Losses 0, Open 0
@@ -6,11 +6,11 @@ How are we doing?
 - Yesterday: no closed trades recorded.
 
 Fresh trade ideas to review:
-- ETH-USD: Buy near 4461.28 | Stop 4372.06 | Target 4639.74 | Timeframe 1h | Trend filter ADX 10
-- ETH-USD: Buy near 4465.69 | Stop 4376.38 | Target 4644.32 | Timeframe 1h | Trend filter ADX 10
 - BTC-USD: Sell near 108484.97 | Stop 110654.67 | Target 104145.57 | Timeframe 1h | Trend filter ADX 10
 - BTC-USD: Buy near 121358.71 | Stop 120367.78 | Target 123340.56 | Timeframe 1h | Trend filter ADX 10
 - BCH-USD: Buy near 603.47 | Stop 597.05 | Target 616.3 | Timeframe 1h | Trend filter ADX 10
+- SOL-USD: Buy near 233.55 | Stop 229.09 | Target 242.46 | Timeframe 1h | Trend filter ADX 10
+- ETH-USD: Buy near 4502.19 | Stop 4433.99 | Target 4638.57 | Timeframe 1h | Trend filter ADX 10
 
 Next steps for you:
 1. Open your broker app. Place any trade you like from the list above, including stop-loss and target.
