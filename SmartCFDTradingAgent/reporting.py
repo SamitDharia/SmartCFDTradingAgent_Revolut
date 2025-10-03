@@ -510,7 +510,7 @@ class Digest:
         .summary-grid {{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px;}}
         .summary-card {{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:14px;background:#f6f8ff;border:1px solid rgba(99,102,241,0.18);}}
         .summary-card span.icon {{font-size:18px;margin-top:2px;}}
-        .summary-card div {{font-size:14px;line-height:1.45;color:#0f172a;}}
+        .summary-card .content {{font-size:14px;line-height:1.45;color:#0f172a;}}
         .section {{margin-bottom:18px;}}
         .section h2 {{margin:0 0 10px;font-size:15px;text-transform:uppercase;letter-spacing:0.08em;color:#6b7280;display:flex;align-items:center;gap:8px;}}
         .section ul {{margin:0;padding-left:18px;}}
@@ -524,18 +524,18 @@ class Digest:
 
         summary_cards = []
         summary_cards.append(
-            f"<div class='summary-card'><span class='icon'>✅</span><div><strong>Overall</strong><br/>Wins {stats.get('wins',0)}, losses {stats.get('losses',0)}, open {stats.get('open',0)}</div></div>"
+            f"<div class='summary-card'><div class='icon'>✅</div><div class='content'><strong>Overall</strong><br/>Wins {stats.get('wins',0)}, losses {stats.get('losses',0)}, open {stats.get('open',0)}</div></div>"
         )
         if snapshot:
             summary_cards.append(
-                f"<div class='summary-card'><span class='icon'>📆</span><div><strong>Yesterday</strong><br/>{snapshot['total']} closed | net {snapshot['pnl']:+.2f}</div></div>"
+                f"<div class='summary-card'><div class='icon'>📆</div><div class='content'><strong>Yesterday</strong><br/>{snapshot['total']} closed | net {snapshot['pnl']:+.2f}</div></div>"
             )
         else:
             summary_cards.append(
-                "<div class='summary-card'><span class='icon'>📆</span><div><strong>Yesterday</strong><br/>No trades were closed.</div></div>"
+                "<div class='summary-card'><div class='icon'>📆</div><div class='content'><strong>Yesterday</strong><br/>No trades were closed.</div></div>"
             )
         summary_cards.append(
-            "<div class='summary-card'><span class='icon'>ℹ️</span><div><strong>ATR insight</strong><br/>ATR keeps risk steady — higher ATR automatically means smaller trade size.</div></div>"
+            "<div class='summary-card'><div class='icon'>ℹ️</div><div class='content'><strong>ATR insight</strong><br/>ATR keeps risk steady — higher ATR automatically means smaller trade size.</div></div>"
         )
         summary_html = "<div class='summary-grid'>" + "".join(summary_cards) + "</div>"
 
