@@ -44,3 +44,4 @@ def _unsafe_request(self, *args, **kwargs):
     return _orig_request(self, *args, **kwargs)
 
 requests.Session.request = _unsafe_request
+
