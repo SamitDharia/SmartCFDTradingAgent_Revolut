@@ -43,9 +43,12 @@ STORE.mkdir(exist_ok=True)
 # ----------------- helpers -----------------
 def safe_send(msg: str) -> None:
     try:
-        tg_send(msg)
+        ok = tg_send(msg)
     except Exception as e:
         log.error("Telegram send failed: %s", e)
+    else:
+        if not ok:
+            log.warning("Telegram send returned False; message dropped (first 200 chars): %s", msg[:200])
 
 # --- asset classification ---
 ASSET_MAP: dict[str, str] = {}
@@ -423,7 +426,13 @@ def run_cycle(
     end = dt.date.today().isoformat()
     lookback_days = _max_lookback_days(interval)
     start = (dt.date.today() - dt.timedelta(days=lookback_days)).isoformat()
-    price = get_price_data(tickers, start, end, interval=interval)
+    try:
+        price = get_price_data(tickers, start, end, interval=interval)
+    except Exception as e:
+        err = f"⚠️ Data download failed for {', '.join(tickers)} ({interval}): {e}"
+        log.error(err)
+        safe_send(err)
+        return
     base_sig = generate_signals(
         price,
         adx_threshold=adx,
