@@ -394,6 +394,7 @@ def run_cycle(
     sl_atr=2.0,
     tp_atr=4.0,
     trail_atr=0.0,
+    max_trade_risk: float = 0.01,
     broker: "Broker | None" = None,
     dry_run: bool = False,
 ):
@@ -594,8 +595,11 @@ def run_cycle(
 
         planned_left = max(1, remaining[cls])
         per_trade_budget = max(0.0, remaining_budget[cls]) / planned_left
-        per_trade_risk = min(per_trade_budget,  # honor class budget
-                             risk)              # honor per-trade cap
+        per_trade_risk = min(
+            per_trade_budget,  # honor class budget
+            risk,              # honor per-trade cap
+            max_trade_risk,    # global guardrail
+        )
 
         if per_trade_budget <= 0:
             limits_hit.add("risk")
@@ -707,6 +711,7 @@ def main():
     ap.add_argument("--grace", type=int, default=900)
     default_risk = float(os.getenv("RISK_PCT", "0.01"))
     ap.add_argument("--risk", type=float, default=default_risk)
+    ap.add_argument("--max-trade-risk", type=float, default=default_risk, help="Maximum fraction of equity risked per trade")
     ap.add_argument("--equity", type=float, default=1000.0)
     ap.add_argument("--sl-atr", type=float, default=2.0, help="Stop loss ATR multiple (0 disables)")
     ap.add_argument("--tp-atr", type=float, default=4.0, help="Take profit ATR multiple (0 disables)")
@@ -855,6 +860,7 @@ def main():
             grace=args.grace,
             qty=args.qty,
             risk=args.risk,
+            max_trade_risk=args.max_trade_risk,
             force=args.force,
             interval=args.interval,
             adx=args.adx,
