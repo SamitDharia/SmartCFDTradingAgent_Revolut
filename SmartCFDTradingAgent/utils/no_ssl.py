@@ -14,9 +14,9 @@ try:
     # yfinance uses a shared requests session; make it skip verification
     sess = getattr(yf.shared, "_requests", None) or requests.Session()
     sess.verify = False
-sess.headers.setdefault('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36')
-sess.headers.setdefault('Accept', 'application/json, text/plain, */*')
-sess.headers.setdefault('Accept-Language', 'en-US,en;q=0.9')
+    sess.headers.setdefault('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36')
+    sess.headers.setdefault('Accept', 'application/json, text/plain, */*')
+    sess.headers.setdefault('Accept-Language', 'en-US,en;q=0.9')
 
     class UnsafeAdapter(requests.adapters.HTTPAdapter):
         def init_poolmanager(self, *args, **kwargs):
