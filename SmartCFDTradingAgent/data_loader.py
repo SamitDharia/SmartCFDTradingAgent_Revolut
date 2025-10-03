@@ -222,6 +222,10 @@ def get_price_data(
     tickers = list(dict.fromkeys(tickers))
     iv = (interval or "1d").lower()
 
+    if USE_ALPACA_CRYPTO and tickers and all(_is_crypto_symbol(t) for t in tickers):
+        log.info("Fetching crypto data via Alpaca for tickers: %s", tickers)
+        return _get_crypto_data_alpaca(tickers, start, end, iv)
+
     # ---------- Intraday path (per-ticker only) ----------
     if iv in INTRADAY:
         # Use the exact combos that worked on your machine.
