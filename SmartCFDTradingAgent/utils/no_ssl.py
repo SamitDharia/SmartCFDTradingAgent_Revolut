@@ -2,6 +2,8 @@
 # Force yfinance to use requests (not libcurl) and ignore corporate MITM certs.
 from __future__ import annotations
 import os, ssl, requests
+ssl._create_default_https_context = ssl._create_unverified_context
+print("[no_ssl] SSL verification disabled for Yahoo requests.")
 
 # Must be set BEFORE yfinance is imported anywhere
 os.environ.setdefault("CURL_CA_BUNDLE", "")
@@ -32,3 +34,6 @@ try:
 except Exception:
     # If anything above fails, we still benefit from env vars.
     pass
+
+
+
