@@ -90,7 +90,7 @@ def test_dry_run_cycle_logging_and_summary(monkeypatch, tmp_path, caplog):
     monkeypatch.setattr(pipeline, "backtest", fake_backtest)
 
     with caplog.at_level("INFO"):
-        pipeline.run_cycle(watch=["AAA"], size=1, grace=0, risk=0.01, qty=1000, force=True)
+        pipeline.run_cycle(watch=["AAA"], size=1, grace=0, risk=0.01, qty=1000, force=True, max_trade_risk=0.01)
 
     assert any(msg.startswith("Summary:") for msg in sent)
     assert "Summary:" in caplog.text

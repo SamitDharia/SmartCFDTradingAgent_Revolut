@@ -64,6 +64,7 @@ def test_run_cycle_uses_broker_equity(monkeypatch, tmp_path):
         qty=1000,
         broker=broker,
         force=True,
+        max_trade_risk=0.01,
     )
 
     assert recorded["equity"] == 5000
@@ -125,6 +126,7 @@ def test_run_cycle_handles_none_equity(monkeypatch, tmp_path):
         qty=1000,
         broker=broker,
         force=True,
+        max_trade_risk=0.01,
     )
 
     assert recorded["equity"] == 1000
