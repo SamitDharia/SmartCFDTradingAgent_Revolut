@@ -1,6 +1,8 @@
 ﻿import pandas as pd
 import streamlit as st
 import altair as alt
+from pathlib import Path
+from datetime import datetime
 
 STORE = Path(__file__).resolve().parents[1] / "SmartCFDTradingAgent" / "storage"
 DECISIONS_CSV = STORE / "decision_log.csv"
@@ -25,11 +27,13 @@ col1, col2, col3 = st.columns(3)
 if not trades.empty and {'entry', 'exit', 'time', 'side'}.issubset(trades.columns):
     trades['time'] = pd.to_datetime(trades['time'], errors='coerce')
     closed = trades.dropna(subset=['exit', 'entry', 'time'])
+
     def pnl(row):
         entry = float(row['entry'])
         exit_ = float(row['exit'])
         side = str(row['side']).lower()
         return (exit_ - entry) if side != 'sell' else (entry - exit_)
+
     closed['pnl'] = closed.apply(pnl, axis=1)
     closed = closed.sort_values('time')
     closed['cum_pnl'] = closed['pnl'].cumsum()
@@ -37,14 +41,14 @@ if not trades.empty and {'entry', 'exit', 'time', 'side'}.issubset(trades.column
     col2.metric("Closed losses", int((closed['pnl'] < 0).sum()))
     col3.metric("Open trades", int(trades['exit'].isna().sum()))
 else:
+    closed = pd.DataFrame()
     col1.metric("Closed wins", 0)
     col2.metric("Closed losses", 0)
     col3.metric("Open trades", int(trades['exit'].isna().sum() if 'exit' in trades else 0))
 
 st.subheader("Performance Timeline")
-if not trades.empty and {'entry', 'exit', 'time', 'side'}.issubset(trades.columns):
-    timeline = closed[['time', 'cum_pnl']]
-    timeline = timeline.set_index('time')
+if not closed.empty:
+    timeline = closed[['time', 'cum_pnl']].set_index('time')
     st.line_chart(timeline)
 else:
     st.info("No closed trades yet. Once trades close you'll see a P&L timeline here.")
@@ -64,29 +68,26 @@ st.subheader("Latest Trade Ideas")
 if decisions.empty:
     st.info("No decisions logged yet. Once the agent runs you will see new ideas here.")
 else:
-    latest = decisions.tail(10)[[
-        "ts",
-        "ticker",
-        "side",
-        "price",
-        "sl",
-        "tp",
-        "interval",
-        "adx",
-    ]]
-    latest = latest.rename(
-        columns={
-            "ts": "Timestamp",
-            "ticker": "Ticker",
-            "side": "Action",
-            "price": "Entry Price",
-            "sl": "Stop-Loss",
-            "tp": "Target",
-            "interval": "Timeframe",
-            "adx": "Trend strength (ADX)",
-        }
-    )
-    st.dataframe(latest)
+    latest = decisions.tail(50)
+    action_filter = st.multiselect("Show signals", options=sorted(latest['side'].dropna().unique().tolist()), default=sorted(latest['side'].dropna().unique().tolist()))
+    filtered = latest[latest['side'].isin(action_filter)] if action_filter else latest
+    chart_data = filtered[['ts', 'side']].groupby('side').count().reset_index().rename(columns={'ts': 'count'})
+    bar = alt.Chart(chart_data).mark_bar().encode(x='side', y='count', tooltip=['side', 'count'])
+    st.altair_chart(bar, use_container_width=True)
+    display_cols = [
+        "ts", "ticker", "side", "price", "sl", "tp", "interval", "adx"
+    ]
+    filtered = filtered[display_cols].rename(columns={
+        "ts": "Timestamp",
+        "ticker": "Ticker",
+        "side": "Action",
+        "price": "Entry Price",
+        "sl": "Stop-Loss",
+        "tp": "Target",
+        "interval": "Timeframe",
+        "adx": "Trend strength (ADX)",
+    })
+    st.dataframe(filtered)
 
 st.markdown(
     """
@@ -100,5 +101,5 @@ Need help? Run `scripts\\test_telegram.cmd` to confirm alerts or check the paper
 """
 )
 
-last_updated = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+last_updated = datetime.now().strftime("%Y-%m-%d %H:%M")
 st.caption(f"Last refreshed: {last_updated}")
