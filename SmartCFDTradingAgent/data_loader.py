@@ -153,24 +153,24 @@ def _get_crypto_data_alpaca(tickers: list[str], start: str, end: str, interval: 
     if df is None or df.empty:
         raise RuntimeError(f'No data returned for {tickers} via Alpaca.')
 
+    data = df.reset_index()
+    data['symbol'] = data['symbol'].str.replace('/', '-').str.upper()
+    data['timestamp'] = pd.to_datetime(data['timestamp'])
+    if getattr(data['timestamp'].dt, 'tz', None) is not None:
+        data['timestamp'] = data['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)
+    else:
+        data['timestamp'] = data['timestamp'].dt.tz_localize(None)
+    data = data.rename(columns={
+        'open': 'Open',
+        'high': 'High',
+        'low': 'Low',
+        'close': 'Close',
+        'volume': 'Volume',
+    })
     frames: list[pd.DataFrame] = []
-    for symbol in df.index.get_level_values('symbol').unique():
-        sub = df.xs(symbol, level='symbol')[['open', 'high', 'low', 'close', 'volume']].copy()
-        sub.index = pd.to_datetime(sub.index)
-        if getattr(sub.index, 'tz', None) is not None:
-            sub.index = sub.index.tz_convert('UTC').tz_localize(None)
-        else:
-            sub.index = sub.index.tz_localize(None)
-        sub = sub.rename(columns={
-            'open': 'Open',
-            'high': 'High',
-            'low': 'Low',
-            'close': 'Close',
-            'volume': 'Volume',
-        })
-        sub = sub[['Open', 'High', 'Low', 'Close', 'Volume']]
-        sym = symbol.replace('/', '-').upper()
-        frames.append(pd.concat({sym: sub}, axis=1))
+    for symbol, group in data.groupby('symbol'):
+        sub = group.sort_values('timestamp').set_index('timestamp')[['Open', 'High', 'Low', 'Close', 'Volume']]
+        frames.append(pd.concat({symbol: sub}, axis=1))
 
     if not frames:
         raise RuntimeError(f'No data returned for {tickers} via Alpaca.')
