@@ -1,10 +1,6 @@
 ﻿crypto:
   - BTC-USD
   - ETH-USD
-  - SOL-USD
-  - ADA-USD
-  - LTC-USD
-  - BNB-USD
 equity:
   - SPY
   - QQQ
