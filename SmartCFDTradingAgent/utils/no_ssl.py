@@ -40,12 +40,16 @@ except Exception:
 
 
 
-_orig_request = requests.Session.request
+try:
+    _orig_request = requests.Session.request
+except AttributeError:  # pragma: no cover - requests may be stubbed in tests
+    _orig_request = None
+else:
 
-def _unsafe_request(self, *args, **kwargs):
-    kwargs.setdefault("verify", False)
-    return _orig_request(self, *args, **kwargs)
+    def _unsafe_request(self, *args, **kwargs):
+        kwargs.setdefault("verify", False)
+        return _orig_request(self, *args, **kwargs)
 
-requests.Session.request = _unsafe_request
+    requests.Session.request = _unsafe_request
 
 
