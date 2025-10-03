@@ -130,6 +130,11 @@ class Digest:
                 "total_tp": 0.0,
                 "total_sl": 0.0,
                 "average_r": None,
+                "median_r": None,
+                "avg_risk": None,
+                "avg_reward": None,
+                "best_tp": None,
+                "worst_sl": None,
             }
 
         def _to_float(value: object) -> float | None:
