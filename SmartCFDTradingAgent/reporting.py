@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import statistics
+import statistics
 from pathlib import Path
 from typing import Any, Iterable, Optional, Tuple
 
@@ -314,13 +315,26 @@ class Digest:
                 plain_lines.append(f"- If every stop triggered: {simulation['total_sl']:+.2f}")
             if simulation.get("average_r") is not None:
                 plain_lines.append(f"- Average reward-to-risk: {simulation['average_r']:.2f}R")
+            if simulation.get("median_r") is not None:
+                plain_lines.append(f"- Median reward-to-risk: {simulation['median_r']:.2f}R")
+            if simulation.get("avg_risk") is not None:
+                plain_lines.append(f"- Average stop distance: {simulation['avg_risk']:.2f}")
+            if simulation.get("avg_reward") is not None:
+                plain_lines.append(f"- Average target move: {simulation['avg_reward']:.2f}")
+            if simulation.get("best_tp") is not None or simulation.get("worst_sl") is not None:
+                best_val = simulation.get("best_tp")
+                worst_val = simulation.get("worst_sl")
+                best_txt = f"{best_val:+.2f}" if best_val is not None else "n/a"
+                worst_txt = f"{worst_val:+.2f}" if worst_val is not None else "n/a"
+                plain_lines.append(f"- Per-plan range: best {best_txt} | worst {worst_txt}")
             for item in simulation["items"][:3]:
                 entry_txt = _fmt_price(item.get("entry"))
                 tp_txt = _fmt_signed(item.get("pnl_tp"))
                 sl_txt = _fmt_signed(item.get("pnl_sl"))
                 r_txt = f", R {item['r_multiple']:.2f}" if item.get("r_multiple") is not None else ""
+                risk_txt = f" | Risk {abs(float(item['pnl_sl'])):.2f}" if item.get("pnl_sl") is not None else ""
                 plain_lines.append(
-                    f"  * {item.get('ticker', '?')} {item.get('side', '?')} @ {entry_txt} -> TP {tp_txt} / SL {sl_txt}{r_txt}"
+                    f"  * {item.get('ticker', '?')} {item.get('side', '?')} @ {entry_txt} -> TP {tp_txt} / SL {sl_txt}{r_txt}{risk_txt}"
                 )
         else:
             plain_lines.append("- No trade plans were logged yesterday.")
