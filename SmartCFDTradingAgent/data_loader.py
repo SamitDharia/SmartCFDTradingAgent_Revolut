@@ -148,7 +148,7 @@ def _get_crypto_data_alpaca(tickers: list[str], start: str, end: str, interval: 
 
     symbols = [ticker.replace('-', '/').upper() for ticker in tickers]
     exchanges = ALPACA_CRYPTO_EXCHANGES or None
-    bars = client.get_crypto_bars(symbols, timeframe, start_ts.isoformat(), end_ts.isoformat(), exchanges=exchanges, limit=10000)
+    bars = client.get_crypto_bars(symbols, timeframe, start_ts.isoformat(), end_ts.isoformat(), limit=10000)
     df = bars.df
     if df is None or df.empty:
         raise RuntimeError(f'No data returned for {tickers} via Alpaca.')
