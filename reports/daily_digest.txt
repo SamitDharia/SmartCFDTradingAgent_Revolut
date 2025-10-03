@@ -1,27 +1,27 @@
-Daily Trading Digest Friday 03 October 2025 18:20
+🌅 Daily Trading Digest - Friday 03 October 2025 18:44
 
-Yesterday's scorecard:
-- Lifetime totals: Wins 0, Losses 0, Open 0
-- Closed yesterday: no trades were logged.
+Yesterday at a glance
+- All-time totals: 0 wins | 0 losses | 0 open
+- No trades were closed yesterday.
 
-Simulated execution (based on yesterday's plans):
+If every plan hit its targets
 - No trade plans were logged yesterday.
 
-Fresh trade ideas:
-- ETH-USD: Buy near 4552.61 | stop 4480.58 | target 4696.68 | timeframe 1h | ADX 10
-- BTC-USD: Buy near 123742.74 | stop 122452.23 | target 126323.78 | timeframe 1h | ADX 10
-- BCH-USD: Buy near 615.05 | stop 607.36 | target 630.45 | timeframe 1h | ADX 10
-- BTC-USD: Buy near 122630.77 | stop 121312.07 | target 125268.19 | timeframe 1h | ADX 10
-- BCH-USD: Buy near 608.87 | stop 601.09 | target 624.42 | timeframe 1h | ADX 10
+Fresh ideas on the radar
+- BCH-USD: Buy near 615.05 | stop 607.36 | target 630.45 | timeframe 1h | trend guide 10
+- BTC-USD: Buy near 122630.77 | stop 121312.07 | target 125268.19 | timeframe 1h | trend guide 10
+- BCH-USD: Buy near 608.87 | stop 601.09 | target 624.42 | timeframe 1h | trend guide 10
+- BTC-USD: Buy near 122600.58 | stop 121031.55 | target 125738.65 | timeframe 1h | trend guide 10
+- BCH-USD: Buy near 604.63 | stop 595.59 | target 622.71 | timeframe 1h | trend guide 10
 
-Next steps:
-1. Pick the setups that match your plan and size the position from the stop distance.
-2. Update your journal once orders are placed or skipped.
+Quick actions
+1. Pick the setups that match your plan and size positions from the stop distance.
+2. Make a quick note explaining why you chose to trade or pass.
 
-Glossary:
-- ATR: measures recent price movement; larger ATR implies smaller position size.
-- Stop-loss: exit level that caps risk if price moves against the trade.
-- Take-profit: exit level that locks in gains when price reaches the objective.
-- R-multiple: reward divided by risk, used to compare setups.
+Word bank
+- Stop-loss: a pre-set exit that limits how much the trade can hurt you.
+- Target: a price where we choose to lock in gains.
+- Reward vs. risk: how much the idea could earn compared with what it could lose.
+- Trend guide (ADX): a number showing how strong the price move is right now.
 
 Questions? Reply to this email and we will help.

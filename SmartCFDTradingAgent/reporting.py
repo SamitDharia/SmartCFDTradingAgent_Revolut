@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import datetime as dt
 import json
@@ -406,6 +406,7 @@ class Digest:
 
     # ------------------------------------------------------------ email content
 
+
     def build_email_content(self, decisions: int = 5) -> Tuple[str, str, Optional[Path]]:
         now = dt.datetime.now().strftime("%A %d %B %Y %H:%M")
         stats = self.trade_stats()
@@ -433,77 +434,72 @@ class Digest:
                 return "n/a"
 
         plain_lines: list[str] = []
-        plain_lines.append(f"Daily Trading Digest {now}")
+        plain_lines.append(f"🌅 Daily Trading Digest - {now}")
         plain_lines.append("")
-        plain_lines.append("Yesterday's scorecard:")
+        plain_lines.append("Yesterday at a glance")
         plain_lines.append(
-            f"- Lifetime totals: Wins {stats.get('wins', 0)}, Losses {stats.get('losses', 0)}, Open {stats.get('open', 0)}"
+            f"- All-time totals: {stats.get('wins', 0)} wins | {stats.get('losses', 0)} losses | {stats.get('open', 0)} open"
         )
         if snapshot:
             plain_lines.append(
-                f"- Closed yesterday: {snapshot['total']} (Wins {snapshot['wins']} | Losses {snapshot['losses']} | Still open {snapshot['open']}) | Net P/L {snapshot['pnl']:+.2f}"
+                f"- Trades closed: {snapshot['total']} (wins {snapshot['wins']}, losses {snapshot['losses']}, still open {snapshot['open']})"
             )
+            plain_lines.append(f"- Net change: {snapshot['pnl']:+.2f}")
         else:
-            plain_lines.append("- Closed yesterday: no trades were logged.")
+            plain_lines.append("- No trades were closed yesterday.")
+
         plain_lines.append("")
-        plain_lines.append("Simulated execution (based on yesterday's plans):")
+        plain_lines.append("If every plan hit its targets")
         if simulation and simulation.get("count", 0) > 0:
             plain_lines.append(
-                f"- Plans logged: {simulation['count']} (with both exits set: {simulation['count_with_levels']})"
+                f"- Plans reviewed: {simulation['count']} (with full levels set: {simulation['count_with_levels']})"
             )
-            plain_lines.append(f"- If every target filled: {simulation['total_tp']:+.2f}")
-            if simulation.get("count_with_levels", 0) > 0:
-                plain_lines.append(f"- If every stop triggered: {simulation['total_sl']:+.2f}")
-            if simulation.get("average_r") is not None:
-                plain_lines.append(f"- Average reward-to-risk: {simulation['average_r']:.2f}R")
-            if simulation.get("median_r") is not None:
-                plain_lines.append(f"- Median reward-to-risk: {simulation['median_r']:.2f}R")
-            if simulation.get("avg_risk") is not None:
-                plain_lines.append(f"- Average stop distance: {simulation['avg_risk']:.2f}")
-            if simulation.get("avg_reward") is not None:
-                plain_lines.append(f"- Average target move: {simulation['avg_reward']:.2f}")
-            if simulation.get("best_tp") is not None or simulation.get("worst_sl") is not None:
-                best_val = simulation.get("best_tp")
-                worst_val = simulation.get("worst_sl")
-                best_txt = f"{best_val:+.2f}" if best_val is not None else "n/a"
-                worst_txt = f"{worst_val:+.2f}" if worst_val is not None else "n/a"
-                plain_lines.append(f"- Per-plan range: best {best_txt} | worst {worst_txt}")
+            plain_lines.append(f"- Potential gain at targets: {simulation['total_tp']:+.2f}")
             if simulation.get("total_risk") is not None:
-                plain_lines.append(f"- Combined stop distance: {simulation['total_risk']:.2f}")
+                plain_lines.append(f"- Distance to safety nets (stops): {simulation['total_risk']:.2f}")
             if simulation.get("total_reward") is not None:
-                plain_lines.append(f"- Combined target distance: {simulation['total_reward']:.2f}")
+                plain_lines.append(f"- Distance to targets: {simulation['total_reward']:.2f}")
             if simulation.get("reward_to_risk_ratio") is not None:
-                plain_lines.append(f"- Aggregate reward/risk: {simulation['reward_to_risk_ratio']:.2f}")
+                plain_lines.append(
+                    f"- Reward vs. risk ratio: {simulation['reward_to_risk_ratio']:.2f}"
+                )
             if simulation.get("breakeven_win_rate") is not None:
-                plain_lines.append(f"- Breakeven win rate: {simulation['breakeven_win_rate']:.2f}%")
+                plain_lines.append(
+                    f"- Win rate needed to break even: {simulation['breakeven_win_rate']:.2f}%"
+                )
             for item in simulation["items"][:3]:
                 entry_txt = _fmt_price(item.get("entry"))
                 tp_txt = _fmt_signed(item.get("pnl_tp"))
                 sl_txt = _fmt_signed(item.get("pnl_sl"))
                 r_txt = f", R {item['r_multiple']:.2f}" if item.get("r_multiple") is not None else ""
-                risk_txt = f" | Risk {abs(float(item['pnl_sl'])):.2f}" if item.get("pnl_sl") is not None else ""
                 plain_lines.append(
-                    f"  * {item.get('ticker', '?')} {item.get('side', '?')} @ {entry_txt} -> TP {tp_txt} / SL {sl_txt}{r_txt}{risk_txt}"
+                    f"   -> {item.get('ticker', '?')} {item.get('side', '?')} near {entry_txt} (target move {tp_txt}, stop move {sl_txt}{r_txt})"
                 )
         else:
             plain_lines.append("- No trade plans were logged yesterday.")
+
         plain_lines.append("")
-        plain_lines.append("Fresh trade ideas:")
+        plain_lines.append("Fresh ideas on the radar")
         if rows:
             for row in rows:
-                plain_lines.append(self.describe_decision(row))
+                plain_lines.append(
+                    f"- {row.get('ticker', '?')}: {row.get('side','?')} near {row.get('price','?')} | stop {row.get('sl','-')} | target {row.get('tp','-')} | timeframe {row.get('interval','1d')} | trend guide {row.get('adx','?')}"
+                )
         else:
-            plain_lines.append("- No new trade ideas yet.")
+            plain_lines.append("- No new ideas yet. We'll share as soon as something qualifies.")
+
         plain_lines.append("")
-        plain_lines.append("Next steps:")
-        plain_lines.append("1. Pick the setups that match your plan and size the position from the stop distance.")
-        plain_lines.append("2. Update your journal once orders are placed or skipped.")
+        plain_lines.append("Quick actions")
+        plain_lines.append("1. Pick the setups that match your plan and size positions from the stop distance.")
+        plain_lines.append("2. Make a quick note explaining why you chose to trade or pass.")
+
         plain_lines.append("")
-        plain_lines.append("Glossary:")
-        plain_lines.append("- ATR: measures recent price movement; larger ATR implies smaller position size.")
-        plain_lines.append("- Stop-loss: exit level that caps risk if price moves against the trade.")
-        plain_lines.append("- Take-profit: exit level that locks in gains when price reaches the objective.")
-        plain_lines.append("- R-multiple: reward divided by risk, used to compare setups.")
+        plain_lines.append("Word bank (Glossary)")
+        plain_lines.append("- Stop-loss: a pre-set exit that limits how much the trade can hurt you.")
+        plain_lines.append("- Target: a price where we choose to lock in gains.")
+        plain_lines.append("- Reward vs. risk: how much the idea could earn compared with what it could lose.")
+        plain_lines.append("- Trend guide (ADX): a number showing how strong the price move is right now.")
+
         plain_lines.append("")
         plain_lines.append("Questions? Reply to this email and we will help.")
 
@@ -511,111 +507,158 @@ class Digest:
 
         css = """
         <style>
-        body {background:#f4f6fb;font-family:Segoe UI,Arial,sans-serif;color:#0f172a;margin:0;padding:24px;}
-        .wrapper {max-width:720px;margin:auto;background:#ffffff;border-radius:16px;padding:32px;box-shadow:0 22px 40px rgba(15,23,42,0.12);}
-        h2 {margin-top:0;font-weight:700;color:#0f172a;}
-        .section {margin-bottom:24px;}
-        .card {background:#f8fafc;border-radius:12px;padding:16px;margin-top:12px;}
-        .muted {color:#64748b;font-size:14px;}
-        .list li {margin-bottom:8px;}
-        .steps li {margin-bottom:6px;}
-        .footer {font-size:12px;color:#64748b;margin-top:32px;}
+        body {{background:#eef2ff;font-family:'Segoe UI',Arial,sans-serif;color:#0f172a;margin:0;padding:24px;}}
+        .wrapper {{max-width:760px;margin:auto;background:#ffffff;border-radius:24px;padding:36px;box-shadow:0 30px 60px rgba(15,23,42,0.12);}}
+        .hero {{background:linear-gradient(135deg,#2563eb,#22d3ee);color:#ffffff;padding:28px;border-radius:20px;display:flex;flex-direction:column;gap:4px;}}
+        .hero__title {{font-size:26px;font-weight:700;}}
+        .hero__subtitle {{font-size:16px;opacity:0.9;}}
+        .grid {{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px;margin:28px 0;}}
+        .card {{background:#f8fafc;border-radius:18px;padding:20px;box-shadow:0 16px 32px rgba(15,23,42,0.08);border:1px solid rgba(148,163,184,0.2);}}
+        .metric__icon {{font-size:24px;margin-bottom:12px;}}
+        .metric__title {{font-size:14px;font-weight:600;text-transform:uppercase;color:#475569;letter-spacing:0.05em;}}
+        .metric__value {{font-size:20px;font-weight:700;color:#0f172a;margin-top:6px;}}
+        .section {{margin-bottom:28px;}}
+        .section h3 {{margin:0 0 12px;font-size:20px;color:#0f172a;}}
+        .summary-list {{list-style:none;margin:0;padding:0;display:grid;gap:10px;}}
+        .summary-list li {{background:#eef2ff;border-radius:14px;padding:12px 14px;font-size:15px;color:#1e293b;}}
+        .ideas {{display:grid;gap:14px;}}
+        .idea-card {{border-radius:16px;padding:16px 18px;background:#ffffff;border:1px solid rgba(148,163,184,0.35);box-shadow:0 12px 24px rgba(15,23,42,0.06);}}
+        .idea-card h4 {{margin:0 0 6px;font-size:16px;}}
+        .idea-card p {{margin:0;font-size:14px;color:#475569;}}
+        .badge {{display:inline-block;background:#e0f2fe;color:#0369a1;border-radius:999px;padding:4px 10px;font-size:12px;margin-left:6px;}}
+        .chart-card img {{max-width:100%;border-radius:14px;margin-top:12px;}}
+        .steps li {{margin-bottom:8px;}}
+        .word-bank {{display:grid;gap:10px;margin-top:12px;}}
+        .word-bank .term {{background:#f1f5f9;padding:12px;border-radius:12px;color:#1e293b;font-size:14px;}}
+        .footer {{margin-top:32px;font-size:13px;color:#64748b;text-align:center;}}
         </style>
         """
 
-        snapshot_html = (
-            "<div class='card'><strong>Closed trades yesterday</strong>"
-            f"<p class='muted'>Total {snapshot['total']} | Wins {snapshot['wins']} | Losses {snapshot['losses']} | Still open {snapshot['open']} | Net P/L {snapshot['pnl']:+.2f}</p></div>"
-        ) if snapshot else "<div class='card'><strong>Closed trades yesterday</strong><p class='muted'>No trades were closed yesterday.</p></div>"
-
-        chart_html = (
-            "<div class='card'><strong>Yesterday chart</strong><br /><img src='cid:daily_chart' alt='Yesterday results chart' style='max-width:360px;border-radius:8px;margin-top:8px;'/></div>"
-            if chart_path
-            else "<div class='card'><strong>Yesterday chart</strong><p class='muted'>No closed trades yesterday.</p></div>"
+        lifetime_html = (
+            f"<div class='card metric'><div class='metric__icon'>ðŸ“Š</div><div class='metric__title'>All-time score</div><div class='metric__value'>{stats.get('wins',0)} wins | {stats.get('losses',0)} losses | {stats.get('open',0)} open</div></div>"
+        )
+        if snapshot:
+            yesterday_value = f"{snapshot['total']} closed | net {snapshot['pnl']:+.2f}"
+        else:
+            yesterday_value = "No trades closed yesterday"
+        yesterday_html = (
+            f"<div class='card metric'><div class='metric__icon'>ðŸ•’</div><div class='metric__title'>Yesterday</div><div class='metric__value'>{yesterday_value}</div></div>"
+        )
+        if simulation and simulation.get("count", 0) > 0:
+            safety = simulation.get('total_risk', 0.0)
+            potential_value = f"Targets {simulation['total_tp']:+.2f} | Stops {safety:.2f}"
+        else:
+            potential_value = "No plans logged"
+        simulation_metric_html = (
+            f"<div class='card metric'><div class='metric__icon'>ðŸ§­</div><div class='metric__title'>Plan check</div><div class='metric__value'>{potential_value}</div></div>"
         )
 
+        grid_html = f"<section class='grid'>{lifetime_html}{yesterday_html}{simulation_metric_html}</section>"
+
+        summary_items: list[str] = []
         if simulation and simulation.get("count", 0) > 0:
-            sim_summary_parts = [
-                f"<p class='muted'>Plans logged: {simulation['count']} (with both exits: {simulation['count_with_levels']})</p>",
-                f"<p class='muted'>If every target filled: {simulation['total_tp']:+.2f}</p>",
-            ]
-            if simulation.get("count_with_levels", 0) > 0:
-                sim_summary_parts.append(f"<p class='muted'>If every stop triggered: {simulation['total_sl']:+.2f}</p>")
-            if simulation.get("average_r") is not None:
-                sim_summary_parts.append(f"<p class='muted'>Average reward-to-risk: {simulation['average_r']:.2f}R</p>")
-            if simulation.get("median_r") is not None:
-                sim_summary_parts.append(f"<p class='muted'>Median reward-to-risk: {simulation['median_r']:.2f}R</p>")
-            if simulation.get("avg_risk") is not None:
-                sim_summary_parts.append(f"<p class='muted'>Average stop distance: {simulation['avg_risk']:.2f}</p>")
-            if simulation.get("avg_reward") is not None:
-                sim_summary_parts.append(f"<p class='muted'>Average target move: {simulation['avg_reward']:.2f}</p>")
-            if simulation.get("best_tp") is not None or simulation.get("worst_sl") is not None:
-                best_val = simulation.get("best_tp")
-                worst_val = simulation.get("worst_sl")
-                best_txt = f"{best_val:+.2f}" if best_val is not None else "n/a"
-                worst_txt = f"{worst_val:+.2f}" if worst_val is not None else "n/a"
-                sim_summary_parts.append(f"<p class='muted'>Per-plan range: best {best_txt} | worst {worst_txt}</p>")
+            summary_items.append(
+                f"<li>Plans reviewed: {simulation['count']} (full levels: {simulation['count_with_levels']})</li>"
+            )
+            summary_items.append(f"<li>Potential gain at targets: {simulation['total_tp']:+.2f}</li>")
             if simulation.get("total_risk") is not None:
-                sim_summary_parts.append(f"<p class='muted'>Combined stop distance: {simulation['total_risk']:.2f}</p>")
+                summary_items.append(f"<li>Safety net distance (stops): {simulation['total_risk']:.2f}</li>")
             if simulation.get("total_reward") is not None:
-                sim_summary_parts.append(f"<p class='muted'>Combined target distance: {simulation['total_reward']:.2f}</p>")
+                summary_items.append(f"<li>Distance to targets: {simulation['total_reward']:.2f}</li>")
             if simulation.get("reward_to_risk_ratio") is not None:
-                sim_summary_parts.append(f"<p class='muted'>Aggregate reward/risk: {simulation['reward_to_risk_ratio']:.2f}</p>")
+                summary_items.append(
+                    f"<li>Reward vs. risk ratio: {simulation['reward_to_risk_ratio']:.2f}</li>"
+                )
             if simulation.get("breakeven_win_rate") is not None:
-                sim_summary_parts.append(f"<p class='muted'>Breakeven win rate: {simulation['breakeven_win_rate']:.2f}%</p>")
-            sim_summary_html = "".join(sim_summary_parts)
-            item_rows: list[str] = []
+                summary_items.append(
+                    f"<li>Win rate needed to break even: {simulation['breakeven_win_rate']:.2f}%</li>"
+                )
+        else:
+            summary_items.append("<li>No trade plans were logged yesterday.</li>")
+
+        sim_list_html = "".join(summary_items)
+
+        featured_items: list[str] = []
+        if simulation and simulation.get("items"):
             for item in simulation["items"][:4]:
                 entry_txt = _fmt_price(item.get("entry"))
                 tp_txt = _fmt_signed(item.get("pnl_tp"))
                 sl_txt = _fmt_signed(item.get("pnl_sl"))
-                r_txt = f" | R {item['r_multiple']:.2f}" if item.get("r_multiple") is not None else ""
-                risk_txt = f" | Risk {abs(float(item['pnl_sl'])):.2f}" if item.get("pnl_sl") is not None else ""
-                item_rows.append(
-                    f"<li><strong>{item.get('ticker', '?')}</strong> {item.get('side', '?')} @ {entry_txt} <span class='muted'>TP {tp_txt} | SL {sl_txt}{r_txt}{risk_txt}</span></li>"
+                r_txt = f" Â· R {item['r_multiple']:.2f}" if item.get("r_multiple") is not None else ""
+                featured_items.append(
+                    f"<li>{item.get('ticker','?')} {item.get('side','?')} near {entry_txt} <span class='muted'>Target move {tp_txt} Â· Stop move {sl_txt}{r_txt}</span></li>"
                 )
-            simulation_items_html = "".join(item_rows) or "<li>No trade plans were logged yesterday.</li>"
-            simulation_block = f"<div class='card'><strong>Simulated execution</strong>{sim_summary_html}<ul class='list'>{simulation_items_html}</ul></div>"
-        else:
-            simulation_block = "<div class='card'><strong>Simulated execution</strong><p class='muted'>No trade plans were logged yesterday.</p></div>"
+        featured_html = "".join(featured_items)
+        if featured_html:
+            featured_html = f"<ul class='summary-list'>{featured_html}</ul>"
 
-        ideas_html = "".join(
-            f"<li><strong>{row.get('ticker', '?')}</strong> {FRIENDLY_SIDE.get(row.get('side', ''), row.get('side', ''))} near {row.get('price', '?')} <span class='muted'>Stop {row.get('sl', '-')} | Target {row.get('tp', '-')} | Timeframe {row.get('interval', '1d')} | ADX {row.get('adx', '?')}</span></li>"
-            for row in rows
-        ) if rows else "<li>No new trade ideas yet.</li>"
+        simulation_block = f"""
+        <section class='section'>
+          <h3>What the plans suggest</h3>
+          <ul class='summary-list'>{sim_list_html}</ul>
+          {featured_html}
+        </section>
+        """
+
+        if chart_path:
+            chart_html = f"<div class='card chart-card'><h3>Yesterday's picture</h3><p class='muted'>Visual snapshot of wins, losses, and open trades.</p><img src='cid:daily_chart' alt='Yesterday results chart'/></div>"
+        else:
+            chart_html = "<div class='card chart-card'><h3>Yesterday's picture</h3><p class='muted'>No trades were closed yesterday, so there is no chart to share.</p></div>"
+
+        if rows:
+            ideas_cards = []
+            for row in rows:
+                badge = f"<span class='badge'>{row.get('interval','1d')} timeframe</span>"
+                ideas_cards.append(
+                    f"<div class='idea-card'><h4>{row.get('ticker','?')} Â· {row.get('side','?')} {badge}</h4>"
+                    f"<p>Price near {row.get('price','?')}. Stop {row.get('sl','-')} Â· Target {row.get('tp','-')} Â· Trend guide {row.get('adx','?')}.</p></div>"
+                )
+            ideas_html = "".join(ideas_cards)
+        else:
+            ideas_html = "<div class='idea-card'><p>No new trade ideas yet. We will signal as soon as a setup qualifies.</p></div>"
+
+        steps_html = """
+        <section class='section'>
+          <h3>Quick actions</h3>
+          <ol class='steps'>
+            <li>Pick the setups that fit your plan and size the trade from the stop distance.</li>
+            <li>Write a one-line note on why you traded or passed. Future you will thank you.</li>
+          </ol>
+        </section>
+        """
+
+        glossary_html = """
+        <section class='section'>
+          <h3>Word bank (Glossary)</h3>
+          <div class='word-bank'>
+            <div class='term'><strong>Stop-loss:</strong> pre-set exit that limits the loss.</div>
+            <div class='term'><strong>Target:</strong> price where we choose to lock in gains.</div>
+            <div class='term'><strong>Reward vs. risk:</strong> how much the idea could earn compared with what it could lose.</div>
+            <div class='term'><strong>Trend guide (ADX):</strong> number showing how strong the current price move is.</div>
+          </div>
+        </section>
+        """
+
+        hero_html = f"<header class='hero'><div class='hero__title'>🌅 Daily Trading Digest</div><div class='hero__subtitle'>{now}</div></header>"
 
         html = f"""
         <html>
           <head><meta charset='utf-8'/>{css}</head>
           <body>
             <div class='wrapper'>
-              <h2>Daily Trading Digest - {now}</h2>
-              <div class='section'>
-                <div class='card'><strong>Lifetime totals</strong><p class='muted'>Wins {stats.get('wins',0)} | Losses {stats.get('losses',0)} | Open {stats.get('open',0)}</p></div>
-                {snapshot_html}
+              {hero_html}
+              {grid_html}
+              {simulation_block}
+              <section class='section'>
+                <h3>Yesterday's activity</h3>
                 {chart_html}
-                {simulation_block}
-              </div>
-              <div class='section'>
-                <p><strong>Fresh trade ideas</strong></p>
-                <ul class='list'>{ideas_html}</ul>
-              </div>
-              <div class='section'>
-                <p><strong>Next steps</strong></p>
-                <ol class='steps'>
-                  <li>Pick the setups that match your plan and size the position from the stop distance.</li>
-                  <li>Update your journal once orders are placed or skipped.</li>
-                </ol>
-              </div>
-              <div class='section'>
-                <p><strong>Glossary</strong></p>
-                <ul class='list'>
-                  <li><strong>ATR</strong>: measures recent price movement; larger ATR implies smaller position size.</li>
-                  <li><strong>Stop-loss</strong>: exit level that caps risk if price moves against the trade.</li>
-                  <li><strong>Take-profit</strong>: exit level that locks in gains when price reaches the objective.</li>
-                  <li><strong>R-multiple</strong>: reward divided by risk, used to compare setups.</li>
-                </ul>
-              </div>
+              </section>
+              <section class='section'>
+                <h3>Fresh ideas</h3>
+                <div class='ideas'>{ideas_html}</div>
+              </section>
+              {steps_html}
+              {glossary_html}
               <p class='footer'>Questions? Reply to this email and we will help.</p>
             </div>
           </body>
@@ -633,49 +676,44 @@ class Digest:
         self.backfill_simulated_crypto_trades(target_date, simulation)
         snapshot = self.yesterday_snapshot()
 
-        lines = [f"Trading Digest {now}"]
+        lines = [f"🌅 Daily Digest {now}"]
         lines.append(
-            f"Wins {stats.get('wins', 0)} | Losses {stats.get('losses', 0)} | Open {stats.get('open', 0)}"
+            f"Totals â–¸ wins {stats.get('wins', 0)}, losses {stats.get('losses', 0)}, open {stats.get('open', 0)}"
         )
         if snapshot:
             lines.append(
-                f"Closed yesterday: {snapshot['total']} | Net P/L {snapshot['pnl']:+.2f}"
+                f"Yesterday â–¸ {snapshot['total']} closed, net {snapshot['pnl']:+.2f}"
             )
         else:
-            lines.append("Closed yesterday: none")
+            lines.append("Yesterday â–¸ no trades were closed")
+
         if simulation and simulation.get("count", 0) > 0:
-            lines.append(f"Simulated TP: {simulation['total_tp']:+.2f}")
-            if simulation.get("count_with_levels", 0) > 0:
-                lines.append(f"Simulated SL: {simulation['total_sl']:+.2f}")
-            if simulation.get("average_r") is not None:
-                lines.append(f"Avg R: {simulation['average_r']:.2f}R")
-            if simulation.get("avg_risk") is not None:
-                lines.append(f"Avg risk: {simulation['avg_risk']:.2f}")
-            if simulation.get("avg_reward") is not None:
-                lines.append(f"Avg target: {simulation['avg_reward']:.2f}")
-            if simulation.get("best_tp") is not None or simulation.get("worst_sl") is not None:
-                best_val = simulation.get("best_tp")
-                worst_val = simulation.get("worst_sl")
-                best_txt = f"{best_val:+.2f}" if best_val is not None else "n/a"
-                worst_txt = f"{worst_val:+.2f}" if worst_val is not None else "n/a"
-                lines.append(f"Range: best {best_txt} | worst {worst_txt}")
+            lines.append(
+                f"Plans â–¸ {simulation['count']} checked (full levels {simulation['count_with_levels']})"
+            )
+            lines.append(f"Targets â–¸ {simulation['total_tp']:+.2f}")
             if simulation.get("total_risk") is not None:
-                lines.append(f"Total risk distance: {simulation['total_risk']:.2f}")
-            if simulation.get("total_reward") is not None:
-                lines.append(f"Total target distance: {simulation['total_reward']:.2f}")
+                lines.append(f"Stops â–¸ {simulation['total_risk']:.2f}")
+            if simulation.get("reward_to_risk_ratio") is not None:
+                lines.append(
+                    f"Reward/Risk â–¸ {simulation['reward_to_risk_ratio']:.2f}"
+                )
             if simulation.get("breakeven_win_rate") is not None:
-                lines.append(f"Breakeven win rate: {simulation['breakeven_win_rate']:.2f}%")
-        lines.append("Ideas:")
+                lines.append(
+                    f"Break-even win rate â–¸ {simulation['breakeven_win_rate']:.2f}%"
+                )
+        else:
+            lines.append("Plans â–¸ none logged yesterday")
+
+        lines.append("Ideas")
         if rows:
             for row in rows:
-                ticker = row.get("ticker", "?")
-                side = row.get("side", "Hold")
-                price = row.get("price", "?")
-                sl = row.get("sl", "-")
-                tp = row.get("tp", "-")
-                lines.append(f"- {ticker} {side} @ {price} (SL {sl} / TP {tp})")
+                lines.append(
+                    f"- {row.get('ticker','?')} {row.get('side','?')} @ {row.get('price','?')} (stop {row.get('sl','-')} | target {row.get('tp','-')})"
+                )
         else:
-            lines.append("- No new trade ideas yet.")
+            lines.append("- No new setups yet")
+
         return "\n".join(lines)
 
     # ------------------------------------------------------------- persistence
@@ -694,6 +732,10 @@ class Digest:
 
 
 __all__ = ["Digest", "CHART_PATH"]
+
+
+
+
 
 
 
