@@ -1,0 +1,14 @@
+diff --git a/SmartCFDTradingAgent/reporting.py b/SmartCFDTradingAgent/reporting.py
+index 9cb00c4..4873084 100644
+--- a/SmartCFDTradingAgent/reporting.py
++++ b/SmartCFDTradingAgent/reporting.py
+@@ -454,8 +454,7 @@ class Digest:
+                 lines.append(f"- {ticker} {side} @ {price} (SL {sl} / TP {tp})")
+         else:
+             lines.append("- No new trade ideas yet.")
+-        return "
+-".join(lines)
++        return "\n".join(lines)
+ 
+     # ------------------------------------------------------------- persistence
+     def save_digest(self, content: str, path: Path) -> None:
