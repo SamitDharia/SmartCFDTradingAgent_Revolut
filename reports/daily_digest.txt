@@ -1,24 +1,29 @@
-Daily Trading Digest - Friday 03 October 2025 18:57
+Daily Trading Digest | Friday 03 October 2025 19:07
+========================================================================
 
-Yesterday at a glance
-- All-time totals: wins 0, losses 0, open 0
+SCOREBOARD
+- Wins to date: 0
+- Losses to date: 0
+- Open positions: 0
+
+YESTERDAY
 - No trades were closed yesterday.
 
-If every plan hit its targets
+IF PLANS RAN AS DRAWN
 - No trade plans were logged yesterday.
 
-Fresh ideas on the radar
-- BCH-USD: Buy near 615.05 | stop 607.36 | target 630.45 | timeframe 1h | trend guide 10
-- BTC-USD: Buy near 122630.77 | stop 121312.07 | target 125268.19 | timeframe 1h | trend guide 10
+FRESH IDEAS ON THE RADAR
 - BCH-USD: Buy near 608.87 | stop 601.09 | target 624.42 | timeframe 1h | trend guide 10
 - BTC-USD: Buy near 122600.58 | stop 121031.55 | target 125738.65 | timeframe 1h | trend guide 10
 - BCH-USD: Buy near 604.63 | stop 595.59 | target 622.71 | timeframe 1h | trend guide 10
+- BTC-USD: Buy near 122145.4 | stop 120567.3 | target 125301.6 | timeframe 1h | trend guide 10
+- BCH-USD: Buy near 604.25 | stop 595.21 | target 622.33 | timeframe 1h | trend guide 10
 
-Quick actions
-1. Pick the setups that match your plan and size positions from the stop distance.
-2. Make a quick note explaining why you chose to trade or pass.
+QUICK ACTIONS
+1. Pick the setups that match your plan and size the trade from the stop distance.
+2. Make a one-line note on why you traded or passed.
 
-Word bank (Glossary)
+WORD BANK (GLOSSARY)
 - Stop-loss: a pre-set exit that limits how much the trade can hurt you.
 - Target: a price where we choose to lock in gains.
 - Reward versus risk: how much the idea could earn compared with what it could lose.

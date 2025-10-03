@@ -1,34 +1,6 @@
 {
-  "generated_at": "2025-10-03T17:57:28.725877",
+  "generated_at": "2025-10-03T18:07:52.889783",
   "decisions": [
-    {
-      "ts": "2025-10-03T17:30+01:00",
-      "tz": "Europe/Dublin",
-      "interval": "1h",
-      "adx": "10",
-      "ticker": "BCH-USD",
-      "side": "Buy",
-      "price": "615.05",
-      "sl": "607.36",
-      "tp": "630.45",
-      "null": [
-        ""
-      ]
-    },
-    {
-      "ts": "2025-10-03T18:00+01:00",
-      "tz": "Europe/Dublin",
-      "interval": "1h",
-      "adx": "10",
-      "ticker": "BTC-USD",
-      "side": "Buy",
-      "price": "122630.77",
-      "sl": "121312.07",
-      "tp": "125268.19",
-      "null": [
-        ""
-      ]
-    },
     {
       "ts": "2025-10-03T18:00+01:00",
       "tz": "Europe/Dublin",
@@ -67,6 +39,34 @@
       "price": "604.63",
       "sl": "595.59",
       "tp": "622.71",
+      "null": [
+        ""
+      ]
+    },
+    {
+      "ts": "2025-10-03T19:00+01:00",
+      "tz": "Europe/Dublin",
+      "interval": "1h",
+      "adx": "10",
+      "ticker": "BTC-USD",
+      "side": "Buy",
+      "price": "122145.4",
+      "sl": "120567.3",
+      "tp": "125301.6",
+      "null": [
+        ""
+      ]
+    },
+    {
+      "ts": "2025-10-03T19:00+01:00",
+      "tz": "Europe/Dublin",
+      "interval": "1h",
+      "adx": "10",
+      "ticker": "BCH-USD",
+      "side": "Buy",
+      "price": "604.25",
+      "sl": "595.21",
+      "tp": "622.33",
       "null": [
         ""
       ]

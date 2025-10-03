@@ -407,6 +407,7 @@ class Digest:
     # ------------------------------------------------------------ email content
 
 
+
     def build_email_content(self, decisions: int = 5) -> Tuple[str, str, Optional[Path]]:
         now = dt.datetime.now().strftime("%A %d %B %Y %H:%M")
         stats = self.trade_stats()
@@ -434,27 +435,32 @@ class Digest:
                 return "n/a"
 
         plain_lines: list[str] = []
-        plain_lines.append(f"Daily Trading Digest - {now}")
-        plain_lines.append("")
-        plain_lines.append("Yesterday at a glance")
-        plain_lines.append(
-            f"- All-time totals: wins {stats.get('wins', 0)}, losses {stats.get('losses', 0)}, open {stats.get('open', 0)}"
-        )
+        plain_lines.extend([
+            f"Daily Trading Digest | {now}",
+            "=" * 72,
+            "",
+            "SCOREBOARD",
+            f"- Wins to date: {stats.get('wins', 0)}",
+            f"- Losses to date: {stats.get('losses', 0)}",
+            f"- Open positions: {stats.get('open', 0)}",
+            "",
+            "YESTERDAY",
+        ])
         if snapshot:
             plain_lines.append(
-                f"- Trades closed: {snapshot['total']} (wins {snapshot['wins']}, losses {snapshot['losses']}, still open {snapshot['open']})"
+                f"- Closed trades: {snapshot['total']} (wins {snapshot['wins']}, losses {snapshot['losses']}, still open {snapshot['open']})"
             )
             plain_lines.append(f"- Net change: {snapshot['pnl']:+.2f}")
         else:
             plain_lines.append("- No trades were closed yesterday.")
 
         plain_lines.append("")
-        plain_lines.append("If every plan hit its targets")
+        plain_lines.append("IF PLANS RAN AS DRAWN")
         if simulation and simulation.get("count", 0) > 0:
             plain_lines.append(
-                f"- Plans reviewed: {simulation['count']} (with full levels set: {simulation['count_with_levels']})"
+                f"- Plans reviewed: {simulation['count']} (full levels set: {simulation['count_with_levels']})"
             )
-            plain_lines.append(f"- Potential gain at targets: {simulation['total_tp']:+.2f}")
+            plain_lines.append(f"- Potential move at targets: {simulation['total_tp']:+.2f}")
             if simulation.get("total_risk") is not None:
                 plain_lines.append(f"- Distance to safety nets (stops): {simulation['total_risk']:.2f}")
             if simulation.get("total_reward") is not None:
@@ -465,7 +471,7 @@ class Digest:
                 )
             if simulation.get("breakeven_win_rate") is not None:
                 plain_lines.append(
-                    f"- Win rate needed to break even: {simulation['breakeven_win_rate']:.2f}%"
+                    f"- Win-rate needed to break even: {simulation['breakeven_win_rate']:.2f}%"
                 )
             for item in simulation["items"][:3]:
                 entry_txt = _fmt_price(item.get("entry"))
@@ -473,13 +479,13 @@ class Digest:
                 sl_txt = _fmt_signed(item.get("pnl_sl"))
                 r_txt = f", R {item['r_multiple']:.2f}" if item.get("r_multiple") is not None else ""
                 plain_lines.append(
-                    f"  -> {item.get('ticker', '?')} {item.get('side', '?')} near {entry_txt} (target move {tp_txt}, stop move {sl_txt}{r_txt})"
+                    f"    -> {item.get('ticker', '?')} {item.get('side', '?')} near {entry_txt} (target move {tp_txt}, stop move {sl_txt}{r_txt})"
                 )
         else:
             plain_lines.append("- No trade plans were logged yesterday.")
 
         plain_lines.append("")
-        plain_lines.append("Fresh ideas on the radar")
+        plain_lines.append("FRESH IDEAS ON THE RADAR")
         if rows:
             for row in rows:
                 plain_lines.append(
@@ -488,60 +494,64 @@ class Digest:
         else:
             plain_lines.append("- No new ideas yet. We'll share as soon as something qualifies.")
 
-        plain_lines.append("")
-        plain_lines.append("Quick actions")
-        plain_lines.append("1. Pick the setups that match your plan and size positions from the stop distance.")
-        plain_lines.append("2. Make a quick note explaining why you chose to trade or pass.")
+        plain_lines.extend([
+            "",
+            "QUICK ACTIONS",
+            "1. Pick the setups that match your plan and size the trade from the stop distance.",
+            "2. Make a one-line note on why you traded or passed.",
+            "",
+            "WORD BANK (Glossary)",
+            "- Stop-loss: a pre-set exit that limits how much the trade can hurt you.",
+            "- Target: a price where we choose to lock in gains.",
+            "- Reward versus risk: how much the idea could earn compared with what it could lose.",
+            "- Trend guide (ADX): a number showing how strong the price move is right now.",
+            "",
+            "Questions? Reply to this email and we will help.",
+        ])
 
-        plain_lines.append("")
-        plain_lines.append("Word bank (Glossary)")
-        plain_lines.append("- Stop-loss: a pre-set exit that limits how much the trade can hurt you.")
-        plain_lines.append("- Target: a price where we choose to lock in gains.")
-        plain_lines.append("- Reward versus risk: how much the idea could earn compared with what it could lose.")
-        plain_lines.append("- Trend guide (ADX): a number showing how strong the price move is right now.")
-
-        plain_lines.append("")
-        plain_lines.append("Questions? Reply to this email and we will help.")
         plain_text = "\n".join(plain_lines)
 
         css = """
         <style>
-        body {{background:#eef2ff;font-family:'Segoe UI',Arial,sans-serif;color:#0f172a;margin:0;padding:24px;}}
-        .wrapper {{max-width:760px;margin:auto;background:#ffffff;border-radius:24px;padding:36px;box-shadow:0 30px 60px rgba(15,23,42,0.12);}}
-        .hero {{background:linear-gradient(135deg,#2563eb,#22d3ee);color:#ffffff;padding:28px;border-radius:20px;display:flex;flex-direction:column;gap:4px;}}
-        .hero__title {{font-size:26px;font-weight:700;}}
+        body {{background:#f0f4ff;font-family:'Segoe UI',Arial,sans-serif;color:#0f172a;margin:0;padding:0;}}
+        .wrapper {{max-width:780px;margin:0 auto;background:#ffffff;border-radius:28px;padding:40px;box-shadow:0 32px 64px rgba(15,23,42,0.12);}}
+        .hero {{background:linear-gradient(135deg,#2563eb 0%,#9333ea 45%,#22d3ee 100%);color:#ffffff;padding:32px;border-radius:24px;display:flex;flex-direction:column;gap:6px;}}
+        .hero__title {{font-size:30px;font-weight:700;letter-spacing:0.03em;}}
         .hero__subtitle {{font-size:16px;opacity:0.9;}}
-        .grid {{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px;margin:28px 0;}}
-        .card {{background:#f8fafc;border-radius:18px;padding:20px;box-shadow:0 16px 32px rgba(15,23,42,0.08);border:1px solid rgba(148,163,184,0.2);}}
-        .metric__icon {{font-size:24px;margin-bottom:12px;}}
-        .metric__title {{font-size:14px;font-weight:600;text-transform:uppercase;color:#475569;letter-spacing:0.05em;}}
-        .metric__value {{font-size:20px;font-weight:700;color:#0f172a;margin-top:6px;}}
-        .section {{margin-bottom:28px;}}
-        .section h3 {{margin:0 0 12px;font-size:20px;color:#0f172a;}}
-        .summary-list {{list-style:none;margin:0;padding:0;display:grid;gap:10px;}}
-        .summary-list li {{background:#eef2ff;border-radius:14px;padding:12px 14px;font-size:15px;color:#1e293b;}}
-        .ideas {{display:grid;gap:14px;}}
-        .idea-card {{border-radius:16px;padding:16px 18px;background:#ffffff;border:1px solid rgba(148,163,184,0.35);box-shadow:0 12px 24px rgba(15,23,42,0.06);}}
-        .idea-card h4 {{margin:0 0 6px;font-size:16px;}}
-        .idea-card p {{margin:0;font-size:14px;color:#475569;}}
-        .badge {{display:inline-block;background:#e0f2fe;color:#0369a1;border-radius:999px;padding:4px 10px;font-size:12px;margin-left:6px;}}
-        .chart-card img {{max-width:100%;border-radius:14px;margin-top:12px;}}
-        .steps li {{margin-bottom:8px;}}
-        .word-bank {{display:grid;gap:10px;margin-top:12px;}}
-        .word-bank .term {{background:#f1f5f9;padding:12px;border-radius:12px;color:#1e293b;font-size:14px;}}
-        .footer {{margin-top:32px;font-size:13px;color:#64748b;text-align:center;}}
+        .grid {{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px;margin:32px 0;}}
+        .card {{background:#f8fafc;border-radius:20px;padding:22px;box-shadow:0 18px 36px rgba(15,23,42,0.10);border:1px solid rgba(148,163,184,0.25);}}
+        .metric__icon {{font-size:26px;margin-bottom:14px;}}
+        .metric__title {{font-size:13px;font-weight:600;text-transform:uppercase;color:#475569;letter-spacing:0.08em;}}
+        .metric__value {{font-size:22px;font-weight:700;color:#0f172a;margin-top:6px;}}
+        .section {{margin-bottom:34px;}}
+        .section h3 {{margin:0 0 14px;font-size:22px;color:#0f172a;display:flex;align-items:center;gap:10px;}}
+        .section h3 span.icon {{font-size:22px;}}
+        .summary-list {{list-style:none;margin:0;padding:0;display:grid;gap:12px;}}
+        .summary-list li {{background:#e7efff;border-radius:16px;padding:14px 16px;font-size:15px;color:#1e293b;box-shadow:0 8px 18px rgba(59,130,246,0.12);}}
+        .featured {{margin-top:16px;border-left:4px solid #2563eb;padding-left:16px;display:grid;gap:8px;}}
+        .featured li {{font-size:15px;color:#1f2937;}}
+        .ideas {{display:grid;gap:18px;}}
+        .idea-card {{border-radius:20px;padding:18px 20px;background:linear-gradient(135deg,#ffffff 0%,#f8fafc 100%);border:1px solid rgba(148,163,184,0.35);box-shadow:0 16px 32px rgba(15,23,42,0.08);}}
+        .idea-card h4 {{margin:0 0 8px;font-size:18px;display:flex;align-items:center;gap:8px;}}
+        .idea-card p {{margin:0;font-size:14px;color:#475569;line-height:1.55;}}
+        .badge {{display:inline-block;background:#dbeafe;color:#1d4ed8;border-radius:999px;padding:4px 12px;font-size:12px;letter-spacing:0.05em;}}
+        .chart-card img {{max-width:100%;border-radius:16px;margin-top:14px;}}
+        .steps li {{margin-bottom:10px;}}
+        .word-bank {{display:grid;gap:12px;margin-top:16px;}}
+        .word-bank .term {{background:#f4f7ff;padding:14px;border-radius:14px;color:#1e293b;font-size:14px;box-shadow:0 10px 20px rgba(148,163,184,0.18);}}
+        .footer {{margin-top:36px;font-size:13px;color:#6b7280;text-align:center;}}
         </style>
         """
 
         lifetime_html = (
-            f"<div class='card metric'><div class='metric__icon'>ðŸ“Š</div><div class='metric__title'>All-time score</div><div class='metric__value'>{stats.get('wins',0)} wins | {stats.get('losses',0)} losses | {stats.get('open',0)} open</div></div>"
+            f"<div class='card metric'><div class='metric__icon'>&#128202;</div><div class='metric__title'>All-time score</div><div class='metric__value'>{stats.get('wins',0)} wins | {stats.get('losses',0)} losses | {stats.get('open',0)} open</div></div>"
         )
         if snapshot:
             yesterday_value = f"{snapshot['total']} closed | net {snapshot['pnl']:+.2f}"
         else:
             yesterday_value = "No trades closed yesterday"
         yesterday_html = (
-            f"<div class='card metric'><div class='metric__icon'>ðŸ•’</div><div class='metric__title'>Yesterday</div><div class='metric__value'>{yesterday_value}</div></div>"
+            f"<div class='card metric'><div class='metric__icon'>&#9201;</div><div class='metric__title'>Yesterday</div><div class='metric__value'>{yesterday_value}</div></div>"
         )
         if simulation and simulation.get("count", 0) > 0:
             safety = simulation.get('total_risk', 0.0)
@@ -549,7 +559,7 @@ class Digest:
         else:
             potential_value = "No plans logged"
         simulation_metric_html = (
-            f"<div class='card metric'><div class='metric__icon'>ðŸ§­</div><div class='metric__title'>Plan check</div><div class='metric__value'>{potential_value}</div></div>"
+            f"<div class='card metric'><div class='metric__icon'>&#128736;</div><div class='metric__title'>Plan check</div><div class='metric__value'>{potential_value}</div></div>"
         )
 
         grid_html = f"<section class='grid'>{lifetime_html}{yesterday_html}{simulation_metric_html}</section>"
@@ -557,20 +567,20 @@ class Digest:
         summary_items: list[str] = []
         if simulation and simulation.get("count", 0) > 0:
             summary_items.append(
-                f"<li>Plans reviewed: {simulation['count']} (full levels: {simulation['count_with_levels']})</li>"
+                f"<li><strong>Plans reviewed:</strong> {simulation['count']} (full levels {simulation['count_with_levels']})</li>"
             )
-            summary_items.append(f"<li>Potential gain at targets: {simulation['total_tp']:+.2f}</li>")
+            summary_items.append(f"<li><strong>Potential move at targets:</strong> {simulation['total_tp']:+.2f}</li>")
             if simulation.get("total_risk") is not None:
-                summary_items.append(f"<li>Safety net distance (stops): {simulation['total_risk']:.2f}</li>")
+                summary_items.append(f"<li><strong>Safety nets (stops):</strong> {simulation['total_risk']:.2f}</li>")
             if simulation.get("total_reward") is not None:
-                summary_items.append(f"<li>Distance to targets: {simulation['total_reward']:.2f}</li>")
+                summary_items.append(f"<li><strong>Distance to targets:</strong> {simulation['total_reward']:.2f}</li>")
             if simulation.get("reward_to_risk_ratio") is not None:
                 summary_items.append(
-                    f"<li>Reward vs. risk ratio: {simulation['reward_to_risk_ratio']:.2f}</li>"
+                    f"<li><strong>Reward vs risk:</strong> {simulation['reward_to_risk_ratio']:.2f}</li>"
                 )
             if simulation.get("breakeven_win_rate") is not None:
                 summary_items.append(
-                    f"<li>Win rate needed to break even: {simulation['breakeven_win_rate']:.2f}%</li>"
+                    f"<li><strong>Break-even win rate:</strong> {simulation['breakeven_win_rate']:.2f}%</li>"
                 )
         else:
             summary_items.append("<li>No trade plans were logged yesterday.</li>")
@@ -583,34 +593,34 @@ class Digest:
                 entry_txt = _fmt_price(item.get("entry"))
                 tp_txt = _fmt_signed(item.get("pnl_tp"))
                 sl_txt = _fmt_signed(item.get("pnl_sl"))
-                r_txt = f" Â· R {item['r_multiple']:.2f}" if item.get("r_multiple") is not None else ""
+                r_txt = f" · R {item['r_multiple']:.2f}" if item.get("r_multiple") is not None else ""
                 featured_items.append(
-                    f"<li>{item.get('ticker','?')} {item.get('side','?')} near {entry_txt} <span class='muted'>Target move {tp_txt} Â· Stop move {sl_txt}{r_txt}</span></li>"
+                    f"<li><strong>{item.get('ticker','?')}</strong> {item.get('side','?')} near {entry_txt} <span class='muted'>Target move {tp_txt} · Stop move {sl_txt}{r_txt}</span></li>"
                 )
         featured_html = "".join(featured_items)
         if featured_html:
-            featured_html = f"<ul class='summary-list'>{featured_html}</ul>"
+            featured_html = f"<ul class='featured'>{featured_html}</ul>"
 
         simulation_block = f"""
         <section class='section'>
-          <h3>What the plans suggest</h3>
+          <h3><span class='icon'>&#128161;</span>What the plans suggest</h3>
           <ul class='summary-list'>{sim_list_html}</ul>
           {featured_html}
         </section>
         """
 
         if chart_path:
-            chart_html = f"<div class='card chart-card'><h3>Yesterday's picture</h3><p class='muted'>Visual snapshot of wins, losses, and open trades.</p><img src='cid:daily_chart' alt='Yesterday results chart'/></div>"
+            chart_html = f"<div class='card chart-card'><h3><span class='icon'>&#128200;</span>Yesterday's picture</h3><p class='muted'>Visual snapshot of wins, losses, and open trades.</p><img src='cid:daily_chart' alt='Yesterday results chart'/></div>"
         else:
-            chart_html = "<div class='card chart-card'><h3>Yesterday's picture</h3><p class='muted'>No trades were closed yesterday, so there is no chart to share.</p></div>"
+            chart_html = "<div class='card chart-card'><h3><span class='icon'>&#128200;</span>Yesterday's picture</h3><p class='muted'>No trades were closed yesterday, so there is no chart to share.</p></div>"
 
         if rows:
             ideas_cards = []
             for row in rows:
                 badge = f"<span class='badge'>{row.get('interval','1d')} timeframe</span>"
                 ideas_cards.append(
-                    f"<div class='idea-card'><h4>{row.get('ticker','?')} Â· {row.get('side','?')} {badge}</h4>"
-                    f"<p>Price near {row.get('price','?')}. Stop {row.get('sl','-')} Â· Target {row.get('tp','-')} Â· Trend guide {row.get('adx','?')}.</p></div>"
+                    f"<div class='idea-card'><h4>&#128270; {row.get('ticker','?')} {badge}</h4>"
+                    f"<p><strong>Action:</strong> {row.get('side','?')} · <strong>Price:</strong> {row.get('price','?')}<br/><strong>Stop:</strong> {row.get('sl','-')} · <strong>Target:</strong> {row.get('tp','-')}<br/><strong>Trend guide:</strong> {row.get('adx','?')}</p></div>"
                 )
             ideas_html = "".join(ideas_cards)
         else:
@@ -618,7 +628,7 @@ class Digest:
 
         steps_html = """
         <section class='section'>
-          <h3>Quick actions</h3>
+          <h3><span class='icon'>&#9989;</span>Quick actions</h3>
           <ol class='steps'>
             <li>Pick the setups that fit your plan and size the trade from the stop distance.</li>
             <li>Write a one-line note on why you traded or passed. Future you will thank you.</li>
@@ -628,11 +638,11 @@ class Digest:
 
         glossary_html = """
         <section class='section'>
-          <h3>Word bank (Glossary)</h3>
+          <h3><span class='icon'>&#128211;</span>Word bank (Glossary)</h3>
           <div class='word-bank'>
             <div class='term'><strong>Stop-loss:</strong> pre-set exit that limits the loss.</div>
             <div class='term'><strong>Target:</strong> price where we choose to lock in gains.</div>
-            <div class='term'><strong>Reward vs. risk:</strong> how much the idea could earn compared with what it could lose.</div>
+            <div class='term'><strong>Reward versus risk:</strong> how much the idea could earn compared with what it could lose.</div>
             <div class='term'><strong>Trend guide (ADX):</strong> number showing how strong the current price move is.</div>
           </div>
         </section>
@@ -649,11 +659,11 @@ class Digest:
               {grid_html}
               {simulation_block}
               <section class='section'>
-                <h3>Yesterday's activity</h3>
+                <h3><span class='icon'>&#128187;</span>Yesterday's activity</h3>
                 {chart_html}
               </section>
               <section class='section'>
-                <h3>Fresh ideas</h3>
+                <h3><span class='icon'>&#128204;</span>Fresh ideas</h3>
                 <div class='ideas'>{ideas_html}</div>
               </section>
               {steps_html}
@@ -675,43 +685,49 @@ class Digest:
         self.backfill_simulated_crypto_trades(target_date, simulation)
         snapshot = self.yesterday_snapshot()
 
-        lines = [f"Daily Trading Digest {now}"]
+        lines = []
+        lines.append(f"DAILY TRADING DIGEST | {now}")
+        lines.append("-------------------------------")
+        lines.append("SCOREBOARD")
         lines.append(
-            f"Totals â–¸ wins {stats.get('wins', 0)}, losses {stats.get('losses', 0)}, open {stats.get('open', 0)}"
+            f"  Wins {stats.get('wins', 0)} | Losses {stats.get('losses', 0)} | Open {stats.get('open', 0)}"
         )
         if snapshot:
             lines.append(
-                f"Yesterday â–¸ {snapshot['total']} closed, net {snapshot['pnl']:+.2f}"
+                f"  Yesterday: {snapshot['total']} closed | Net {snapshot['pnl']:+.2f}"
             )
         else:
-            lines.append("Yesterday â–¸ no trades were closed")
+            lines.append("  Yesterday: no trades were closed")
 
+        lines.append("")
+        lines.append("PLAN CHECK")
         if simulation and simulation.get("count", 0) > 0:
             lines.append(
-                f"Plans â–¸ {simulation['count']} checked (full levels {simulation['count_with_levels']})"
+                f"  Plans reviewed: {simulation['count']} (full levels {simulation['count_with_levels']})"
             )
-            lines.append(f"Targets â–¸ {simulation['total_tp']:+.2f}")
+            lines.append(f"  Targets move: {simulation['total_tp']:+.2f}")
             if simulation.get("total_risk") is not None:
-                lines.append(f"Stops â–¸ {simulation['total_risk']:.2f}")
+                lines.append(f"  Stops distance: {simulation['total_risk']:.2f}")
             if simulation.get("reward_to_risk_ratio") is not None:
                 lines.append(
-                    f"Reward/Risk â–¸ {simulation['reward_to_risk_ratio']:.2f}"
+                    f"  Reward vs risk: {simulation['reward_to_risk_ratio']:.2f}"
                 )
             if simulation.get("breakeven_win_rate") is not None:
                 lines.append(
-                    f"Break-even win rate â–¸ {simulation['breakeven_win_rate']:.2f}%"
+                    f"  Break-even win rate: {simulation['breakeven_win_rate']:.2f}%"
                 )
         else:
-            lines.append("Plans â–¸ none logged yesterday")
+            lines.append("  No trade plans were logged yesterday.")
 
-        lines.append("Ideas")
+        lines.append("")
+        lines.append("IDEAS")
         if rows:
             for row in rows:
                 lines.append(
-                    f"- {row.get('ticker','?')} {row.get('side','?')} @ {row.get('price','?')} (stop {row.get('sl','-')} | target {row.get('tp','-')})"
+                    f"  - {row.get('ticker','?')} {row.get('side','?')} @ {row.get('price','?')} (stop {row.get('sl','-')} | target {row.get('tp','-')})"
                 )
         else:
-            lines.append("- No new setups yet")
+            lines.append("  - No new setups yet")
 
         return "\n".join(lines)
 
