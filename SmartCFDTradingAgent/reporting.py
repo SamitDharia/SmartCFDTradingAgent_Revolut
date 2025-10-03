@@ -488,6 +488,18 @@ class Digest:
             lines.append(f"Simulated TP: {simulation['total_tp']:+.2f}")
             if simulation.get("count_with_levels", 0) > 0:
                 lines.append(f"Simulated SL: {simulation['total_sl']:+.2f}")
+            if simulation.get("average_r") is not None:
+                lines.append(f"Avg R: {simulation['average_r']:.2f}R")
+            if simulation.get("avg_risk") is not None:
+                lines.append(f"Avg risk: {simulation['avg_risk']:.2f}")
+            if simulation.get("avg_reward") is not None:
+                lines.append(f"Avg target: {simulation['avg_reward']:.2f}")
+            if simulation.get("best_tp") is not None or simulation.get("worst_sl") is not None:
+                best_val = simulation.get("best_tp")
+                worst_val = simulation.get("worst_sl")
+                best_txt = f"{best_val:+.2f}" if best_val is not None else "n/a"
+                worst_txt = f"{worst_val:+.2f}" if worst_val is not None else "n/a"
+                lines.append(f"Range: best {best_txt} | worst {worst_txt}")
         lines.append("Ideas:")
         if rows:
             for row in rows:
