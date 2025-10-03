@@ -247,6 +247,7 @@ class Digest:
         )
 
     # ------------------------------------------------------------ email content
+
     def build_email_content(self, decisions: int = 5) -> Tuple[str, str, Optional[Path]]:
         now = dt.datetime.now().strftime("%A %d %B %Y %H:%M")
         stats = self.trade_stats()
@@ -254,6 +255,22 @@ class Digest:
         snapshot = self.yesterday_snapshot()
         simulation = self.simulate_recommended_trades()
         chart_path = self.save_snapshot_chart(snapshot)
+
+        def _fmt_price(value: object) -> str:
+            if value is None:
+                return "?"
+            try:
+                return f"{float(value):.2f}"
+            except (TypeError, ValueError):
+                return "?"
+
+        def _fmt_signed(value: object) -> str:
+            if value is None:
+                return "n/a"
+            try:
+                return f"{float(value):+.2f}"
+            except (TypeError, ValueError):
+                return "n/a"
 
         plain_lines: list[str] = []
         plain_lines.append(f"Daily Trading Digest {now}")
@@ -280,9 +297,9 @@ class Digest:
             if simulation.get("average_r") is not None:
                 plain_lines.append(f"- Average reward-to-risk: {simulation['average_r']:.2f}R")
             for item in simulation["items"][:3]:
-                entry_txt = f"{item['entry']:.2f}" if item.get("entry") is not None else "?"
-                tp_txt = f"{item['pnl_tp']:+.2f}" if item.get("pnl_tp") is not None else "n/a"
-                sl_txt = f"{item['pnl_sl']:+.2f}" if item.get("pnl_sl") is not None else "n/a"
+                entry_txt = _fmt_price(item.get("entry"))
+                tp_txt = _fmt_signed(item.get("pnl_tp"))
+                sl_txt = _fmt_signed(item.get("pnl_sl"))
                 r_txt = f", R {item['r_multiple']:.2f}" if item.get("r_multiple") is not None else ""
                 plain_lines.append(
                     f"  * {item.get('ticker', '?')} {item.get('side', '?')} @ {entry_txt} -> TP {tp_txt} / SL {sl_txt}{r_txt}"
@@ -309,7 +326,8 @@ class Digest:
         plain_lines.append("")
         plain_lines.append("Questions? Reply to this email and we will help.")
 
-        plain_text = "\n".join(plain_lines)
+        plain_text = "
+".join(plain_lines)
 
         css = """
         <style>
@@ -345,22 +363,23 @@ class Digest:
                 sim_summary_parts.append(f"<p class='muted'>If every stop triggered: {simulation['total_sl']:+.2f}</p>")
             if simulation.get("average_r") is not None:
                 sim_summary_parts.append(f"<p class='muted'>Average reward-to-risk: {simulation['average_r']:.2f}R</p>")
-            sim_summary_html = "".Join('', sim_summary_parts)
-            items_html = "".join(
-                f"<li><strong>{item.get('ticker', '?')}</strong> {item.get('side', '?')} @ "
-                f"{item['entry']:.2f if item.get('entry') is not None else '?'} "
-                f"<span class='muted'>TP {item['pnl_tp']:+.2f if item.get('pnl_tp') is not None else 'n/a'} | "
-                f"SL {item['pnl_sl']:+.2f if item.get('pnl_sl') is not None else 'n/a'}"
-                f"{(f" | R {item['r_multiple']:.2f}" if item.get('r_multiple') is not None else '')}</span></li>"
-                for item in simulation["items"][:4]
-            )
-            simulation_block = f"<div class='card'><strong>Simulated execution</strong>{sim_summary_html}<ul class='list'>{items_html}</ul></div>"
+            sim_summary_html = "".join(sim_summary_parts)
+            item_rows: list[str] = []
+            for item in simulation["items"][:4]:
+                entry_txt = _fmt_price(item.get("entry"))
+                tp_txt = _fmt_signed(item.get("pnl_tp"))
+                sl_txt = _fmt_signed(item.get("pnl_sl"))
+                r_txt = f" | R {item['r_multiple']:.2f}" if item.get("r_multiple") is not None else ""
+                item_rows.append(
+                    f"<li><strong>{item.get('ticker', '?')}</strong> {item.get('side', '?')} @ {entry_txt} <span class='muted'>TP {tp_txt} | SL {sl_txt}{r_txt}</span></li>"
+                )
+            simulation_items_html = "".join(item_rows) or "<li>No trade plans were logged yesterday.</li>"
+            simulation_block = f"<div class='card'><strong>Simulated execution</strong>{sim_summary_html}<ul class='list'>{simulation_items_html}</ul></div>"
         else:
             simulation_block = "<div class='card'><strong>Simulated execution</strong><p class='muted'>No trade plans were logged yesterday.</p></div>"
 
         ideas_html = "".join(
-            f"<li><strong>{row.get('ticker', '?')}</strong> {FRIENDLY_SIDE.get(row.get('side', ''), row.get('side', ''))} near {row.get('price', '?')} "
-            f"<span class='muted'>Stop {row.get('sl', '-')} | Target {row.get('tp', '-')} | Timeframe {row.get('interval', '1d')} | ADX {row.get('adx', '?')}</span></li>"
+            f"<li><strong>{row.get('ticker', '?')}</strong> {FRIENDLY_SIDE.get(row.get('side', ''), row.get('side', ''))} near {row.get('price', '?')} <span class='muted'>Stop {row.get('sl', '-')} | Target {row.get('tp', '-')} | Timeframe {row.get('interval', '1d')} | ADX {row.get('adx', '?')}</span></li>"
             for row in rows
         ) if rows else "<li>No new trade ideas yet.</li>"
 
