@@ -16,6 +16,7 @@ from SmartCFDTradingAgent.utils.trade_logger import aggregate_trade_stats
 
 STORE = Path(__file__).resolve().parent / "storage"
 REPORTS_DIR = Path("reports")
+CHART_PATH = REPORTS_DIR / "daily_digest.png"
 
 
 FRIENDLY_SIDE = {
@@ -26,7 +27,7 @@ FRIENDLY_SIDE = {
 
 
 class Digest:
-    """Produce plain-language summaries for non-traders."""
+    """Produce friendly digest content for email/Telegram."""
 
     def __init__(self, timezone: str = "Europe/Dublin") -> None:
         self.timezone = timezone
@@ -68,9 +69,11 @@ class Digest:
             if pd.isna(entry) or pd.isna(exit_):
                 return 0.0
             side = str(row.get("side", "")).lower()
+            entry = float(entry)
+            exit_ = float(exit_)
             if side == "sell":
-                return float(entry) - float(exit_)
-            return float(exit_) - float(entry)
+                return entry - exit_
+            return exit_ - entry
 
         closed = rows.dropna(subset=["exit"])
         wins = 0
@@ -82,15 +85,17 @@ class Digest:
             if pd.isna(entry) or pd.isna(exit_):
                 continue
             side = str(row.get("side", "")).lower()
+            entry = float(entry)
+            exit_ = float(exit_)
             if side == "sell":
-                if float(exit_) < float(entry):
+                if exit_ < entry:
                     wins += 1
-                elif float(exit_) > float(entry):
+                elif exit_ > entry:
                     losses += 1
             else:
-                if float(exit_) > float(entry):
+                if exit_ > entry:
                     wins += 1
-                elif float(exit_) < float(entry):
+                elif exit_ < entry:
                     losses += 1
             pnl += _pnl(row)
         return {
@@ -101,28 +106,29 @@ class Digest:
             "pnl": float(round(pnl, 2)),
         }
 
-    def save_snapshot_chart(self, snapshot: dict[str, float] | None, path: Path) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
+    def save_snapshot_chart(self, snapshot: dict[str, float] | None) -> Path | None:
+        CHART_PATH.parent.mkdir(parents=True, exist_ok=True)
         if not snapshot:
-            if path.exists():
+            if CHART_PATH.exists():
                 try:
-                    path.unlink()
+                    CHART_PATH.unlink()
                 except Exception:
                     pass
-            return
+            return None
 
         labels = ["Wins", "Losses", "Open"]
         values = [snapshot.get("wins", 0), snapshot.get("losses", 0), snapshot.get("open", 0)]
-        fig, ax = plt.subplots(figsize=(4, 3))
         colors = ["#2ca02c", "#d62728", "#1f77b4"]
+        fig, ax = plt.subplots(figsize=(4, 3))
         ax.bar(labels, values, color=colors)
-        ax.set_ylabel("Count of trades")
+        ax.set_ylabel("Trades")
         ax.set_title("Yesterday's results")
         ax.grid(axis="y", linestyle="--", alpha=0.2)
         ax.text(0.5, -0.25, f"Net P/L: {snapshot.get('pnl', 0.0):+.2f}", ha="center", transform=ax.transAxes)
         fig.tight_layout()
-        fig.savefig(path, dpi=150)
+        fig.savefig(CHART_PATH, dpi=150)
         plt.close(fig)
+        return CHART_PATH
 
     def describe_decision(self, row: dict[str, str]) -> str:
         side = FRIENDLY_SIDE.get(row.get("side", ""), row.get("side", ""))
@@ -136,62 +142,133 @@ class Digest:
             f"Stop {sl} | Target {tp} | Timeframe {interval} | Trend filter ADX {adx}"
         )
 
-    def generate_text(self, decisions: int = 5) -> str:
+    def build_email_content(self, decisions: int = 5) -> tuple[str, str, Path | None]:
         now = dt.datetime.now().strftime("%A %d %B %Y %H:%M")
         stats = self.trade_stats()
         rows = self.latest_decisions(decisions)
         snapshot = self.yesterday_snapshot()
-        chart_path = REPORTS_DIR / "daily_digest.png"
-        self.save_snapshot_chart(snapshot, chart_path)
+        chart_path = self.save_snapshot_chart(snapshot)
 
-        parts: list[str] = []
-        parts.append(f"Daily Trading Digest — {now}")
-        parts.append("")
-
-        parts.append("How are we doing?")
-        parts.append(
-            f"- Total closed trades so far: Wins {stats.get('wins', 0)}, Losses {stats.get('losses', 0)}, Open {stats.get('open', 0)}"
-        )
-        parts.append(
-            "- What this means: the agent keeps risk small by using ATR (Average True Range), "
-            "which measures a market's typical wiggle. Bigger ATR means the system automatically places smaller trades."
+        plain_lines: list[str] = []
+        plain_lines.append(f"Daily Trading Digest — {now}")
+        plain_lines.append("")
+        plain_lines.append("How did we do yesterday?")
+        plain_lines.append(
+            f"- Overall: Wins {stats.get('wins', 0)}, Losses {stats.get('losses', 0)}, Open {stats.get('open', 0)}"
         )
         if snapshot:
-            parts.append(
+            plain_lines.append(
                 f"- Yesterday: {snapshot['total']} closed (Wins {snapshot['wins']} | Losses {snapshot['losses']} | Open {snapshot['open']}) — Net P/L {snapshot['pnl']:+.2f}"
             )
-            win_bar = '█' * max(snapshot['wins'], 1)
-            loss_bar = '█' * max(snapshot['losses'], 1)
-            parts.append(f"  Wins [{win_bar}]  Losses [{loss_bar}]")
-            parts.append(f"  Chart saved to {chart_path}")
         else:
-            parts.append("- Yesterday: no closed trades recorded.")
-        parts.append("")
+            plain_lines.append("- Yesterday: no closed trades recorded.")
+        plain_lines.append(
+            "- What this means: ATR (Average True Range) keeps risk steady — bigger ATR automatically means smaller trade size."
+        )
+        plain_lines.append("")
 
-        parts.append("Fresh trade ideas to review:")
+        plain_lines.append("Fresh trade ideas:")
         if rows:
             for row in rows:
-                parts.append(self.describe_decision(row))
+                plain_lines.append(self.describe_decision(row))
         else:
-            parts.append("- No new trade ideas yet. The agent will alert you as soon as one appears.")
-        parts.append("")
+            plain_lines.append("- No new trade ideas yet. We'll alert you when one appears.")
+        plain_lines.append("")
 
-        parts.append("Next steps for you:")
-        parts.append("1. Open your broker app. Place any trade you like from the list above, including stop-loss and target.")
-        parts.append("2. Prefer to watch? Just log in later and check the digest for updates.")
-        parts.append("3. Any alerts about data issues? They simply mean the data feed was busy. The next run re-tries automatically.")
-        parts.append("")
+        plain_lines.append("Next steps:")
+        plain_lines.append("1. Open your broker and place any ideas you like (with stop & target).")
+        plain_lines.append("2. Prefer to watch? Check the dashboard: http://localhost:8501")
+        plain_lines.append("3. Keep notes on what interests you for future review.")
+        plain_lines.append("")
 
-        parts.append("Glossary (plain language):")
-        parts.append("- ATR: measures how much the price usually moves; bigger ATR = smaller position size.")
-        parts.append("- Stop-loss: automatic exit if price moves against us too far.")
-        parts.append("- Take-profit: automatic exit when price hits our goal.")
-        parts.append("- ADX: trend strength indicator; higher values usually mean a stronger trend.")
-        parts.append("")
+        plain_lines.append("Glossary:")
+        plain_lines.append("- ATR: measures typical price movement; bigger ATR → smaller position size.")
+        plain_lines.append("- Stop-loss: automatic exit if price goes too far against us.")
+        plain_lines.append("- Take-profit: automatic exit when price reaches the goal.")
+        plain_lines.append("- ADX: trend strength indicator; higher values usually mean a stronger trend.")
 
-        parts.append("Questions? Reply to this Telegram message and we’ll help you out.")
+        plain_text = "\n".join(plain_lines)
 
-        return "\n".join(parts)
+        html_rows = "".join(
+            f"<li>🥇 <strong>{row.get('ticker')}</strong>: {FRIENDLY_SIDE.get(row.get('side',''), row.get('side',''))} near {row.get('price','?')} &nbsp;"
+            f"<span style='color:#999'>SL {row.get('sl','-')} | TP {row.get('tp','-')} | TF {row.get('interval','1d')} | ADX {row.get('adx','?')}</span></li>"
+            for row in rows
+        ) if rows else "<li>No new trade ideas yet. We'll alert you when one appears.</li>"
+
+        html_snapshot = (
+            f"<p>📊 <strong>Yesterday:</strong> {snapshot['total']} closed (Wins {snapshot['wins']} | Losses {snapshot['losses']} | Open {snapshot['open']}) — Net P/L <strong>{snapshot['pnl']:+.2f}</strong></p>"
+            if snapshot else "<p>📊 <strong>Yesterday:</strong> No closed trades recorded.</p>"
+        )
+
+        chart_img = (
+            f"<p><img src='cid:daily_chart' alt='Yesterday results chart' style='max-width:360px;border:1px solid #eee;border-radius:6px;'/></p>"
+            if chart_path and chart_path.exists() else ""
+        )
+
+        html = f"""
+<html>
+  <body style="font-family:'Segoe UI',Arial,sans-serif;background:#f9fbfc;color:#1f2a33;padding:16px;">
+    <div style="max-width:720px;margin:auto;background:#ffffff;border-radius:12px;box-shadow:0 4px 16px rgba(15,23,42,0.08);padding:24px;">
+      <h2 style="margin-top:0;color:#0f172a;">📈 Daily Trading Digest — {now}</h2>
+      <section style="margin-bottom:18px;">
+        <p>📌 <strong>How did we do yesterday?</strong></p>
+        <p>✅ <strong>Overall</strong>: Wins {stats.get('wins',0)}, Losses {stats.get('losses',0)}, Open {stats.get('open',0)}</p>
+        {html_snapshot}
+        <p>🛡️ <strong>What this means:</strong> ATR (Average True Range) keeps risk steady — bigger ATR automatically means smaller trade size.</p>
+        {chart_img}
+      </section>
+      <section style="margin-bottom:18px;">
+        <p>💡 <strong>Fresh trade ideas:</strong></p>
+        <ul style="padding-left:20px;margin-top:8px;margin-bottom:8px;">
+          {html_rows}
+        </ul>
+      </section>
+      <section style="margin-bottom:18px;">
+        <p>🧭 <strong>Next steps:</strong></p>
+        <ol style="padding-left:20px;margin-top:8px;margin-bottom:8px;">
+          <li>Open your broker and place any ideas you like (with stop & target).</li>
+          <li>Prefer to watch? Explore the dashboard ↗ <a href="http://localhost:8501" style="color:#2563eb;">http://localhost:8501</a></li>
+          <li>Keep notes on anything interesting for future review.</li>
+        </ol>
+      </section>
+      <section style="margin-bottom:18px;">
+        <p>📘 <strong>Glossary:</strong></p>
+        <ul style="padding-left:20px;margin-top:8px;margin-bottom:8px;">
+          <li><strong>ATR</strong>: measures typical price movement; bigger ATR → smaller position size.</li>
+          <li><strong>Stop-loss</strong>: automatic exit if price moves against us.</li>
+          <li><strong>Take-profit</strong>: automatic exit when price hits the goal.</li>
+          <li><strong>ADX</strong>: trend strength indicator; higher values usually mean stronger trend.</li>
+        </ul>
+      </section>
+      <p style="font-size:12px;color:#6b7280;margin-top:24px;">Questions? Reply to this email and we’ll help you out.</p>
+    </div>
+  </body>
+</html>
+"""
+
+        return plain_text, html, chart_path if chart_path and chart_path.exists() else None
+
+    def build_telegram_message(self, decisions: int = 3) -> str:
+        now = dt.datetime.now().strftime("%d %b %H:%M")
+        stats = self.trade_stats()
+        rows = self.latest_decisions(decisions)
+        snapshot = self.yesterday_snapshot()
+
+        lines = [f"Crypto Digest {now}"]
+        lines.append(f"Wins {stats.get('wins',0)}, Losses {stats.get('losses',0)}, Open {stats.get('open',0)}")
+        if snapshot:
+            lines.append(f"Yesterday: {snapshot['total']} closed | PnL {snapshot['pnl']:+.2f}")
+        else:
+            lines.append("Yesterday: no closed trades")
+        lines.append("Ideas:")
+        if rows:
+            for row in rows:
+                lines.append(
+                    f"• {row.get('ticker')} {row.get('side','Hold')} @ {row.get('price')} (SL {row.get('sl','-')} / TP {row.get('tp','-')})"
+                )
+        else:
+            lines.append("• No new trades yet")
+        return "\n".join(lines)
 
     def save_digest(self, content: str, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -207,4 +284,4 @@ class Digest:
         path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
-__all__ = ["Digest"]
+__all__ = ["Digest", "CHART_PATH"]
