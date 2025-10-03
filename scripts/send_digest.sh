@@ -6,4 +6,4 @@ if [[ -z "${VIRTUAL_ENV:-}" && -f "venv/bin/activate" ]]; then
   # shellcheck disable=SC1091
   source venv/bin/activate
 fi
-python scripts/human_digest.py "$@"
+python scripts/human_digest.py --to-telegram --email "$@"
