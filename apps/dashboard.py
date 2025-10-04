@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 from pathlib import Path
 
 import altair as alt
@@ -38,7 +38,7 @@ st.markdown(
 )
 
 st.title("SmartCFD Trading Dashboard")
-st.caption("Friendly view for non-traders – refreshed automatically by the agent")
+st.caption("Friendly view for non-traders; refreshed automatically by the agent")
 
 # ------------------------------------------------------------------ data load
 def _safe_read_csv(path: Path) -> pd.DataFrame:
@@ -86,7 +86,7 @@ for col, label, value in zip(
     )
 
 # ---------------------------------------------------------------- tabs
-perf_tab, signals_tab = st.tabs(["📈 Performance", "💡 Signals"])
+perf_tab, signals_tab = st.tabs(["Performance", "Signals"])
 
 with perf_tab:
     st.markdown("<div class='section-card'>", unsafe_allow_html=True)
@@ -159,4 +159,4 @@ st.markdown(
 )
 
 last_updated = datetime.now().strftime("%Y-%m-%d %H:%M")
-st.caption(f"Last refreshed: {last_updated}")
+st.caption("Friendly view for non-traders; refreshed automatically by the agent")
