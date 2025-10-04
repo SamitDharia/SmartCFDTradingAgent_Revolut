@@ -6,6 +6,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Iterable, List
+import logging
 
 import pandas as pd
 import yfinance as yf
@@ -42,6 +43,21 @@ CACHE_DIR = Path(
 )
 
 log = get_logger()
+
+
+def _quiet_yf_logs() -> None:
+    """Reduce noise from yfinance/urllib3 when not using Alpaca.
+
+    Controlled by env var YF_SILENT (defaults to on).
+    """
+    try:
+        silent = os.getenv("YF_SILENT", "1").strip().lower() in {"1", "true", "yes", "on"}
+        if not silent:
+            return
+        logging.getLogger("yfinance").setLevel(logging.ERROR)
+        logging.getLogger("urllib3").setLevel(logging.ERROR)
+    except Exception:
+        pass
 
 
 def _cache_path(key: str) -> Path:
@@ -238,6 +254,8 @@ def get_price_data(
     if use_alpaca_crypto() and tickers and all(_is_crypto_symbol(t) for t in tickers):
         log.info("Fetching crypto data via Alpaca for tickers: %s", tickers)
         return _get_crypto_data_alpaca(tickers, start, end, iv)
+    else:
+        _quiet_yf_logs()
 
     # ---------- Intraday path (per-ticker only) ----------
     if iv in INTRADAY:
