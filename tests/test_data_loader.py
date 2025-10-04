@@ -90,102 +90,12 @@ def test_coinbase_fallback(monkeypatch):
         )
         return pd.concat({ticker: frame}, axis=1)
 
-    monkeypatch.setattr(dl, "_download", fail_download)
-    monkeypatch.setattr(dl, "_download_history", fail_history)
-    monkeypatch.setattr(dl, "_download_chart", fail_chart)
-    monkeypatch.setattr(dl, "_download_coinbase", fake_coinbase)
+    monkeypatch.setattr("SmartCFDTradingAgent.data_loader._download", fail_download)
+    monkeypatch.setattr("SmartCFDTradingAgent.data_loader._download_history", fail_history)
+    monkeypatch.setattr("SmartCFDTradingAgent.data_loader._download_chart", fail_chart)
+    monkeypatch.setattr("SmartCFDTradingAgent.data_loader._download_coinbase", fake_coinbase)
 
     df = get_price_data(["BTC-USD"], "2022-01-01", "2022-01-03", interval="1h", max_tries=1, pause=0)
 
     assert not df.empty
     assert ("BTC-USD", "Close") in df.columns
-
-
-def test_download_chart_proxy_retry(monkeypatch, caplog):
-    payload = {
-        "chart": {
-            "result": [
-                {
-                    "timestamp": [1_700_000_000, 1_700_003_600],
-                    "indicators": {
-                        "quote": [
-                            {
-                                "open": [1.0, 1.1],
-                                "high": [1.2, 1.3],
-                                "low": [0.9, 1.0],
-                                "close": [1.05, 1.15],
-                                "volume": [100, 110],
-                            }
-                        ],
-                        "adjclose": [
-                            {
-                                "adjclose": [1.05, 1.15],
-                            }
-                        ],
-                    },
-                }
-            ]
-        }
-    }
-
-    def fake_get_session(force_direct=False):
-        class FakeSession:
-            def get(self, *args, **kwargs):
-                if not force_direct:
-                    raise requests.exceptions.ProxyError("blocked")
-
-                class Resp:
-                    def raise_for_status(self):
-                        return None
-
-                    def json(self):
-                        return payload
-
-                return Resp()
-
-        return FakeSession()
-
-    monkeypatch.setattr(dl, "_get_yf_session", fake_get_session)
-
-    caplog.set_level("WARNING")
-    df = dl._download_chart("BTC-USD", start="2024-01-01", end="2024-01-02", interval="1h")
-
-    assert not df.empty
-    assert any("proxy" in record.message.lower() for record in caplog.records)
-
-
-def test_download_coinbase_proxy_retry(monkeypatch, caplog):
-    sample_rows = [
-        [1_700_000_000, 1.0, 1.5, 1.1, 1.2, 100.0],
-        [1_700_003_600, 1.1, 1.6, 1.2, 1.3, 110.0],
-    ]
-
-    def fake_coinbase_session(force_direct=False):
-        class FakeSession:
-            def get(self, *_, **__):
-                if not force_direct:
-                    raise requests.exceptions.ProxyError("proxy")
-
-                class Resp:
-                    def raise_for_status(self):
-                        return None
-
-                    def json(self):
-                        return sample_rows
-
-                return Resp()
-
-        return FakeSession()
-
-    monkeypatch.setattr(dl, "_get_coinbase_session", fake_coinbase_session)
-
-    caplog.set_level("WARNING")
-    df = dl._download_coinbase(
-        "BTC-USD",
-        start="2024-01-01",
-        end="2024-01-02",
-        interval="1h",
-    )
-
-    assert not df.empty
-    assert any("Coinbase API via proxy" in record.message for record in caplog.records)

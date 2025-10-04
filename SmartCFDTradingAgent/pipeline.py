@@ -7,6 +7,9 @@ import datetime as dt
 import csv
 import sys
 import json
+import yfinance as yf
+import pandas as pd
+from requests import HTTPError
 from datetime import timezone
 from zoneinfo import ZoneInfo
 from pathlib import Path
@@ -426,13 +429,42 @@ def run_cycle(
     end = dt.date.today().isoformat()
     lookback_days = _max_lookback_days(interval)
     start = (dt.date.today() - dt.timedelta(days=lookback_days)).isoformat()
+
+    # Ensure tickers is always defined before we call get_price_data or reference it in except
+    tickers = []  # default so except block can reference it safely
+
+    # choose tickers earlier in the function (example)
+    market_closed = not market_open()
+    if market_closed:
+        tickers = ["BTC-USD","ETH-USD","SOL-USD","ADA-USD","LTC-USD","BCH-USD"]
+    else:
+        tickers = watch  # ...existing code that sets full universe...
+
+    # Replace the call to get_price_data(...) with this block:
     try:
         price = get_price_data(tickers, start, end, interval=interval)
+    except HTTPError as e:
+        msg = str(e)
+        if "401" in msg or "Unauthorized" in msg or "unauthorized" in msg.lower():
+            log.error("Alpaca unauthorized (401): %s -- trying Yahoo fallback", e)
+            try:
+                price = _fetch_via_yahoo(tickers, start, end, interval)
+                log.info("Fetched crypto data via Yahoo for tickers: %s", tickers)
+            except Exception as e2:
+                log.error("Yahoo fallback failed: %s", e2)
+                raise
+        else:
+            log.error("Data download failed: %s", e)
+            raise
     except Exception as e:
-        err = f"Data download failed for {', '.join(tickers)} ({interval}): {e}"
-        log.error(err)
-        safe_send(err)
-        return
+        # non-HTTP errors -> try yahoo as a secondary attempt
+        try:
+            price = _fetch_via_yahoo(tickers, start, end, interval)
+            log.info("Fetched crypto data via Yahoo for tickers: %s", tickers)
+        except Exception as e2:
+            log.error("Data download failed and Yahoo fallback failed: %s / %s", e, e2)
+            raise
+
     base_sig = generate_signals(
         price,
         adx_threshold=adx,
@@ -941,11 +973,38 @@ def main():
         model_cfg = None
         ml_path = cfg.get("ml_model", args.ml_model)
         if ml_path:
-            try:
-                from SmartCFDTradingAgent.ml_models import PriceDirectionModel
-                model_cfg = PriceDirectionModel.load(ml_path)
-            except Exception as e:
-                log.error("Failed to load ML model from config: %s", e)
+            # expand environment vars and resolve relative paths
+            ml_path_resolved = Path(os.path.expandvars(str(ml_path)))
+            if not ml_path_resolved.exists():
+                log.error(
+                    "ML model path from config does not exist: %s (resolved: %s)",
+                    ml_path,
+                    ml_path_resolved,
+                )
+            else:
+                model_cfg = None
+                try:
+                    from SmartCFDTradingAgent.ml_models import PriceDirectionModel
+                    model_cfg = PriceDirectionModel.load(str(ml_path_resolved))
+                except Exception as e_load:
+                    log.warning("PriceDirectionModel.load failed: %s. Trying json/pickle fallback.", e_load)
+                    try:
+                        # try JSON first (human-editable). If file is binary pickle, this will raise.
+                        raw = json.loads(ml_path_resolved.read_text(encoding="utf-8"))
+                        model_cfg = _DummyModel(raw)
+                    except Exception:
+                        # last resort: try pickle -> if it's a simple dict we can wrap it
+                        try:
+                            import pickle
+                            with ml_path_resolved.open("rb") as fh:
+                                raw = pickle.load(fh)
+                            if isinstance(raw, dict):
+                                model_cfg = _DummyModel(raw)
+                            else:
+                                # not a dict/object we understand -> ignore and warn
+                                log.error("ML model file present but not loadable as known format.")
+                        except Exception as e_pickle:
+                            log.error("Fallback ML load failed: %s", e_pickle)
         run_cycle(
             watch=watch,
             size=int(cfg.get("size", args.size)),
@@ -993,11 +1052,16 @@ def main():
 
     model = None
     if args.ml_model:
-        try:
-            from SmartCFDTradingAgent.ml_models import PriceDirectionModel
-            model = PriceDirectionModel.load(args.ml_model)
-        except Exception as e:
-            log.error("Failed to load ML model: %s", e)
+        ml_path_resolved = Path(os.path.expandvars(str(args.ml_model)))
+        if not ml_path_resolved.exists():
+            log.error("ML model path does not exist: %s (resolved: %s)", args.ml_model, ml_path_resolved)
+        else:
+            try:
+                from SmartCFDTradingAgent.ml_models import PriceDirectionModel
+
+                model = PriceDirectionModel.load(str(ml_path_resolved))
+            except Exception as e:
+                log.error("Failed to load ML model: %s", e)
 
     try:
         run_cycle(
@@ -1043,6 +1107,26 @@ def main():
     except Exception as e:
         log.exception("Pipeline crashed: %s", e)
         safe_send(f"⚠️ SmartCFD crashed\n{e}")
+
+def _fetch_via_yahoo(tickers, start, end, interval):
+    iv_map = {"1h":"60m","60m":"60m","1d":"1d","1m":"1m","5m":"5m","15m":"15m","30m":"30m"}
+    yf_iv = iv_map.get(interval, interval)
+    df = yf.download(tickers, start=start, end=end, interval=yf_iv, group_by="ticker", threads=True, progress=False)
+    out = {}
+    if len(tickers) == 1:
+        out[tickers[0]] = df[["Open","High","Low","Close","Volume"]].copy()
+    else:
+        for t in tickers:
+            if t in df.columns:
+                sub = df[t].copy()
+            else:
+                # when yfinance returns flat, try selecting by suffix
+                sub = df[[c for c in df.columns if c[1:].endswith(("Open","High","Low","Close","Volume"))]] if hasattr(df.columns, 'levels') else pd.DataFrame()
+            if not sub.empty:
+                out[t] = sub[["Open","High","Low","Close","Volume"]].copy()
+    if not out:
+        raise RuntimeError("Yahoo returned no usable data")
+    return out
 
 if __name__ == "__main__":
     load_dotenv()
