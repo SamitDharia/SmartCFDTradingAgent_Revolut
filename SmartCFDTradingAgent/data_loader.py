@@ -1,14 +1,16 @@
 ﻿from __future__ import annotations
 
 import hashlib
+import math
+import logging
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Iterable, List
-import logging
 
 import pandas as pd
+import requests
 import yfinance as yf
 
 from SmartCFDTradingAgent.utils.logger import get_logger
@@ -232,6 +234,601 @@ def _download(
     )
 
 
+_YF_SESSIONS: dict[bool, requests.Session] = {}
+_COINBASE_SESSIONS: dict[bool, requests.Session] = {}
+_CRYPTOCOMPARE_SESSIONS: dict[bool, requests.Session] = {}
+
+
+def _build_session(
+    *,
+    user_agent_env: str,
+    default_agent: str,
+    disable_proxy_env: str | None = None,
+    force_direct: bool = False,
+    extra_headers: dict[str, str] | None = None,
+) -> requests.Session:
+    session = requests.Session()
+    session.headers.update(
+        {
+            "User-Agent": os.getenv(user_agent_env, default_agent),
+        }
+    )
+    if extra_headers:
+        session.headers.update(extra_headers)
+    if force_direct or (disable_proxy_env and _truthy(disable_proxy_env)):
+        session.trust_env = False
+    return session
+
+
+def _get_yf_session(force_direct: bool = False) -> requests.Session:
+    global _YF_SESSIONS
+    key = bool(force_direct)
+    session = _YF_SESSIONS.get(key)
+    if session is None:
+        session = _build_session(
+            user_agent_env="YF_USER_AGENT",
+            default_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/122.0 Safari/537.36"
+            ),
+            disable_proxy_env="YF_DISABLE_PROXY" if not force_direct else None,
+            force_direct=force_direct,
+        )
+        _YF_SESSIONS[key] = session
+    return session
+
+
+def _get_coinbase_session(force_direct: bool = False) -> requests.Session:
+    global _COINBASE_SESSIONS
+    key = bool(force_direct)
+    session = _COINBASE_SESSIONS.get(key)
+    if session is None:
+        session = _build_session(
+            user_agent_env="COINBASE_USER_AGENT",
+            default_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/122.0 Safari/537.36"
+            ),
+            disable_proxy_env="COINBASE_DISABLE_PROXY" if not force_direct else None,
+            force_direct=force_direct,
+            extra_headers={"Accept": "application/json"},
+        )
+        _COINBASE_SESSIONS[key] = session
+    return session
+
+
+def _get_cryptocompare_session(force_direct: bool = False) -> requests.Session:
+    global _CRYPTOCOMPARE_SESSIONS
+    key = bool(force_direct)
+    session = _CRYPTOCOMPARE_SESSIONS.get(key)
+    if session is None:
+        session = _build_session(
+            user_agent_env="CRYPTOCOMPARE_USER_AGENT",
+            default_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/122.0 Safari/537.36"
+            ),
+            disable_proxy_env="CRYPTOCOMPARE_DISABLE_PROXY" if not force_direct else None,
+            force_direct=force_direct,
+            extra_headers={"Accept": "application/json"},
+        )
+        api_key = os.getenv("CRYPTOCOMPARE_API_KEY", "").strip()
+        if api_key:
+            session.headers["Authorization"] = f"Apikey {api_key}"
+        _CRYPTOCOMPARE_SESSIONS[key] = session
+    return session
+
+
+def _download_history(
+    ticker: str,
+    *,
+    start: str | None,
+    end: str | None,
+    interval: str,
+) -> pd.DataFrame | None:
+    """Fallback to ``Ticker.history`` for stubborn Yahoo responses."""
+
+    session = _get_yf_session()
+    try:
+        history = yf.Ticker(ticker, session=session).history(
+            start=start,
+            end=end,
+            interval=interval,
+            auto_adjust=False,
+            actions=False,
+            prepost=False,
+        )
+    except requests.exceptions.ProxyError as exc:
+        log.warning(
+            "Ticker.history proxy request failed for %s: %s – retrying without proxies",
+            ticker,
+            exc,
+        )
+        try:
+            session = _get_yf_session(force_direct=True)
+            history = yf.Ticker(ticker, session=session).history(
+                start=start,
+                end=end,
+                interval=interval,
+                auto_adjust=False,
+                actions=False,
+                prepost=False,
+            )
+        except Exception as exc2:
+            log.debug("Ticker.history direct retry failed for %s: %s", ticker, exc2)
+            return None
+    except Exception as exc:
+        log.debug("Ticker.history failed for %s: %s", ticker, exc)
+        return None
+
+    if history is None or history.empty:
+        return None
+
+    history.index = pd.to_datetime(history.index)
+    history = history.sort_index()
+    expected_cols = [c for c in FIELDS_ORDER if c in history.columns]
+    if not expected_cols:
+        return None
+
+    history = history[expected_cols]
+    return pd.concat({ticker: history}, axis=1)
+
+
+def _download_chart(
+    ticker: str,
+    *,
+    start: str | None,
+    end: str | None,
+    interval: str,
+    cache_expire: float | None = None,
+) -> pd.DataFrame | None:
+    """Fallback using Yahoo chart API when yfinance helpers fail.
+
+    Returns data normalized to MultiIndex [ticker, field] or ``None`` when
+    retrieval fails. Responses are cached using the shared pickle cache so we
+    don't spam Yahoo when running multiple retries.
+    """
+
+    start_ts = pd.Timestamp(start) if start is not None else None
+    end_ts = pd.Timestamp(end) if end is not None else None
+    if start_ts is None or end_ts is None:
+        return None
+
+    start_ts = _ensure_utc(start_ts)
+    end_ts = _ensure_utc(end_ts)
+    if end_ts <= start_ts:
+        end_ts = start_ts + pd.Timedelta(days=1)
+
+    iv = interval.lower()
+    interval_map = {"1h": "60m", "90m": "90m"}
+    yahoo_interval = interval_map.get(iv, iv)
+
+    key = f"chart|{ticker}|{yahoo_interval}|{int(start_ts.timestamp())}|{int(end_ts.timestamp())}"
+    if cache_expire is not None:
+        cached = _load_cache(key, cache_expire)
+        if cached is not None:
+            return cached
+
+    params = {
+        "period1": int(start_ts.timestamp()),
+        "period2": int(end_ts.timestamp()),
+        "interval": yahoo_interval,
+        "includePrePost": "false",
+        "events": "history",
+    }
+
+    session = _get_yf_session()
+    timeout = float(os.getenv("YF_TIMEOUT", "10"))
+    try:
+        resp = session.get(
+            f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}",
+            params=params,
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+    except requests.exceptions.ProxyError as exc:
+        log.warning(
+            "Yahoo chart API via proxy failed for %s: %s – retrying without proxies",
+            ticker,
+            exc,
+        )
+        try:
+            session = _get_yf_session(force_direct=True)
+            resp = session.get(
+                f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}",
+                params=params,
+                timeout=timeout,
+            )
+            resp.raise_for_status()
+            payload = resp.json()
+        except Exception as exc2:
+            log.debug("Yahoo chart API direct retry failed for %s: %s", ticker, exc2)
+            return None
+    except Exception as exc:
+        log.debug("Yahoo chart API request failed for %s: %s", ticker, exc)
+        return None
+
+    result = payload.get("chart", {}).get("result") or []
+    if not result:
+        return None
+
+    result = result[0]
+    timestamps = result.get("timestamp")
+    indicators = result.get("indicators", {})
+    quotes = (indicators.get("quote") or [{}])[0]
+    adjcloses = (indicators.get("adjclose") or [{}])[0]
+    if not timestamps:
+        return None
+
+    index = pd.to_datetime(timestamps, unit="s", utc=True).tz_convert(None)
+    frame = pd.DataFrame(
+        {
+            "Open": quotes.get("open"),
+            "High": quotes.get("high"),
+            "Low": quotes.get("low"),
+            "Close": quotes.get("close"),
+            "Adj Close": adjcloses.get("adjclose"),
+            "Volume": quotes.get("volume"),
+        },
+        index=index,
+    )
+
+    frame = frame.dropna(how="all")
+    if frame.empty:
+        return None
+
+    # Ensure chronological order and expected column subset
+    frame = frame.sort_index()
+    expected_cols = [c for c in FIELDS_ORDER if c in frame.columns]
+    frame = frame[expected_cols]
+
+    out = pd.concat({ticker: frame}, axis=1)
+    if cache_expire is not None:
+        _save_cache(key, out)
+    return out
+
+
+_COINBASE_GRANULARITY = {
+    "1m": 60,
+    "2m": 120,
+    "5m": 300,
+    "15m": 900,
+    "30m": 1800,
+    "60m": 3600,
+    "90m": 5400,
+    "1h": 3600,
+    "1d": 86400,
+}
+
+
+def _download_coinbase(
+    ticker: str,
+    *,
+    start: str | None,
+    end: str | None,
+    interval: str,
+    cache_expire: float | None = None,
+) -> pd.DataFrame | None:
+    """Fallback using Coinbase public candles endpoint.
+
+    Coinbase limits each request to 300 candles; this function automatically
+    chunks the requested timerange and stitches responses together. Results are
+    cached using the shared pickle cache so we do not overwhelm the API.
+    """
+
+    granularity = _COINBASE_GRANULARITY.get(interval.lower())
+    if granularity is None:
+        return None
+
+    start_ts = pd.Timestamp(start) if start is not None else None
+    end_ts = pd.Timestamp(end) if end is not None else None
+    if start_ts is None or end_ts is None:
+        return None
+
+    start_ts = _ensure_utc(start_ts)
+    end_ts = _ensure_utc(end_ts)
+    if end_ts <= start_ts:
+        end_ts = start_ts + pd.Timedelta(seconds=granularity)
+
+    key = (
+        f"coinbase|{ticker}|{granularity}|"
+        f"{int(start_ts.timestamp())}|{int(end_ts.timestamp())}"
+    )
+    if cache_expire is not None:
+        cached = _load_cache(key, cache_expire)
+        if cached is not None:
+            return cached
+
+    base_url = os.getenv(
+        "COINBASE_API_URL", "https://api.exchange.coinbase.com"
+    ).rstrip("/")
+    product = ticker.upper().replace("_", "-")
+    url = f"{base_url}/products/{product}/candles"
+
+    chunk = pd.Timedelta(seconds=granularity * 300)
+    current_start = start_ts
+    rows: list[dict] = []
+    timeout = float(os.getenv("COINBASE_TIMEOUT", "10"))
+
+    session = _get_coinbase_session()
+
+    while current_start < end_ts:
+        current_end = min(current_start + chunk, end_ts)
+        params = {
+            "start": current_start.isoformat(),
+            "end": current_end.isoformat(),
+            "granularity": granularity,
+        }
+        try:
+            resp = session.get(url, params=params, timeout=timeout)
+            resp.raise_for_status()
+            payload = resp.json()
+        except requests.exceptions.ProxyError as exc:
+            log.warning(
+                "Coinbase API via proxy failed for %s [%s - %s]: %s – retrying without proxies",
+                ticker,
+                current_start,
+                current_end,
+                exc,
+            )
+            session = _get_coinbase_session(force_direct=True)
+            try:
+                resp = session.get(url, params=params, timeout=timeout)
+                resp.raise_for_status()
+                payload = resp.json()
+            except Exception as exc2:
+                log.debug(
+                    "Coinbase API direct retry failed for %s [%s - %s]: %s",
+                    ticker,
+                    current_start,
+                    current_end,
+                    exc2,
+                )
+                return None
+        except Exception as exc:
+            log.debug(
+                "Coinbase API request failed for %s [%s - %s]: %s",
+                ticker,
+                current_start,
+                current_end,
+                exc,
+            )
+            return None
+
+        if not isinstance(payload, list):
+            log.debug("Coinbase API unexpected payload for %s: %s", ticker, payload)
+            return None
+
+        for entry in payload:
+            if not isinstance(entry, (list, tuple)) or len(entry) < 6:
+                continue
+            ts = pd.Timestamp(entry[0], unit="s", tz="UTC").tz_convert(None)
+            low, high, open_, close, volume = entry[1:6]
+            rows.append(
+                {
+                    "timestamp": ts,
+                    "Open": float(open_),
+                    "High": float(high),
+                    "Low": float(low),
+                    "Close": float(close),
+                    "Adj Close": float(close),
+                    "Volume": float(volume),
+                }
+            )
+
+        current_start = current_end
+
+    if not rows:
+        return None
+
+    frame = pd.DataFrame(rows)
+    if frame.empty:
+        return None
+
+    frame = frame.drop_duplicates("timestamp").set_index("timestamp")
+    frame = frame.sort_index()
+    expected_cols = [c for c in FIELDS_ORDER if c in frame.columns]
+    frame = frame[expected_cols]
+
+    out = pd.concat({ticker: frame}, axis=1)
+    if cache_expire is not None:
+        _save_cache(key, out)
+    return out
+
+
+_CRYPTOCOMPARE_INTERVALS = {
+    "1m": ("histominute", 1),
+    "2m": ("histominute", 2),
+    "5m": ("histominute", 5),
+    "15m": ("histominute", 15),
+    "30m": ("histominute", 30),
+    "60m": ("histominute", 60),
+    "90m": ("histominute", 90),
+    "1h": ("histohour", 1),
+    "1d": ("histoday", 1),
+}
+
+_CRYPTOCOMPARE_BASE_SECONDS = {
+    "histominute": 60,
+    "histohour": 3600,
+    "histoday": 86400,
+}
+
+
+def _download_cryptocompare(
+    ticker: str,
+    *,
+    start: str | None,
+    end: str | None,
+    interval: str,
+    cache_expire: float | None = None,
+) -> pd.DataFrame | None:
+    entry = _CRYPTOCOMPARE_INTERVALS.get(interval.lower())
+    if entry is None:
+        return None
+
+    endpoint, aggregate = entry
+    base_seconds = _CRYPTOCOMPARE_BASE_SECONDS[endpoint] * max(aggregate, 1)
+
+    if not ticker or "-" not in ticker:
+        return None
+
+    base, quote = ticker.split("-", 1)
+    base = base.strip().upper()
+    quote = quote.strip().upper()
+    if not base or not quote:
+        return None
+
+    start_ts = pd.Timestamp(start) if start is not None else None
+    end_ts = pd.Timestamp(end) if end is not None else None
+    if start_ts is None or end_ts is None:
+        return None
+
+    start_ts = _ensure_utc(start_ts)
+    end_ts = _ensure_utc(end_ts)
+    if end_ts <= start_ts:
+        end_ts = start_ts + pd.Timedelta(seconds=base_seconds)
+
+    key = (
+        f"cryptocompare|{ticker}|{endpoint}|{aggregate}|"
+        f"{int(start_ts.timestamp())}|{int(end_ts.timestamp())}"
+    )
+    if cache_expire is not None:
+        cached = _load_cache(key, cache_expire)
+        if cached is not None:
+            return cached
+
+    url = f"https://min-api.cryptocompare.com/data/v2/{endpoint}"
+    timeout = float(os.getenv("CRYPTOCOMPARE_TIMEOUT", "10"))
+
+    rows: list[dict] = []
+    session = _get_cryptocompare_session()
+    current_end = end_ts
+
+    while current_end > start_ts:
+        total_seconds = max((current_end - start_ts).total_seconds(), base_seconds)
+        needed = int(math.ceil(total_seconds / base_seconds))
+        limit = max(1, min(2000, needed))
+
+        params = {
+            "fsym": base,
+            "tsym": quote,
+            "toTs": int(current_end.timestamp()),
+            "limit": limit,
+        }
+        if aggregate > 1:
+            params["aggregate"] = int(aggregate)
+
+        try:
+            resp = session.get(url, params=params, timeout=timeout)
+            resp.raise_for_status()
+            payload = resp.json()
+        except requests.exceptions.ProxyError as exc:
+            log.warning(
+                "CryptoCompare via proxy failed for %s [%s - %s]: %s – retrying without proxies",
+                ticker,
+                start_ts,
+                current_end,
+                exc,
+            )
+            session = _get_cryptocompare_session(force_direct=True)
+            try:
+                resp = session.get(url, params=params, timeout=timeout)
+                resp.raise_for_status()
+                payload = resp.json()
+            except Exception as exc2:
+                log.debug(
+                    "CryptoCompare direct retry failed for %s [%s - %s]: %s",
+                    ticker,
+                    start_ts,
+                    current_end,
+                    exc2,
+                )
+                return None
+        except Exception as exc:
+            log.debug(
+                "CryptoCompare request failed for %s [%s - %s]: %s",
+                ticker,
+                start_ts,
+                current_end,
+                exc,
+            )
+            return None
+
+        if (payload.get("Response") or "").lower() == "error":
+            message = payload.get("Message") or payload.get("Data")
+            log.debug("CryptoCompare error for %s: %s", ticker, message)
+            return None
+
+        data = (payload.get("Data") or {}).get("Data") or []
+        if not data:
+            break
+
+        valid_times: list[pd.Timestamp] = []
+        for entry_row in data:
+            if not isinstance(entry_row, dict):
+                continue
+            ts_val = entry_row.get("time")
+            if ts_val is None:
+                continue
+            try:
+                ts_utc = pd.Timestamp(ts_val, unit="s", tz="UTC")
+            except Exception:
+                continue
+            valid_times.append(ts_utc)
+            rows.append(
+                {
+                    "timestamp": ts_utc.tz_convert(None),
+                    "Open": float(entry_row.get("open", float("nan"))),
+                    "High": float(entry_row.get("high", float("nan"))),
+                    "Low": float(entry_row.get("low", float("nan"))),
+                    "Close": float(entry_row.get("close", float("nan"))),
+                    "Adj Close": float(entry_row.get("close", float("nan"))),
+                    "Volume": float(entry_row.get("volumeto", float("nan"))),
+                }
+            )
+
+        if not valid_times:
+            break
+
+        earliest = min(valid_times)
+        if earliest <= start_ts:
+            break
+
+        candidate_end = earliest - pd.Timedelta(seconds=base_seconds)
+        if candidate_end <= start_ts:
+            break
+        current_end = candidate_end
+
+    if not rows:
+        return None
+
+    frame = pd.DataFrame(rows)
+    if frame.empty:
+        return None
+
+    frame = frame.drop_duplicates("timestamp").set_index("timestamp")
+    frame = frame.sort_index()
+    start_naive = start_ts.tz_convert(None)
+    end_naive = end_ts.tz_convert(None)
+    frame = frame.loc[(frame.index >= start_naive) & (frame.index <= end_naive)]
+    frame = frame.dropna(how="all")
+    if frame.empty:
+        return None
+
+    expected_cols = [c for c in FIELDS_ORDER if c in frame.columns]
+    frame = frame[expected_cols]
+
+    out = pd.concat({ticker: frame}, axis=1)
+    if cache_expire is not None:
+        _save_cache(key, out)
+    return out
+
+
 def get_price_data(
     tickers: Iterable[str],
     start: str,
@@ -250,12 +847,19 @@ def get_price_data(
     """
     tickers = list(dict.fromkeys(tickers))
     iv = (interval or "1d").lower()
+    cache_expire = cache_expire if cache_expire is not None else DEFAULT_CACHE_EXPIRY
 
-    if use_alpaca_crypto() and tickers and all(_is_crypto_symbol(t) for t in tickers):
+    crypto_only = tickers and all(_is_crypto_symbol(t) for t in tickers)
+
+    if use_alpaca_crypto() and crypto_only:
         log.info("Fetching crypto data via Alpaca for tickers: %s", tickers)
-        return _get_crypto_data_alpaca(tickers, start, end, iv)
-    else:
-        _quiet_yf_logs()
+        try:
+            return _get_crypto_data_alpaca(tickers, start, end, iv)
+        except Exception as exc:
+            log.error("Alpaca crypto data fetch failed: %s", exc)
+            log.info("Falling back to Yahoo Finance for crypto data.")
+
+    _quiet_yf_logs()
 
     # ---------- Intraday path (per-ticker only) ----------
     if iv in INTRADAY:
@@ -268,7 +872,6 @@ def get_price_data(
         ]
 
         workers = workers or DEFAULT_WORKERS
-        cache_expire = cache_expire if cache_expire is not None else DEFAULT_CACHE_EXPIRY
 
         frames: list[pd.DataFrame] = []
         missing: list[str] = []
@@ -290,6 +893,45 @@ def get_price_data(
                     except Exception:
                         pass
                     time.sleep(pause * attempt)
+            alt = _download_history(t, start=start, end=end, interval=iv)
+            if alt is not None and not alt.dropna(how="all").empty:
+                log.info("Fetched %s via yfinance.Ticker.history fallback", t)
+                _save_cache(f"{t}|history|{iv}|{start}|{end}", alt)
+                return t, alt, False
+            alt_chart = _download_chart(
+                t,
+                start=start,
+                end=end,
+                interval=iv,
+                cache_expire=cache_expire,
+            )
+            if alt_chart is not None and not alt_chart.dropna(how="all").empty:
+                log.info("Fetched %s via Yahoo chart API fallback", t)
+                return t, alt_chart, False
+            if crypto_only:
+                alt_coinbase = _download_coinbase(
+                    t,
+                    start=start,
+                    end=end,
+                    interval=iv,
+                    cache_expire=cache_expire,
+                )
+                if alt_coinbase is not None and not alt_coinbase.dropna(how="all").empty:
+                    log.info("Fetched %s via Coinbase candles fallback", t)
+                    return t, alt_coinbase, False
+                alt_cryptocompare = _download_cryptocompare(
+                    t,
+                    start=start,
+                    end=end,
+                    interval=iv,
+                    cache_expire=cache_expire,
+                )
+                if (
+                    alt_cryptocompare is not None
+                    and not alt_cryptocompare.dropna(how="all").empty
+                ):
+                    log.info("Fetched %s via CryptoCompare fallback", t)
+                    return t, alt_cryptocompare, False
             return t, None, False
 
         start_t = time.time()
@@ -344,11 +986,93 @@ def get_price_data(
             d1 = _download(t, start=start, end=end, interval=iv, threads=False)
             d1 = _normalize_to_ticker_field(d1, [t])
             if d1 is None or d1.dropna(how="all").empty:
-                missing.append(t)
+                alt = _download_history(t, start=start, end=end, interval=iv)
+                if alt is None or alt.dropna(how="all").empty:
+                    alt_chart = _download_chart(
+                        t,
+                        start=start,
+                        end=end,
+                        interval=iv,
+                        cache_expire=cache_expire,
+                    )
+                    if alt_chart is None or alt_chart.dropna(how="all").empty:
+                        if crypto_only:
+                            alt_coinbase = _download_coinbase(
+                                t,
+                                start=start,
+                                end=end,
+                                interval=iv,
+                                cache_expire=cache_expire,
+                            )
+                            if (
+                                alt_coinbase is not None
+                                and not alt_coinbase.dropna(how="all").empty
+                            ):
+                                frames.append(alt_coinbase)
+                                continue
+                            alt_cryptocompare = _download_cryptocompare(
+                                t,
+                                start=start,
+                                end=end,
+                                interval=iv,
+                                cache_expire=cache_expire,
+                            )
+                            if (
+                                alt_cryptocompare is not None
+                                and not alt_cryptocompare.dropna(how="all").empty
+                            ):
+                                frames.append(alt_cryptocompare)
+                                continue
+                        missing.append(t)
+                        continue
+                    frames.append(alt_chart)
+                    continue
+                frames.append(alt)
                 continue
             frames.append(d1)
         except Exception:
-            missing.append(t)
+            alt = _download_history(t, start=start, end=end, interval=iv)
+            if alt is None or alt.dropna(how="all").empty:
+                alt_chart = _download_chart(
+                    t,
+                    start=start,
+                    end=end,
+                    interval=iv,
+                    cache_expire=cache_expire,
+                )
+                if alt_chart is None or alt_chart.dropna(how="all").empty:
+                    if crypto_only:
+                        alt_coinbase = _download_coinbase(
+                            t,
+                            start=start,
+                            end=end,
+                            interval=iv,
+                            cache_expire=cache_expire,
+                        )
+                        if (
+                            alt_coinbase is not None
+                            and not alt_coinbase.dropna(how="all").empty
+                        ):
+                            frames.append(alt_coinbase)
+                            continue
+                        alt_cryptocompare = _download_cryptocompare(
+                            t,
+                            start=start,
+                            end=end,
+                            interval=iv,
+                            cache_expire=cache_expire,
+                        )
+                        if (
+                            alt_cryptocompare is not None
+                            and not alt_cryptocompare.dropna(how="all").empty
+                        ):
+                            frames.append(alt_cryptocompare)
+                            continue
+                    missing.append(t)
+                    continue
+                frames.append(alt_chart)
+                continue
+            frames.append(alt)
 
     if frames:
         out = pd.concat(frames, axis=1).sort_index()
