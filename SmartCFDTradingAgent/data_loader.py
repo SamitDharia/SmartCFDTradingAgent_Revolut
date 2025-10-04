@@ -234,7 +234,6 @@ def _download(
 
 
 _YF_SESSION: requests.Session | None = None
-_COINBASE_SESSION: requests.Session | None = None
 
 
 def _get_yf_session() -> requests.Session:
@@ -253,25 +252,6 @@ def _get_yf_session() -> requests.Session:
         )
         _YF_SESSION = session
     return _YF_SESSION
-
-
-def _get_coinbase_session() -> requests.Session:
-    global _COINBASE_SESSION
-    if _COINBASE_SESSION is None:
-        session = requests.Session()
-        session.headers.update(
-            {
-                "User-Agent": os.getenv(
-                    "COINBASE_USER_AGENT",
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/122.0 Safari/537.36",
-                ),
-                "Accept": "application/json",
-            }
-        )
-        _COINBASE_SESSION = session
-    return _COINBASE_SESSION
 
 
 def _download_history(
@@ -307,227 +287,6 @@ def _download_history(
 
     history = history[expected_cols]
     return pd.concat({ticker: history}, axis=1)
-
-
-def _download_chart(
-    ticker: str,
-    *,
-    start: str | None,
-    end: str | None,
-    interval: str,
-    cache_expire: float | None = None,
-) -> pd.DataFrame | None:
-    """Fallback using Yahoo chart API when yfinance helpers fail.
-
-    Returns data normalized to MultiIndex [ticker, field] or ``None`` when
-    retrieval fails. Responses are cached using the shared pickle cache so we
-    don't spam Yahoo when running multiple retries.
-    """
-
-    start_ts = pd.Timestamp(start) if start is not None else None
-    end_ts = pd.Timestamp(end) if end is not None else None
-    if start_ts is None or end_ts is None:
-        return None
-
-    start_ts = _ensure_utc(start_ts)
-    end_ts = _ensure_utc(end_ts)
-    if end_ts <= start_ts:
-        end_ts = start_ts + pd.Timedelta(days=1)
-
-    iv = interval.lower()
-    interval_map = {"1h": "60m", "90m": "90m"}
-    yahoo_interval = interval_map.get(iv, iv)
-
-    key = f"chart|{ticker}|{yahoo_interval}|{int(start_ts.timestamp())}|{int(end_ts.timestamp())}"
-    if cache_expire is not None:
-        cached = _load_cache(key, cache_expire)
-        if cached is not None:
-            return cached
-
-    params = {
-        "period1": int(start_ts.timestamp()),
-        "period2": int(end_ts.timestamp()),
-        "interval": yahoo_interval,
-        "includePrePost": "false",
-        "events": "history",
-    }
-
-    try:
-        resp = _get_yf_session().get(
-            f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}",
-            params=params,
-            timeout=float(os.getenv("YF_TIMEOUT", "10")),
-        )
-        resp.raise_for_status()
-        payload = resp.json()
-    except Exception as exc:
-        log.debug("Yahoo chart API request failed for %s: %s", ticker, exc)
-        return None
-
-    result = payload.get("chart", {}).get("result") or []
-    if not result:
-        return None
-
-    result = result[0]
-    timestamps = result.get("timestamp")
-    indicators = result.get("indicators", {})
-    quotes = (indicators.get("quote") or [{}])[0]
-    adjcloses = (indicators.get("adjclose") or [{}])[0]
-    if not timestamps:
-        return None
-
-    index = pd.to_datetime(timestamps, unit="s", utc=True).tz_convert(None)
-    frame = pd.DataFrame(
-        {
-            "Open": quotes.get("open"),
-            "High": quotes.get("high"),
-            "Low": quotes.get("low"),
-            "Close": quotes.get("close"),
-            "Adj Close": adjcloses.get("adjclose"),
-            "Volume": quotes.get("volume"),
-        },
-        index=index,
-    )
-
-    frame = frame.dropna(how="all")
-    if frame.empty:
-        return None
-
-    # Ensure chronological order and expected column subset
-    frame = frame.sort_index()
-    expected_cols = [c for c in FIELDS_ORDER if c in frame.columns]
-    frame = frame[expected_cols]
-
-    out = pd.concat({ticker: frame}, axis=1)
-    if cache_expire is not None:
-        _save_cache(key, out)
-    return out
-
-
-_COINBASE_GRANULARITY = {
-    "1m": 60,
-    "2m": 120,
-    "5m": 300,
-    "15m": 900,
-    "30m": 1800,
-    "60m": 3600,
-    "90m": 5400,
-    "1h": 3600,
-    "1d": 86400,
-}
-
-
-def _download_coinbase(
-    ticker: str,
-    *,
-    start: str | None,
-    end: str | None,
-    interval: str,
-    cache_expire: float | None = None,
-) -> pd.DataFrame | None:
-    """Fallback using Coinbase public candles endpoint.
-
-    Coinbase limits each request to 300 candles; this function automatically
-    chunks the requested timerange and stitches responses together. Results are
-    cached using the shared pickle cache so we do not overwhelm the API.
-    """
-
-    granularity = _COINBASE_GRANULARITY.get(interval.lower())
-    if granularity is None:
-        return None
-
-    start_ts = pd.Timestamp(start) if start is not None else None
-    end_ts = pd.Timestamp(end) if end is not None else None
-    if start_ts is None or end_ts is None:
-        return None
-
-    start_ts = _ensure_utc(start_ts)
-    end_ts = _ensure_utc(end_ts)
-    if end_ts <= start_ts:
-        end_ts = start_ts + pd.Timedelta(seconds=granularity)
-
-    key = (
-        f"coinbase|{ticker}|{granularity}|"
-        f"{int(start_ts.timestamp())}|{int(end_ts.timestamp())}"
-    )
-    if cache_expire is not None:
-        cached = _load_cache(key, cache_expire)
-        if cached is not None:
-            return cached
-
-    base_url = os.getenv(
-        "COINBASE_API_URL", "https://api.exchange.coinbase.com"
-    ).rstrip("/")
-    product = ticker.upper().replace("_", "-")
-    url = f"{base_url}/products/{product}/candles"
-
-    chunk = pd.Timedelta(seconds=granularity * 300)
-    current_start = start_ts
-    rows: list[dict] = []
-    timeout = float(os.getenv("COINBASE_TIMEOUT", "10"))
-
-    session = _get_coinbase_session()
-
-    while current_start < end_ts:
-        current_end = min(current_start + chunk, end_ts)
-        params = {
-            "start": current_start.isoformat(),
-            "end": current_end.isoformat(),
-            "granularity": granularity,
-        }
-        try:
-            resp = session.get(url, params=params, timeout=timeout)
-            resp.raise_for_status()
-            payload = resp.json()
-        except Exception as exc:
-            log.debug(
-                "Coinbase API request failed for %s [%s - %s]: %s",
-                ticker,
-                current_start,
-                current_end,
-                exc,
-            )
-            return None
-
-        if not isinstance(payload, list):
-            log.debug("Coinbase API unexpected payload for %s: %s", ticker, payload)
-            return None
-
-        for entry in payload:
-            if not isinstance(entry, (list, tuple)) or len(entry) < 6:
-                continue
-            ts = pd.Timestamp(entry[0], unit="s", tz="UTC").tz_convert(None)
-            low, high, open_, close, volume = entry[1:6]
-            rows.append(
-                {
-                    "timestamp": ts,
-                    "Open": float(open_),
-                    "High": float(high),
-                    "Low": float(low),
-                    "Close": float(close),
-                    "Adj Close": float(close),
-                    "Volume": float(volume),
-                }
-            )
-
-        current_start = current_end
-
-    if not rows:
-        return None
-
-    frame = pd.DataFrame(rows)
-    if frame.empty:
-        return None
-
-    frame = frame.drop_duplicates("timestamp").set_index("timestamp")
-    frame = frame.sort_index()
-    expected_cols = [c for c in FIELDS_ORDER if c in frame.columns]
-    frame = frame[expected_cols]
-
-    out = pd.concat({ticker: frame}, axis=1)
-    if cache_expire is not None:
-        _save_cache(key, out)
-    return out
 
 
 def get_price_data(
@@ -599,27 +358,6 @@ def get_price_data(
                 log.info("Fetched %s via yfinance.Ticker.history fallback", t)
                 _save_cache(f"{t}|history|{iv}|{start}|{end}", alt)
                 return t, alt, False
-            alt_chart = _download_chart(
-                t,
-                start=start,
-                end=end,
-                interval=iv,
-                cache_expire=cache_expire,
-            )
-            if alt_chart is not None and not alt_chart.dropna(how="all").empty:
-                log.info("Fetched %s via Yahoo chart API fallback", t)
-                return t, alt_chart, False
-            if crypto_only:
-                alt_coinbase = _download_coinbase(
-                    t,
-                    start=start,
-                    end=end,
-                    interval=iv,
-                    cache_expire=cache_expire,
-                )
-                if alt_coinbase is not None and not alt_coinbase.dropna(how="all").empty:
-                    log.info("Fetched %s via Coinbase candles fallback", t)
-                    return t, alt_coinbase, False
             return t, None, False
 
         start_t = time.time()
@@ -676,31 +414,7 @@ def get_price_data(
             if d1 is None or d1.dropna(how="all").empty:
                 alt = _download_history(t, start=start, end=end, interval=iv)
                 if alt is None or alt.dropna(how="all").empty:
-                    alt_chart = _download_chart(
-                        t,
-                        start=start,
-                        end=end,
-                        interval=iv,
-                        cache_expire=cache_expire,
-                    )
-                    if alt_chart is None or alt_chart.dropna(how="all").empty:
-                        if crypto_only:
-                            alt_coinbase = _download_coinbase(
-                                t,
-                                start=start,
-                                end=end,
-                                interval=iv,
-                                cache_expire=cache_expire,
-                            )
-                            if (
-                                alt_coinbase is not None
-                                and not alt_coinbase.dropna(how="all").empty
-                            ):
-                                frames.append(alt_coinbase)
-                                continue
-                        missing.append(t)
-                        continue
-                    frames.append(alt_chart)
+                    missing.append(t)
                     continue
                 frames.append(alt)
                 continue
@@ -708,31 +422,7 @@ def get_price_data(
         except Exception:
             alt = _download_history(t, start=start, end=end, interval=iv)
             if alt is None or alt.dropna(how="all").empty:
-                alt_chart = _download_chart(
-                    t,
-                    start=start,
-                    end=end,
-                    interval=iv,
-                    cache_expire=cache_expire,
-                )
-                if alt_chart is None or alt_chart.dropna(how="all").empty:
-                    if crypto_only:
-                        alt_coinbase = _download_coinbase(
-                            t,
-                            start=start,
-                            end=end,
-                            interval=iv,
-                            cache_expire=cache_expire,
-                        )
-                        if (
-                            alt_coinbase is not None
-                            and not alt_coinbase.dropna(how="all").empty
-                        ):
-                            frames.append(alt_coinbase)
-                            continue
-                    missing.append(t)
-                    continue
-                frames.append(alt_chart)
+                missing.append(t)
                 continue
             frames.append(alt)
 

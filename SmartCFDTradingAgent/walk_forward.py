@@ -3,7 +3,12 @@ from __future__ import annotations
 import argparse, datetime as dt, json, sqlite3
 import logging
 from pathlib import Path
+import os
+import pickle
+import time
+import yfinance as yf
 import pandas as pd
+from requests import HTTPError
 from SmartCFDTradingAgent.data_loader import get_price_data
 from SmartCFDTradingAgent.indicators import ema, macd, adx
 from SmartCFDTradingAgent.utils import trade_logger
@@ -15,10 +20,41 @@ except Exception:  # pragma: no cover - model training optional
     PriceDirectionModel = None  # type: ignore
 
 STORE = Path(__file__).resolve().parent / "storage"
-STORE.mkdir(exist_ok=True)
-log = get_logger()
+MODEL_DEST = STORE / "ml_model.pkl"
 
-log = logging.getLogger(__name__)
+def _save_model_atomic(model_obj, dest: Path = MODEL_DEST):
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_suffix(dest.suffix + f".tmp.{int(time.time())}")
+    try:
+        # Prefer model.save(path) if available
+        if hasattr(model_obj, "save"):
+            try:
+                model_obj.save(str(tmp))
+            except TypeError:
+                # some save implementations may require a file-like; fallback to pickle
+                with tmp.open("wb") as fh:
+                    pickle.dump(model_obj, fh)
+        else:
+            with tmp.open("wb") as fh:
+                pickle.dump(model_obj, fh)
+        # Backup existing model (keep single backup)
+        if dest.exists():
+            bak = dest.with_suffix(dest.suffix + ".bak")
+            try:
+                if bak.exists():
+                    bak.unlink()
+                dest.replace(bak)
+            except Exception:
+                pass
+        # Atomic replace
+        os.replace(str(tmp), str(dest))
+    except Exception:
+        try:
+            if tmp.exists():
+                tmp.unlink()
+        except Exception:
+            pass
+        raise
 
 
 log = get_logger()
@@ -166,7 +202,25 @@ def retrain_from_trade_log(years: int = 1, interval: str = "1d", min_hours_betwe
 
     end = dt.date.today().isoformat()
     start = (dt.date.today() - dt.timedelta(days=365 * years)).isoformat()
-    df = get_price_data(tickers, start, end, interval=interval)
+    # replace the direct call with a try/except that falls back to Yahoo
+    try:
+        df = get_price_data(tickers, start, end, interval=interval)
+    except HTTPError as e:
+        log.error("Alpaca data fetch failed: %s. Trying Yahoo fallback.", e)
+        try:
+            df = _yf_fetch_as_dataframe(tickers, start, end, interval)
+            log.info("Fetched training data via Yahoo for tickers: %s", tickers)
+        except Exception as e2:
+            log.error("Yahoo fallback failed: %s", e2)
+            raise
+    except Exception as e:
+        # non-HTTP errors -> attempt Yahoo as well
+        try:
+            df = _yf_fetch_as_dataframe(tickers, start, end, interval)
+            log.info("Fetched training data via Yahoo for tickers: %s", tickers)
+        except Exception as e2:
+            log.error("Data fetch failed and Yahoo fallback failed: %s / %s", e, e2)
+            raise
 
     params_path = store / "params.json"
     try:
@@ -202,7 +256,17 @@ def retrain_from_trade_log(years: int = 1, interval: str = "1d", min_hours_betwe
                 close = df["Close"]
             model = PriceDirectionModel()
             model.fit(close.to_frame("Close"))
-            model.save(store / "ml_model.pkl")
+            # save atomically and back up previous model
+            try:
+                _save_model_atomic(model, dest=store / "ml_model.pkl")
+            except Exception:
+                # fallback to best-effort save
+                try:
+                    model.save(store / "ml_model.pkl")
+                except Exception:
+                    with (store / "ml_model.pkl").open("wb") as fh:
+                        import pickle
+                        pickle.dump(model, fh)
         except Exception:
             pass
 
@@ -210,6 +274,34 @@ def retrain_from_trade_log(years: int = 1, interval: str = "1d", min_hours_betwe
         stamp.write_text(dt.datetime.utcnow().isoformat(), encoding="utf-8")
     except Exception:
         pass
+
+
+def _yf_fetch_as_dataframe(tickers, start, end, interval):
+    """Download each ticker individually via yfinance and return a MultiIndex DataFrame
+    with (ticker, field) columns to match Alpaca-style output expected by retrain."""
+    iv_map = {"1h":"60m","60m":"60m","1d":"1d","1m":"1m","5m":"5m","15m":"15m","30m":"30m"}
+    yf_iv = iv_map.get(interval, interval)
+    frames = []
+    failed = []
+    for t in tickers:
+        try:
+            df = yf.download(t, start=start, end=end, interval=yf_iv, progress=False)
+            if df is None or df.empty:
+                failed.append(t)
+                log.warning("Yahoo empty for %s", t)
+                continue
+            df = df.rename(columns={"Adj Close":"Adj_Close"})
+            frames.append((t, df[["Open","High","Low","Close","Volume"]].copy()))
+        except Exception as e:
+            failed.append(t)
+            log.warning("Failed to get ticker '%s' reason: %s", t, e)
+    if not frames:
+        raise RuntimeError("Yahoo returned no usable data")
+    # concat to MultiIndex columns similar to Alpaca data format
+    df_concat = pd.concat([f[1] for f in frames], axis=1, keys=[f[0] for f in frames])
+    if failed:
+        log.warning("%d Failed downloads:\n%s", len(failed), failed)
+    return df_concat
 
 
 def main():
