@@ -60,3 +60,39 @@ def test_get_price_data_cache_hit(monkeypatch, tmp_path, caplog):
     get_price_data(["AAA"], "2022-01-01", "2022-01-02", interval="1h", max_tries=1, pause=0)
     assert calls["n"] == 1
     assert any("Cache hit" in r.message for r in caplog.records)
+
+
+def test_coinbase_fallback(monkeypatch):
+    def fail_download(*_, **__):
+        raise Exception("primary download failed")
+
+    def fail_history(*_, **__):
+        return None
+
+    def fail_chart(*_, **__):
+        return None
+
+    def fake_coinbase(ticker, *, start, end, interval, cache_expire=None):
+        idx = pd.date_range(start, periods=2, freq="1h")
+        frame = pd.DataFrame(
+            {
+                "Open": [1.0, 2.0],
+                "High": [1.5, 2.5],
+                "Low": [0.5, 1.5],
+                "Close": [1.2, 2.2],
+                "Adj Close": [1.2, 2.2],
+                "Volume": [10.0, 20.0],
+            },
+            index=idx,
+        )
+        return pd.concat({ticker: frame}, axis=1)
+
+    monkeypatch.setattr("SmartCFDTradingAgent.data_loader._download", fail_download)
+    monkeypatch.setattr("SmartCFDTradingAgent.data_loader._download_history", fail_history)
+    monkeypatch.setattr("SmartCFDTradingAgent.data_loader._download_chart", fail_chart)
+    monkeypatch.setattr("SmartCFDTradingAgent.data_loader._download_coinbase", fake_coinbase)
+
+    df = get_price_data(["BTC-USD"], "2022-01-01", "2022-01-03", interval="1h", max_tries=1, pause=0)
+
+    assert not df.empty
+    assert ("BTC-USD", "Close") in df.columns

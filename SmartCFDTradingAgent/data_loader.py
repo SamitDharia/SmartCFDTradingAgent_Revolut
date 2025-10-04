@@ -309,7 +309,9 @@ def get_price_data(
     iv = (interval or "1d").lower()
     cache_expire = cache_expire if cache_expire is not None else DEFAULT_CACHE_EXPIRY
 
-    if use_alpaca_crypto() and tickers and all(_is_crypto_symbol(t) for t in tickers):
+    crypto_only = tickers and all(_is_crypto_symbol(t) for t in tickers)
+
+    if use_alpaca_crypto() and crypto_only:
         log.info("Fetching crypto data via Alpaca for tickers: %s", tickers)
         try:
             return _get_crypto_data_alpaca(tickers, start, end, iv)
