@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 import time
 import requests
+import warnings
+import urllib3
 from dotenv import load_dotenv
 
 from SmartCFDTradingAgent.utils.logger import get_logger
@@ -58,6 +60,9 @@ def _post(text: str, token: str, chat_id: str) -> bool:
     # small retry loop (handles 429 / transient)
     for attempt in range(4):
         try:
+            # Suppress noisy InsecureRequestWarning only when verify=False is requested
+            if _skip_verify():
+                warnings.filterwarnings("ignore", category=urllib3.exceptions.InsecureRequestWarning)
             r = requests.post(url, data=data, timeout=TIMEOUT, verify=not _skip_verify())
         except Exception as e:
             if attempt == 3:

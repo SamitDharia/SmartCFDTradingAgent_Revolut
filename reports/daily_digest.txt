@@ -1,4 +1,4 @@
-Daily Trading Digest | Saturday 04 October 2025 15:30
+Daily Trading Digest | Saturday 04 October 2025 16:08
 ========================================================================
 
 AT A GLANCE
@@ -21,11 +21,11 @@ PLAN REVIEW
 - Break-even win rate: 33.33%
 
 FRESH TRADE IDEAS
-- LTC-USD: Sell near 118.09 | stop 119.52 | target 115.23 | timeframe 1h | trend guide 10
-- SOL-USD: Sell near 228.31 | stop 231.28 | target 222.36 | timeframe 1h | trend guide 10
-- LTC-USD: Sell near 118.09 | stop 119.52 | target 115.23 | timeframe 1h | trend guide 10
-- SOL-USD: Sell near 229.0 | stop 232.1 | target 222.82 | timeframe 1h | trend guide 10
 - LTC-USD: Sell near 118.61 | stop 120.04 | target 115.73 | timeframe 1h | trend guide 10
+- SOL-USD: Sell near 229.01 | stop 231.92 | target 223.18 | timeframe 1h | trend guide 10
+- BTC-USD: Buy near 122395.64 | stop 122388.64 | target 122409.63 | timeframe 1h | trend guide 12
+- SOL-USD: Sell near 226.99 | stop 230.18 | target 220.62 | timeframe 1h | trend guide 10
+- LTC-USD: Sell near 117.97 | stop 119.43 | target 115.07 | timeframe 1h | trend guide 10
 
 NEXT STEPS
 1. Open your broker and place any ideas you like (with stop & target).
