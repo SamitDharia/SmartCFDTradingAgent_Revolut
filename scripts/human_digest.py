@@ -14,6 +14,9 @@ if str(ROOT) not in sys.path:
 
 from dotenv import load_dotenv
 
+# Load .env before importing project modules so data sources & creds are available at import-time
+load_dotenv()
+
 from SmartCFDTradingAgent.reporting import Digest, CHART_PATH
 from SmartCFDTradingAgent.utils.telegram import send
 from SmartCFDTradingAgent.emailer import send_email, default_recipients
@@ -37,7 +40,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--email-to", default="", help="Comma separated extra email recipients")
     args = parser.parse_args(argv)
 
-    load_dotenv()
     digest = Digest()
     plain_text, html_text, chart_path = digest.build_email_content(decisions=args.decisions)
 

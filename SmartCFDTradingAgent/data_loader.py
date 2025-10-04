@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import hashlib
 import os
@@ -15,8 +15,21 @@ from SmartCFDTradingAgent.utils.logger import get_logger
 INTRADAY = {"1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h"}
 FIELDS_ORDER = ["Open", "High", "Low", "Close", "Adj Close", "Volume"]
 
-USE_ALPACA_CRYPTO = os.getenv("USE_ALPACA_CRYPTO", "").strip().lower() in {"1", "true", "yes", "on"}
 ALPACA_CRYPTO_EXCHANGES = [ex.strip().upper() for ex in os.getenv("ALPACA_CRYPTO_EXCHANGES", "CBSE").split(",") if ex.strip()]
+
+def _truthy(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+def _has_alpaca_creds() -> bool:
+    return bool(os.getenv("ALPACA_API_KEY") or os.getenv("APCA_API_KEY_ID"))
+
+def use_alpaca_crypto() -> bool:
+    """Return True if crypto data should be fetched from Alpaca.
+
+    Prefers explicit flag ``USE_ALPACA_CRYPTO=1``; otherwise auto-enables when
+    Alpaca credentials are present in the environment (loaded via dotenv).
+    """
+    return _truthy("USE_ALPACA_CRYPTO") or _has_alpaca_creds()
 
 # --- Configurable defaults ---
 DEFAULT_WORKERS = int(os.getenv("DATA_WORKERS", "4"))
@@ -222,7 +235,7 @@ def get_price_data(
     tickers = list(dict.fromkeys(tickers))
     iv = (interval or "1d").lower()
 
-    if USE_ALPACA_CRYPTO and tickers and all(_is_crypto_symbol(t) for t in tickers):
+    if use_alpaca_crypto() and tickers and all(_is_crypto_symbol(t) for t in tickers):
         log.info("Fetching crypto data via Alpaca for tickers: %s", tickers)
         return _get_crypto_data_alpaca(tickers, start, end, iv)
 
@@ -328,4 +341,6 @@ def get_price_data(
     if missing:
         raise RuntimeError(f"No data returned for {missing}.")
     raise RuntimeError(f"Failed to download data: {last_err}")
+
+
 
