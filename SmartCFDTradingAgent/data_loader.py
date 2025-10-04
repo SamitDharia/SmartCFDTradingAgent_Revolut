@@ -253,9 +253,13 @@ def get_price_data(
 
     if use_alpaca_crypto() and tickers and all(_is_crypto_symbol(t) for t in tickers):
         log.info("Fetching crypto data via Alpaca for tickers: %s", tickers)
-        return _get_crypto_data_alpaca(tickers, start, end, iv)
-    else:
-        _quiet_yf_logs()
+        try:
+            return _get_crypto_data_alpaca(tickers, start, end, iv)
+        except Exception as exc:
+            log.error("Alpaca crypto data fetch failed: %s", exc)
+            log.info("Falling back to Yahoo Finance for crypto data.")
+
+    _quiet_yf_logs()
 
     # ---------- Intraday path (per-ticker only) ----------
     if iv in INTRADAY:
