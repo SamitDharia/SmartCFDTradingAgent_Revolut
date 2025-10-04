@@ -1,14 +1,15 @@
 ﻿from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Iterable, List
-import logging
 
 import pandas as pd
+import requests
 import yfinance as yf
 import requests
 

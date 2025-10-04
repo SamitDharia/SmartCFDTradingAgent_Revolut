@@ -1,5 +1,8 @@
 import pandas as pd
 import pytest
+import requests
+
+from SmartCFDTradingAgent import data_loader as dl
 from SmartCFDTradingAgent.data_loader import get_price_data
 
 
