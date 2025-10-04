@@ -364,6 +364,24 @@ class Digest:
                         return float(tp), "tp_touch"
             return None, None
 
+        def _refine_touch_1m(ticker: str, side: str, entry: float, sl: float | None, tp: float | None, start_ts: dt.datetime):
+            """Attempt a 1m-granularity check for TP/SL ordering on the same day.
+
+            Falls back to None on any error.
+            """
+            try:
+                start = start_ts.date().isoformat()
+                end = (start_ts.date() + dt.timedelta(days=1)).isoformat()
+                df_m = get_price_data([ticker], start, end, interval="1m")
+                if df_m is None or df_m.empty:
+                    return None, None
+                if isinstance(df_m.columns, pd.MultiIndex):
+                    df_m = df_m[ticker]
+                df_m = df_m.dropna(how="all")
+                return _first_touch(side, entry, sl, tp, df_m, start_ts)
+            except Exception:
+                return None, None
+
         for idx, item in enumerate(items):
             ticker = str(item.get("ticker") or "").upper()
             if not ticker or not is_crypto(ticker):
@@ -404,7 +422,10 @@ class Digest:
             side = str(item.get("side", "")).strip().lower()
             exit_px, exit_reason = _first_touch(side, e, sl_v, tp_v, df_one, decision_dt)
             if exit_px is None or exit_reason is None:
-                continue  # keep open if no touch detected
+                # Try 1m refinement if within same day
+                exit_px, exit_reason = _refine_touch_1m(ticker, side, e, sl_v, tp_v, decision_dt)
+                if exit_px is None or exit_reason is None:
+                    continue  # keep open if no touch detected
 
             risk_abs = item.get("risk")
             if risk_abs in (None, 0) and sl_v is not None:
