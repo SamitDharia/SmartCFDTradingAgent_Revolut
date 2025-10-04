@@ -137,7 +137,7 @@ def optimize_walk_forward(df: pd.DataFrame, train_months=6, test_months=1):
     }
 
 
-def retrain_from_trade_log(years: int = 1, interval: str = "1d") -> None:
+def retrain_from_trade_log(years: int = 1, interval: str = "1d", min_hours_between: int = 24) -> None:
     """Rebuild walk-forward params and retrain the ML model from trade logs."""
     db_path = trade_logger.DB_PATH
     store = db_path.parent
@@ -148,7 +148,8 @@ def retrain_from_trade_log(years: int = 1, interval: str = "1d") -> None:
     try:
         if stamp.exists():
             mtime = dt.datetime.fromtimestamp(stamp.stat().st_mtime)
-            if (dt.datetime.utcnow() - mtime).total_seconds() < 24 * 3600:
+            gap = max(0, int(min_hours_between)) * 3600
+            if (dt.datetime.utcnow() - mtime).total_seconds() < gap:
                 return
     except Exception:
         pass

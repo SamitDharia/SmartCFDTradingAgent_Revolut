@@ -447,6 +447,38 @@ class Digest:
             except (TypeError, ValueError):
                 return "n/a"
 
+        # Load strategy state (if available)
+        strategy_state = None
+        try:
+            st_path = STORE / "strategy_state.json"
+            if st_path.exists():
+                strategy_state = json.loads(st_path.read_text(encoding="utf-8"))
+        except Exception:
+            strategy_state = None
+
+        def _strategy_summary_lines(state: dict[str, object] | None) -> list[str]:
+            if not state:
+                return []
+            try:
+                d = state.get("defaults", {}) or {}
+                ml = state.get("ml", {}) or {}
+                risk = state.get("risk", {}) or {}
+                budgets = state.get("class_budgets", {}) or {}
+                parts = [
+                    f"- Strategy: EMA {d.get('ema_fast','?')}/{d.get('ema_slow','?')} | ADX {d.get('adx','?')} | SL {d.get('sl_atr','?')}x ATR | TP {d.get('tp_atr','?')}x ATR",
+                    f"- ML: {'on' if ml.get('enabled') else 'off'} ({ml.get('blend','off')} @ {ml.get('threshold',0.0)})",
+                    f"- Risk: per trade {risk.get('per_trade', 0.0):.2%} | portfolio cap {risk.get('max_portfolio', 0.0):.2%}",
+                ]
+                if budgets:
+                    try:
+                        btxt = ", ".join(f"{k}={float(v):.2%}" for k, v in budgets.items())
+                        parts.append(f"- Class budgets: {btxt}")
+                    except Exception:
+                        pass
+                return parts
+            except Exception:
+                return []
+
         plain_lines: list[str] = []
         plain_lines.extend(
             [
@@ -467,6 +499,11 @@ class Digest:
         plain_lines.append("- Trend note: ATR keeps risk steady — higher ATR automatically means smaller position size.")
 
         plain_lines.append("")
+        lines_strategy = _strategy_summary_lines(strategy_state)
+        if lines_strategy:
+            plain_lines.append("STRATEGY USED")
+            plain_lines.extend(lines_strategy)
+            plain_lines.append("")
         plain_lines.append("PLAN REVIEW")
         if simulation and simulation.get("count", 0) > 0:
             plain_lines.append(
@@ -587,6 +624,13 @@ class Digest:
             + "</div></section>"
         )
 
+        # Strategy (HTML)
+        strategy_html = ""
+        html_lines = _strategy_summary_lines(strategy_state)
+        if html_lines:
+            items = "".join(f"<li>{l}</li>" for l in html_lines)
+            strategy_html = f"<section class='section'><h2>Strategy Used</h2><ul class='plan-list'>{items}</ul></section>"
+
         plan_points: list[str] = []
         if simulation and simulation.get("count", 0) > 0:
             plan_points.append(
@@ -676,6 +720,7 @@ class Digest:
               </div>
               <div class='content'>
                 {summary_html}
+                {strategy_html}
                 {plan_html}
                 {ideas_html}
                 {chart_html}

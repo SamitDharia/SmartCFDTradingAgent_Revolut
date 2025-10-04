@@ -1,4 +1,4 @@
-Daily Trading Digest | Saturday 04 October 2025 11:01
+Daily Trading Digest | Saturday 04 October 2025 11:25
 ========================================================================
 
 AT A GLANCE
@@ -15,11 +15,11 @@ PLAN REVIEW
 - Break-even win rate: 33.33%
 
 FRESH TRADE IDEAS
-- BCH-USD: Buy near 608.87 | stop 601.09 | target 624.42 | timeframe 1h | trend guide 10
-- BTC-USD: Buy near 122600.58 | stop 121031.55 | target 125738.65 | timeframe 1h | trend guide 10
 - BCH-USD: Buy near 604.63 | stop 595.59 | target 622.71 | timeframe 1h | trend guide 10
 - BTC-USD: Buy near 122145.4 | stop 120567.3 | target 125301.6 | timeframe 1h | trend guide 10
 - BCH-USD: Buy near 604.25 | stop 595.21 | target 622.33 | timeframe 1h | trend guide 10
+- SOL-USD: Sell near 229.57 | stop 232.56 | target 223.58 | timeframe 1h | trend guide 10
+- LTC-USD: Sell near 118.69 | stop 120.26 | target 115.55 | timeframe 1h | trend guide 10
 
 NEXT STEPS
 1. Open your broker and place any ideas you like (with stop & target).

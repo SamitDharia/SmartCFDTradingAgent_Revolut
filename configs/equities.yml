@@ -7,6 +7,12 @@ profiles:
       - IWM
     interval: "1d"
     use_params: true
+    ml_model: SmartCFDTradingAgent/storage/ml_model.pkl
+    ml_threshold: 0.65
+    ml_blend: auto
+    budget_mode: auto
+    retrain_on_dry_run: true
+    retrain_interval_hours: 4
     interval_weights: ""
     adx: 8
     ema_fast: 15
@@ -17,7 +23,5 @@ profiles:
     cooldown_min: 60
     class_caps:
       equity: 2
-    class_risk_budget:
-      equity: 0.02
     max_trades: 2
     grace: 120

@@ -5,6 +5,13 @@
     intervals: "15m,1h"
     interval_weights: "15m=1,1h=2"
     vote: true
+    use_params: true
+    ml_model: SmartCFDTradingAgent/storage/ml_model.pkl
+    ml_threshold: 0.65
+    ml_blend: auto
+    budget_mode: auto
+    retrain_on_dry_run: true
+    retrain_interval_hours: 4
     adx: 10
     ema_fast: 10
     ema_slow: 20
@@ -14,7 +21,5 @@
     cooldown_min: 30
     class_caps:
       crypto: 2
-    class_risk_budget:
-      crypto: 0.10
     max_trades: 10
     grace: 0
