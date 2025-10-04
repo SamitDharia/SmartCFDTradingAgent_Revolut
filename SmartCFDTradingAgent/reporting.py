@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from SmartCFDTradingAgent.pipeline import read_last_decisions, is_crypto
+from SmartCFDTradingAgent.data_loader import get_price_data
 from SmartCFDTradingAgent.utils.trade_logger import aggregate_trade_stats, log_trade, CSV_PATH
 
 STORE = Path(__file__).resolve().parent / "storage"
@@ -265,12 +266,14 @@ class Digest:
         target_date: Optional[dt.date] | None = None,
         simulation: Optional[dict[str, Any]] = None,
     ) -> int:
-        """Persist simulated crypto trades into the trade log for metrics.
+        """Persist data-backed simulated crypto trades into the trade log.
 
-        For manually executed crypto trades (no broker integration), we assume the
-        recommended take-profit was hit so the digest can display hypothetical
-        results. Entries are tagged via ``broker="manual-simulated"`` so real
-        executions can override them later.
+        This evaluates, for each crypto decision made on ``target_date``, whether TP or SL was
+        touched first after the decision timestamp using intraday OHLC data (15m by default).
+        It logs an exit at the touched level with a clear reason (``tp_touch`` or ``sl_touch``).
+        If neither level is touched during the evaluation window, the trade remains open and
+        is not backfilled. Entries are tagged via ``broker="manual-simulated"`` so real executions
+        can override them later.
         """
 
         target_date = target_date or (dt.datetime.now().date() - dt.timedelta(days=1))
@@ -307,6 +310,20 @@ class Digest:
         saved = 0
         items = simulation.get("items", [])
 
+        # Intraday bars for target date to evaluate TP/SL touch
+        try:
+            tickers = sorted({str((it.get("ticker") or "")).upper() for it in items if it.get("ticker")})
+        except Exception:
+            tickers = []
+        intraday_df = None
+        if tickers:
+            try:
+                start = target_date.isoformat()
+                end = (target_date + dt.timedelta(days=1)).isoformat()
+                intraday_df = get_price_data(tickers, start, end, interval="15m")
+            except Exception:
+                intraday_df = None
+
         def _resolve_dt(value: Any, fallback_date: dt.date, offset_minutes: int) -> dt.datetime:
             if isinstance(value, dt.datetime):
                 return value
@@ -322,6 +339,31 @@ class Digest:
                     pass
             return dt.datetime.combine(fallback_date, dt.time(9, 0)) + dt.timedelta(minutes=offset_minutes)
 
+        def _first_touch(side: str, entry: float, sl: float | None, tp: float | None, df_one: pd.DataFrame, start_ts: dt.datetime):
+            if df_one is None or df_one.empty or (sl is None and tp is None):
+                return None, None
+            try:
+                data = df_one.loc[df_one.index >= pd.Timestamp(start_ts)]
+            except Exception:
+                data = df_one
+            for _, row in data.iterrows():
+                try:
+                    high = float(row.get("High", float("nan")))
+                    low = float(row.get("Low", float("nan")))
+                except Exception:
+                    continue
+                if str(side).lower() == "sell":
+                    if sl is not None and high >= sl:
+                        return float(sl), "sl_touch"
+                    if tp is not None and low <= tp:
+                        return float(tp), "tp_touch"
+                else:
+                    if sl is not None and low <= sl:
+                        return float(sl), "sl_touch"
+                    if tp is not None and high >= tp:
+                        return float(tp), "tp_touch"
+            return None, None
+
         for idx, item in enumerate(items):
             ticker = str(item.get("ticker") or "").upper()
             if not ticker or not is_crypto(ticker):
@@ -331,7 +373,8 @@ class Digest:
 
             entry = item.get("entry")
             tp = item.get("tp")
-            if entry is None or tp is None:
+            sl = item.get("sl")
+            if entry is None or (tp is None and sl is None):
                 continue
 
             decision_dt = _resolve_dt(item.get("decision_ts"), target_date, idx)
@@ -339,19 +382,42 @@ class Digest:
             if order_id in recorded_ids:
                 continue
 
-            sl = item.get("sl")
-            pnl_tp = item.get("pnl_tp") or 0.0
+            # Per-ticker intraday view
+            df_one = None
+            try:
+                if intraday_df is not None and isinstance(intraday_df.columns, pd.MultiIndex):
+                    df_one = intraday_df[ticker].dropna(how="all")
+                elif intraday_df is not None:
+                    df_one = intraday_df.dropna(how="all")
+            except Exception:
+                df_one = None
+
+            try:
+                e = float(entry) if entry is not None else None
+                tp_v = float(tp) if tp is not None else None
+                sl_v = float(sl) if sl is not None else None
+            except Exception:
+                e = tp_v = sl_v = None
+            if e is None:
+                continue
+
+            side = str(item.get("side", "")).strip().lower()
+            exit_px, exit_reason = _first_touch(side, e, sl_v, tp_v, df_one, decision_dt)
+            if exit_px is None or exit_reason is None:
+                continue  # keep open if no touch detected
+
             risk_abs = item.get("risk")
-            if not risk_abs and entry is not None and sl is not None:
+            if risk_abs in (None, 0) and sl_v is not None:
                 try:
-                    risk_abs = abs(float(entry) - float(sl))
-                except (TypeError, ValueError):
+                    risk_abs = abs(e - sl_v)
+                except Exception:
                     risk_abs = None
-            r_multiple = item.get("r_multiple")
-            if r_multiple is None and risk_abs not in (None, 0):
+            r_multiple = None
+            if risk_abs not in (None, 0):
                 try:
-                    r_multiple = float(pnl_tp) / float(risk_abs) if risk_abs else None
-                except (TypeError, ValueError):
+                    pnl = (exit_px - e) if side != "sell" else (e - exit_px)
+                    r_multiple = pnl / float(risk_abs)
+                except Exception:
                     r_multiple = None
 
             trade_row = {
@@ -361,8 +427,8 @@ class Digest:
                 "entry": entry,
                 "sl": sl,
                 "tp": tp,
-                "exit": tp,
-                "exit_reason": "simulated_tp",
+                "exit": exit_px,
+                "exit_reason": exit_reason,
                 "atr": item.get("atr"),
                 "r_multiple": r_multiple,
                 "fees": 0.0,
@@ -805,6 +871,11 @@ class Digest:
 
 
 __all__ = ["Digest", "CHART_PATH"]
+
+
+
+
+
 
 
 
