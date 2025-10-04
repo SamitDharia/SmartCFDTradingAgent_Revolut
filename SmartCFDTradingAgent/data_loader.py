@@ -307,6 +307,7 @@ def get_price_data(
     """
     tickers = list(dict.fromkeys(tickers))
     iv = (interval or "1d").lower()
+    cache_expire = cache_expire if cache_expire is not None else DEFAULT_CACHE_EXPIRY
 
     if use_alpaca_crypto() and tickers and all(_is_crypto_symbol(t) for t in tickers):
         log.info("Fetching crypto data via Alpaca for tickers: %s", tickers)
@@ -329,7 +330,6 @@ def get_price_data(
         ]
 
         workers = workers or DEFAULT_WORKERS
-        cache_expire = cache_expire if cache_expire is not None else DEFAULT_CACHE_EXPIRY
 
         frames: list[pd.DataFrame] = []
         missing: list[str] = []
