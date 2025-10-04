@@ -99,8 +99,11 @@ class AlpacaBroker(Broker):
         if dry_run:
             return order
 
+        # Alpaca uses 'BTC/USD' for crypto symbols
+        alpaca_symbol = symbol.replace('-', '/') if '-' in (symbol or '') else symbol
+
         params: Dict[str, Any] = {
-            "symbol": symbol,
+            "symbol": alpaca_symbol,
             "qty": qty,
             "side": side.lower(),
             "type": "market",

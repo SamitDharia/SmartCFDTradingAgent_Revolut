@@ -121,3 +121,52 @@ def aggregate_trade_stats() -> Dict[str, int]:
         }
     finally:
         conn.close()
+
+
+def purge_simulated_for_date(target_date: str) -> int:
+    """Delete manual-simulated rows for a YYYY-MM-DD from CSV and SQLite.
+
+    Returns number of rows removed from SQLite. CSV is rewritten without matching rows.
+    """
+    day = str(target_date)[:10]
+
+    # CSV rewrite (best effort)
+    try:
+        if CSV_PATH.exists():
+            rows: list[Dict[str, Any]] = []
+            with CSV_PATH.open("r", encoding="utf-8") as f:
+                for r in csv.DictReader(f):
+                    ts = (r.get("time") or "")
+                    broker = (r.get("broker") or "").lower()
+                    if ts.startswith(day) and broker == "manual-simulated":
+                        continue
+                    rows.append(r)
+            with CSV_PATH.open("w", newline="", encoding="utf-8") as f:
+                wr = csv.DictWriter(f, fieldnames=FIELDS)
+                wr.writeheader()
+                for r in rows:
+                    wr.writerow(r)
+    except Exception:
+        pass
+
+    # SQLite delete
+    removed = 0
+    try:
+        conn = _ensure_db()
+        with conn:
+            cur = conn.execute(
+                "DELETE FROM trades WHERE LOWER(broker) = ? AND substr(time,1,10) = ?",
+                ("manual-simulated", day),
+            )
+            try:
+                removed = int(cur.rowcount)
+            except Exception:
+                removed = 0
+    except Exception:
+        removed = 0
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+    return removed

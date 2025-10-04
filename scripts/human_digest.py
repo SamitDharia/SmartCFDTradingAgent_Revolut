@@ -38,9 +38,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--to-telegram", action="store_true", help="Send the digest via Telegram as well")
     parser.add_argument("--email", action="store_true", help="Email the digest to subscribers")
     parser.add_argument("--email-to", default="", help="Comma separated extra email recipients")
+    parser.add_argument("--recompute-crypto-backfill", action="store_true", help="Recompute yesterday's crypto outcomes from intraday TP/SL touches (purges manual-simulated for the day)")
     args = parser.parse_args(argv)
 
     digest = Digest()
+    if args.recompute_crypto_backfill:
+        # Purge yesterday's manual-simulated entries and re-backfill with data-backed outcomes
+        from SmartCFDTradingAgent.utils.trade_logger import purge_simulated_for_date
+        yday = (dt.datetime.now().date() - dt.timedelta(days=1))
+        purge_simulated_for_date(yday.isoformat())
+
     plain_text, html_text, chart_path = digest.build_email_content(decisions=args.decisions)
 
     digest.save_digest(plain_text, args.out)
