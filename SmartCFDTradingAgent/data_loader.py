@@ -10,6 +10,7 @@ import logging
 
 import pandas as pd
 import yfinance as yf
+import requests
 
 from SmartCFDTradingAgent.utils.logger import get_logger
 
@@ -232,6 +233,62 @@ def _download(
     )
 
 
+_YF_SESSION: requests.Session | None = None
+
+
+def _get_yf_session() -> requests.Session:
+    global _YF_SESSION
+    if _YF_SESSION is None:
+        session = requests.Session()
+        session.headers.update(
+            {
+                "User-Agent": os.getenv(
+                    "YF_USER_AGENT",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/122.0 Safari/537.36",
+                )
+            }
+        )
+        _YF_SESSION = session
+    return _YF_SESSION
+
+
+def _download_history(
+    ticker: str,
+    *,
+    start: str | None,
+    end: str | None,
+    interval: str,
+) -> pd.DataFrame | None:
+    """Fallback to ``Ticker.history`` for stubborn Yahoo responses."""
+
+    try:
+        history = yf.Ticker(ticker, session=_get_yf_session()).history(
+            start=start,
+            end=end,
+            interval=interval,
+            auto_adjust=False,
+            actions=False,
+            prepost=False,
+        )
+    except Exception as exc:
+        log.debug("Ticker.history failed for %s: %s", ticker, exc)
+        return None
+
+    if history is None or history.empty:
+        return None
+
+    history.index = pd.to_datetime(history.index)
+    history = history.sort_index()
+    expected_cols = [c for c in FIELDS_ORDER if c in history.columns]
+    if not expected_cols:
+        return None
+
+    history = history[expected_cols]
+    return pd.concat({ticker: history}, axis=1)
+
+
 def get_price_data(
     tickers: Iterable[str],
     start: str,
@@ -294,6 +351,11 @@ def get_price_data(
                     except Exception:
                         pass
                     time.sleep(pause * attempt)
+            alt = _download_history(t, start=start, end=end, interval=iv)
+            if alt is not None and not alt.dropna(how="all").empty:
+                log.info("Fetched %s via yfinance.Ticker.history fallback", t)
+                _save_cache(f"{t}|history|{iv}|{start}|{end}", alt)
+                return t, alt, False
             return t, None, False
 
         start_t = time.time()
@@ -348,11 +410,19 @@ def get_price_data(
             d1 = _download(t, start=start, end=end, interval=iv, threads=False)
             d1 = _normalize_to_ticker_field(d1, [t])
             if d1 is None or d1.dropna(how="all").empty:
-                missing.append(t)
+                alt = _download_history(t, start=start, end=end, interval=iv)
+                if alt is None or alt.dropna(how="all").empty:
+                    missing.append(t)
+                    continue
+                frames.append(alt)
                 continue
             frames.append(d1)
         except Exception:
-            missing.append(t)
+            alt = _download_history(t, start=start, end=end, interval=iv)
+            if alt is None or alt.dropna(how="all").empty:
+                missing.append(t)
+                continue
+            frames.append(alt)
 
     if frames:
         out = pd.concat(frames, axis=1).sort_index()
