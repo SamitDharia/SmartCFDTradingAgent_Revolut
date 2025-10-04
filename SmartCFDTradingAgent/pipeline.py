@@ -60,11 +60,32 @@ def _load_asset_classes(path: Path | None = None) -> dict[str, str]:
     The YAML may map classes to lists of tickers or tickers to classes.
     Any tickers not present default to ``equity``.
     """
-    if yaml is None:
-        return {}
     path = path or ROOT / "assets.yml"
     try:
-        data = yaml.safe_load(path.read_text()) or {}
+        raw_text = path.read_text()
+    except Exception:
+        return {}
+    raw_text = raw_text.replace("\ufeff", "").replace("\u00ef\u00bb\u00bf", "")
+
+    # Manual fallback when PyYAML is unavailable.
+    if yaml is None:
+        mapping: dict[str, str] = {}
+        current_cls: str | None = None
+        for raw_line in raw_text.splitlines():
+            line = raw_line.strip().replace("\u00ef\u00bb\u00bf", "")
+            if not line or line.startswith("#"):
+                continue
+            if line.endswith(":"):
+                current_cls = line[:-1].strip() or None
+                continue
+            if line.startswith("-") and current_cls:
+                ticker = line[1:].strip().replace("\u00ef\u00bb\u00bf", "")
+                if ticker:
+                    mapping[ticker.upper()] = current_cls
+        return mapping
+
+    try:
+        data = yaml.safe_load(raw_text) or {}
     except Exception:
         return {}
 
@@ -72,19 +93,30 @@ def _load_asset_classes(path: Path | None = None) -> dict[str, str]:
     if isinstance(data, dict):
         if all(isinstance(v, (list, tuple, set)) for v in data.values()):
             for cls, tickers in data.items():
+                cls_clean = str(cls).strip().replace("\ufeff", "").replace("\u00ef\u00bb\u00bf", "")
                 for t in tickers:
-                    mapping[str(t).upper()] = str(cls)
+                    ticker = str(t).strip().replace("\ufeff", "").replace("\u00ef\u00bb\u00bf", "")
+                    if ticker:
+                        mapping[ticker.upper()] = cls_clean
         else:
             for t, cls in data.items():
-                mapping[str(t).upper()] = str(cls)
+                ticker = str(t).strip().replace("\ufeff", "").replace("\u00ef\u00bb\u00bf", "")
+                cls_clean = str(cls).strip().replace("\ufeff", "").replace("\u00ef\u00bb\u00bf", "")
+                if ticker:
+                    mapping[ticker.upper()] = cls_clean
     return mapping
 
 
 ASSET_MAP = _load_asset_classes()
 
 
+
 def classify(t: str) -> str:
-    return ASSET_MAP.get((t or "").upper(), "equity")
+    cls = ASSET_MAP.get((t or "").upper())
+    if cls is None:
+        return "equity"
+    cleaned = str(cls).replace("\ufeff", "").replace("\u00ef\u00bb\u00bf", "").strip()
+    return cleaned or "equity"
 
 
 def is_crypto(t: str) -> bool:

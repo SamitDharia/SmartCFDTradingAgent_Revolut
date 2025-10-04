@@ -96,16 +96,16 @@ def aggregate_trade_stats() -> Dict[str, int]:
                 SUM(
                     CASE
                         WHEN exit IS NOT NULL AND entry IS NOT NULL
-                             AND ((side = 'buy' AND exit > entry)
-                                  OR (side = 'sell' AND exit < entry))
+                             AND ((LOWER(side) = 'buy' AND exit > entry)
+                                  OR (LOWER(side) = 'sell' AND exit < entry))
                         THEN 1 ELSE 0
                     END
                 ) AS wins,
                 SUM(
                     CASE
                         WHEN exit IS NOT NULL AND entry IS NOT NULL
-                             AND ((side = 'buy' AND exit <= entry)
-                                  OR (side = 'sell' AND exit >= entry))
+                             AND ((LOWER(side) = 'buy' AND exit <= entry)
+                                  OR (LOWER(side) = 'sell' AND exit >= entry))
                         THEN 1 ELSE 0
                     END
                 ) AS losses,
