@@ -409,20 +409,20 @@ def run_cycle(
         log.info("Watchlist empty – skipping cycle.")
         return
 
-    # Market hours gate (skip if equity market closed unless it's crypto-only or --force)
-    if not force and not (all(is_crypto(t) for t in watch) or market_open()):
-        log.info("Market closed – skipping cycle.")
-        return
-
+    # Market hours gate: if equity market closed, still allow crypto-only flow
+    if not force and not market_open():
+        if any(is_crypto(t) for t in watch):
+            watch = [t for t in watch if is_crypto(t)]
+            log.info("Market closed – proceeding with crypto-only subset: %s", ",".join(watch))
+        else:
+            log.info("Market closed – skipping cycle.")
+            return
     try:
         now_local = dt.datetime.now(ZoneInfo(tz))
         tz_label = tz
     except Exception:
         now_local = dt.datetime.now(timezone.utc)
         tz_label = "UTC"
-
-    # Rank and fetch data for the base interval
-    tickers = top_n(watch, size)
     end = dt.date.today().isoformat()
     lookback_days = _max_lookback_days(interval)
     start = (dt.date.today() - dt.timedelta(days=lookback_days)).isoformat()
