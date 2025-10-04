@@ -10,6 +10,7 @@ import logging
 
 import pandas as pd
 import yfinance as yf
+import requests
 
 from SmartCFDTradingAgent.utils.logger import get_logger
 
@@ -232,6 +233,157 @@ def _download(
     )
 
 
+_YF_SESSION: requests.Session | None = None
+
+
+def _get_yf_session() -> requests.Session:
+    global _YF_SESSION
+    if _YF_SESSION is None:
+        session = requests.Session()
+        session.headers.update(
+            {
+                "User-Agent": os.getenv(
+                    "YF_USER_AGENT",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/122.0 Safari/537.36",
+                )
+            }
+        )
+        _YF_SESSION = session
+    return _YF_SESSION
+
+
+def _download_history(
+    ticker: str,
+    *,
+    start: str | None,
+    end: str | None,
+    interval: str,
+) -> pd.DataFrame | None:
+    """Fallback to ``Ticker.history`` for stubborn Yahoo responses."""
+
+    try:
+        history = yf.Ticker(ticker, session=_get_yf_session()).history(
+            start=start,
+            end=end,
+            interval=interval,
+            auto_adjust=False,
+            actions=False,
+            prepost=False,
+        )
+    except Exception as exc:
+        log.debug("Ticker.history failed for %s: %s", ticker, exc)
+        return None
+
+    if history is None or history.empty:
+        return None
+
+    history.index = pd.to_datetime(history.index)
+    history = history.sort_index()
+    expected_cols = [c for c in FIELDS_ORDER if c in history.columns]
+    if not expected_cols:
+        return None
+
+    history = history[expected_cols]
+    return pd.concat({ticker: history}, axis=1)
+
+
+def _download_chart(
+    ticker: str,
+    *,
+    start: str | None,
+    end: str | None,
+    interval: str,
+    cache_expire: float | None = None,
+) -> pd.DataFrame | None:
+    """Fallback using Yahoo chart API when yfinance helpers fail.
+
+    Returns data normalized to MultiIndex [ticker, field] or ``None`` when
+    retrieval fails. Responses are cached using the shared pickle cache so we
+    don't spam Yahoo when running multiple retries.
+    """
+
+    start_ts = pd.Timestamp(start) if start is not None else None
+    end_ts = pd.Timestamp(end) if end is not None else None
+    if start_ts is None or end_ts is None:
+        return None
+
+    start_ts = _ensure_utc(start_ts)
+    end_ts = _ensure_utc(end_ts)
+    if end_ts <= start_ts:
+        end_ts = start_ts + pd.Timedelta(days=1)
+
+    iv = interval.lower()
+    interval_map = {"1h": "60m", "90m": "90m"}
+    yahoo_interval = interval_map.get(iv, iv)
+
+    key = f"chart|{ticker}|{yahoo_interval}|{int(start_ts.timestamp())}|{int(end_ts.timestamp())}"
+    if cache_expire is not None:
+        cached = _load_cache(key, cache_expire)
+        if cached is not None:
+            return cached
+
+    params = {
+        "period1": int(start_ts.timestamp()),
+        "period2": int(end_ts.timestamp()),
+        "interval": yahoo_interval,
+        "includePrePost": "false",
+        "events": "history",
+    }
+
+    try:
+        resp = _get_yf_session().get(
+            f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}",
+            params=params,
+            timeout=float(os.getenv("YF_TIMEOUT", "10")),
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+    except Exception as exc:
+        log.debug("Yahoo chart API request failed for %s: %s", ticker, exc)
+        return None
+
+    result = payload.get("chart", {}).get("result") or []
+    if not result:
+        return None
+
+    result = result[0]
+    timestamps = result.get("timestamp")
+    indicators = result.get("indicators", {})
+    quotes = (indicators.get("quote") or [{}])[0]
+    adjcloses = (indicators.get("adjclose") or [{}])[0]
+    if not timestamps:
+        return None
+
+    index = pd.to_datetime(timestamps, unit="s", utc=True).tz_convert(None)
+    frame = pd.DataFrame(
+        {
+            "Open": quotes.get("open"),
+            "High": quotes.get("high"),
+            "Low": quotes.get("low"),
+            "Close": quotes.get("close"),
+            "Adj Close": adjcloses.get("adjclose"),
+            "Volume": quotes.get("volume"),
+        },
+        index=index,
+    )
+
+    frame = frame.dropna(how="all")
+    if frame.empty:
+        return None
+
+    # Ensure chronological order and expected column subset
+    frame = frame.sort_index()
+    expected_cols = [c for c in FIELDS_ORDER if c in frame.columns]
+    frame = frame[expected_cols]
+
+    out = pd.concat({ticker: frame}, axis=1)
+    if cache_expire is not None:
+        _save_cache(key, out)
+    return out
+
+
 def get_price_data(
     tickers: Iterable[str],
     start: str,
@@ -250,12 +402,17 @@ def get_price_data(
     """
     tickers = list(dict.fromkeys(tickers))
     iv = (interval or "1d").lower()
+    cache_expire = cache_expire if cache_expire is not None else DEFAULT_CACHE_EXPIRY
 
     if use_alpaca_crypto() and tickers and all(_is_crypto_symbol(t) for t in tickers):
         log.info("Fetching crypto data via Alpaca for tickers: %s", tickers)
-        return _get_crypto_data_alpaca(tickers, start, end, iv)
-    else:
-        _quiet_yf_logs()
+        try:
+            return _get_crypto_data_alpaca(tickers, start, end, iv)
+        except Exception as exc:
+            log.error("Alpaca crypto data fetch failed: %s", exc)
+            log.info("Falling back to Yahoo Finance for crypto data.")
+
+    _quiet_yf_logs()
 
     # ---------- Intraday path (per-ticker only) ----------
     if iv in INTRADAY:
@@ -268,7 +425,6 @@ def get_price_data(
         ]
 
         workers = workers or DEFAULT_WORKERS
-        cache_expire = cache_expire if cache_expire is not None else DEFAULT_CACHE_EXPIRY
 
         frames: list[pd.DataFrame] = []
         missing: list[str] = []
@@ -290,6 +446,21 @@ def get_price_data(
                     except Exception:
                         pass
                     time.sleep(pause * attempt)
+            alt = _download_history(t, start=start, end=end, interval=iv)
+            if alt is not None and not alt.dropna(how="all").empty:
+                log.info("Fetched %s via yfinance.Ticker.history fallback", t)
+                _save_cache(f"{t}|history|{iv}|{start}|{end}", alt)
+                return t, alt, False
+            alt_chart = _download_chart(
+                t,
+                start=start,
+                end=end,
+                interval=iv,
+                cache_expire=cache_expire,
+            )
+            if alt_chart is not None and not alt_chart.dropna(how="all").empty:
+                log.info("Fetched %s via Yahoo chart API fallback", t)
+                return t, alt_chart, False
             return t, None, False
 
         start_t = time.time()
@@ -344,11 +515,39 @@ def get_price_data(
             d1 = _download(t, start=start, end=end, interval=iv, threads=False)
             d1 = _normalize_to_ticker_field(d1, [t])
             if d1 is None or d1.dropna(how="all").empty:
-                missing.append(t)
+                alt = _download_history(t, start=start, end=end, interval=iv)
+                if alt is None or alt.dropna(how="all").empty:
+                    alt_chart = _download_chart(
+                        t,
+                        start=start,
+                        end=end,
+                        interval=iv,
+                        cache_expire=cache_expire,
+                    )
+                    if alt_chart is None or alt_chart.dropna(how="all").empty:
+                        missing.append(t)
+                        continue
+                    frames.append(alt_chart)
+                    continue
+                frames.append(alt)
                 continue
             frames.append(d1)
         except Exception:
-            missing.append(t)
+            alt = _download_history(t, start=start, end=end, interval=iv)
+            if alt is None or alt.dropna(how="all").empty:
+                alt_chart = _download_chart(
+                    t,
+                    start=start,
+                    end=end,
+                    interval=iv,
+                    cache_expire=cache_expire,
+                )
+                if alt_chart is None or alt_chart.dropna(how="all").empty:
+                    missing.append(t)
+                    continue
+                frames.append(alt_chart)
+                continue
+            frames.append(alt)
 
     if frames:
         out = pd.concat(frames, axis=1).sort_index()
