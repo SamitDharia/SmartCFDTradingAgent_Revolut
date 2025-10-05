@@ -12,16 +12,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image name (lowercase owner)
+        run: |
+          OWNER_LC="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          IMAGE="ghcr.io/${OWNER_LC}/smartcfdtradingagent:sha-${{ github.sha }}"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
       - name: Build image
         run: |
-          IMAGE=ghcr.io/${{ github.repository_owner }}/smartcfdtradingagent:sha-${{ github.sha }}
           docker build -f docker/Dockerfile -t "$IMAGE" .
-          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
       - name: Push image
         run: docker push "$IMAGE"
