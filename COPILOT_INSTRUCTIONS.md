@@ -16,6 +16,7 @@ The system must trade automatically, learn continuously, and improve its perform
 3. **Machine Learning Core**
    - The system must **learn, update, and optimize** strategies and parameters automatically.
    - Adapt between **conservative** and **aggressive** modes based on performance and risk.
+   - Use XGBoost mplements the gradient boosting framework with significant improvements such as L1 and L2 regularization, built-in cross-validation, handling of missing values, parallel processing, and optimizations for speed and memory, making it a powerful tool fof data where applicabke
    - Objective: **maximize profit with calculated risk**, no manual intervention.
 4. **Continuous Improvement**
    - The AI must evolve and get smarter every run.
