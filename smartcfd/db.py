@@ -18,12 +18,27 @@ def connect(db_path: Optional[str] = None) -> sqlite3.Connection:
     return conn
 
 def init_schema(conn: sqlite3.Connection) -> None:
+    # Runs table
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS runs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             started_at TEXT NOT NULL,
             status TEXT NOT NULL,
+            note TEXT
+        )
+        """
+    )
+    # Heartbeats table
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS heartbeats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts TEXT NOT NULL,
+            ok INTEGER NOT NULL,
+            latency_ms REAL,
+            status_code INTEGER,
+            error TEXT,
             note TEXT
         )
         """
@@ -42,6 +57,31 @@ def record_run(conn: sqlite3.Connection, status: str, note: Optional[str] = None
 def get_latest_runs(conn: sqlite3.Connection, limit: int = 5) -> List[Dict]:
     cur = conn.execute(
         "SELECT id, started_at, status, note FROM runs ORDER BY id DESC LIMIT ?",
+        (int(limit),),
+    )
+    rows = cur.fetchall()
+    return [dict(r) for r in rows]
+
+def record_heartbeat(
+    conn: sqlite3.Connection,
+    ok: bool,
+    latency_ms: Optional[float] = None,
+    status_code: Optional[int] = None,
+    error: Optional[str] = None,
+    note: Optional[str] = None,
+    ts: Optional[str] = None,
+) -> int:
+    tstamp = ts or datetime.now(timezone.utc).isoformat()
+    cur = conn.execute(
+        "INSERT INTO heartbeats (ts, ok, latency_ms, status_code, error, note) VALUES (?, ?, ?, ?, ?, ?)",
+        (tstamp, 1 if ok else 0, latency_ms, status_code, error, note),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+def get_recent_heartbeats(conn: sqlite3.Connection, limit: int = 10) -> List[Dict]:
+    cur = conn.execute(
+        "SELECT id, ts, ok, latency_ms, status_code, error, note FROM heartbeats ORDER BY id DESC LIMIT ?",
         (int(limit),),
     )
     rows = cur.fetchall()
