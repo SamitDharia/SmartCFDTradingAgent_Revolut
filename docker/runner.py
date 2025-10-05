@@ -1,41 +1,67 @@
 import os
 import time
-import json
-from datetime import datetime, timezone
+import logging
 import requests
+from datetime import datetime, timezone
 
-TIMEZONE = os.getenv("TIMEZONE", "Europe/Dublin")
-ALPACA_ENV = os.getenv("ALPACA_ENV", "paper")
-API_BASE = "https://paper-api.alpaca.markets" if ALPACA_ENV.lower() == "paper" else "https://api.alpaca.markets"
-API_TIMEOUT = float(os.getenv("API_TIMEOUT_SECONDS", "10"))
-BACKOFF_MAX = int(os.getenv("NETWORK_MAX_BACKOFF_SECONDS", "60"))
+from smartcfd.config import load_config
+from smartcfd.logging_setup import setup_logging
+from smartcfd.db import connect as db_connect, init_schema, record_run
 
-def log(event: str, **kw):
-    payload = {"ts": datetime.now(timezone.utc).isoformat(), "event": event, **kw}
-    print(json.dumps(payload), flush=True)
+def build_api_base(env: str) -> str:
+    return "https://paper-api.alpaca.markets" if env.lower() == "paper" else "https://api.alpaca.markets"
 
-def check_connectivity():
+def check_connectivity(api_base: str, timeout: float) -> tuple[bool, str]:
     try:
-        r = requests.get(f"{API_BASE}/v2/clock", timeout=API_TIMEOUT)
+        r = requests.get(f"{api_base}/v2/clock", timeout=timeout)
         ok = r.status_code == 200
-        return ok, r.status_code
+        return ok, str(r.status_code)
     except Exception as e:
-        return False, str(e)
+        return False, repr(e)
 
 def main():
-    log("runner.start", tz=TIMEZONE, env=ALPACA_ENV, base=API_BASE)
+    # Setup logging first
+    setup_logging("INFO")
+    log = logging.getLogger("runner")
+
+    # Load configuration
+    cfg = load_config()
+    api_base = build_api_base(cfg.alpaca_env)
+
+    # Record a one-time run row (creates DB and schema if needed)
+    try:
+        conn = db_connect()  # uses DB_PATH or default app.db
+        init_schema(conn)
+        record_run(conn, status="start", note="runner")
+        conn.close()
+    except Exception as e:
+        log.warning("failed to record run row", extra={"extra": {"error": repr(e)}})
+
+    # Startup log
+    log.info(
+        "runner.start",
+        extra={
+            "extra": {
+                "tz": cfg.timezone,
+                "env": cfg.alpaca_env,
+                "api_base": api_base,
+                "timeout": cfg.api_timeout_seconds,
+                "max_backoff": cfg.network_max_backoff_seconds,
+            }
+        },
+    )
 
     backoff = 2
     while True:
-        ok, info = check_connectivity()
+        ok, detail = check_connectivity(api_base, cfg.api_timeout_seconds)
         if ok:
-            log("runner.health.ok", detail=info)
+            log.info("runner.health.ok", extra={"extra": {"detail": detail}})
             backoff = 2
         else:
-            log("runner.health.fail", detail=info)
-            backoff = min(backoff * 2, BACKOFF_MAX)
-        # Placeholder for real agent loop (next PR)
-        log("runner.heartbeat", sleep_seconds=backoff)
+            log.warning("runner.health.fail", extra={"extra": {"detail": detail}})
+            backoff = min(backoff * 2, int(cfg.network_max_backoff_seconds))
+
+        log.info("runner.heartbeat", extra={"extra": {"sleep_seconds": backoff}})
         time.sleep(backoff)
 
 if __name__ == "__main__":
