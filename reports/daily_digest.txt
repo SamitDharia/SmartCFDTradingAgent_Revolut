@@ -1,10 +1,9 @@
-Daily Trading Digest | Saturday 04 October 2025 17:21
+Daily Trading Digest | Sunday 05 October 2025 15:30
 ========================================================================
 
 AT A GLANCE
 - Scoreboard: Wins 16, losses 0, open 0
-- Yesterday: 16 trades closed (wins 16, losses 0, still open 0)
-- Net change: +16154.14
+- Yesterday: no trades were closed.
 - Trend note: ATR keeps risk steady — higher ATR automatically means smaller position size.
 
 STRATEGY USED
@@ -14,11 +13,11 @@ STRATEGY USED
 - Class budgets: crypto=1.00%
 
 PLAN REVIEW
-- Plans reviewed: 16 (full levels set: 16)
-- Targets move: +16154.14
-- Distance to stops: 8077.06
+- Plans reviewed: 18 (full levels set: 18)
+- Targets move: +91.99
+- Distance to stops: 46.02
 - Reward vs risk: 2.00
-- Break-even win rate: 33.33%
+- Break-even win rate: 33.35%
 
 FRESH TRADE IDEAS
 - LTC-USD: Sell near 118.61 | stop 120.04 | target 115.73 | timeframe 1h | trend guide 10
