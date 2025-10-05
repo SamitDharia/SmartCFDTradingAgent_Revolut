@@ -1,0 +1,23 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: smartcfd-agent
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Safe defaults if .env variables are missing
+      TIMEZONE: ${TIMEZONE:-Europe/Dublin}
+      ALPACA_ENV: ${ALPACA_ENV:-paper}
+      API_TIMEOUT_SECONDS: ${API_TIMEOUT_SECONDS:-10}
+      NETWORK_MAX_BACKOFF_SECONDS: ${NETWORK_MAX_BACKOFF_SECONDS:-60}
+      ON_RECONNECT_RECONCILE: ${ON_RECONNECT_RECONCILE:-true}
+      RUN_CONTAINER_SMOKE_TEST: ${RUN_CONTAINER_SMOKE_TEST:-1}
+    healthcheck:
+      test: ["CMD", "python", "/app/docker/healthcheck.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
