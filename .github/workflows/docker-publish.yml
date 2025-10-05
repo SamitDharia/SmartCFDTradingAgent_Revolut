@@ -12,16 +12,36 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build image
+
+      - name: Compute image names (lowercase owner)
+        id: meta
         run: |
-          IMAGE=ghcr.io/${{ github.repository_owner }}/smartcfdtradingagent:sha-${{ github.sha }}
-          docker build -f docker/Dockerfile -t "$IMAGE" .
-          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
-      - name: Push image
-        run: docker push "$IMAGE"
+          OWNER_LC="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          echo "owner_lc=${OWNER_LC}" >> "$GITHUB_OUTPUT"
+          echo "sha_tag=ghcr.io/${OWNER_LC}/smartcfdtradingagent:sha-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "latest_tag=ghcr.io/${OWNER_LC}/smartcfdtradingagent:latest" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build image (sha tag)
+        run: |
+          docker build -f docker/Dockerfile -t "${{ steps.meta.outputs.sha_tag }}" .
+
+      - name: Tag as latest (on main)
+        if: steps.meta.outputs.latest_tag != ''
+        run: |
+          docker tag "${{ steps.meta.outputs.sha_tag }}" "${{ steps.meta.outputs.latest_tag }}"
+
+      - name: Push image(s)
+        run: |
+          docker push "${{ steps.meta.outputs.sha_tag }}"
+          if [ -n "${{ steps.meta.outputs.latest_tag }}" ]; then
+            docker push "${{ steps.meta.outputs.latest_tag }}"
+          fi
