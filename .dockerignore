@@ -1,0 +1,14 @@
+# Don’t send these to the Docker build context
+.git
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.dist
+build
+dist
+*.log
+.env
+.env.*
+.DS_Store
