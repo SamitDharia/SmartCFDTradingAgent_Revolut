@@ -53,6 +53,8 @@ class RiskManager:
     def check_for_halt(self) -> bool:
         """
         Checks if the max daily drawdown has been exceeded. If so, halts trading.
+        Drawdown is a negative value, so we check if it's *less than* the configured max.
+        e.g., if drawdown is -6% and limit is -5%, trading should halt.
         """
         if self.is_halted:
             log.warning("risk.check.halted", extra={"extra": {"reason": "already halted"}})
@@ -67,10 +69,15 @@ class RiskManager:
 
         equity = float(account.equity)
         last_equity = float(account.last_equity)
-        drawdown = (last_equity - equity) / last_equity
+        
+        if last_equity == 0: # Avoid division by zero on new accounts
+            return False
 
-        if drawdown > self.config.max_daily_drawdown_percent:
-            log.critical("risk.halt.drawdown_exceeded", extra={"extra": {"drawdown": drawdown, "limit": self.config.max_daily_drawdown_percent}})
+        drawdown_percent = ((equity - last_equity) / last_equity) * 100.0
+
+        # max_daily_drawdown_percent is negative, e.g., -5.0
+        if drawdown_percent < self.config.max_daily_drawdown_percent:
+            log.critical("risk.halt.drawdown_exceeded", extra={"extra": {"drawdown_percent": round(drawdown_percent, 2), "limit_percent": self.config.max_daily_drawdown_percent}})
             self.is_halted = True
             return True
         
@@ -79,27 +86,45 @@ class RiskManager:
     def filter_actions(self, actions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Filters a list of proposed actions based on risk rules.
+        - Max Position Size: No single position can exceed this notional value.
+        - Max Total Exposure: The sum of all position market values cannot exceed this.
         """
         if self.is_halted:
-            log.warning("risk.filter.halted", extra={"extra": {"reason": "Trading is halted"}})
+            log.warning("risk.filter.halted", extra={"extra": {"reason": "Trading is halted, no actions will be approved."}})
             return []
 
-        # In a real implementation, we would check each proposed order against
-        # position size limits, total exposure, etc.
-        # For now, we'll just log and pass them through.
-        
-        log.info("risk.filter.start", extra={"extra": {"action_count": len(actions)}})
+        positions = self._get_positions()
+        current_exposure = sum(float(p.market_value) for p in positions)
         
         approved_actions = []
         for action in actions:
+            # We only apply these risk rules to opening new positions
             if action.get("action") == "buy":
-                # Example: Check if this buy order would exceed max position size
-                # order = OrderRequest(**action.get("order_details"))
-                # if self._would_exceed_limits(order):
-                #     log.warning("risk.filter.reject", extra={"extra": {"order": order.model_dump(), "reason": "exceeds_limit"}})
-                #     continue
-                pass
+                try:
+                    order = OrderRequest.model_validate(action.get("order_details", {}))
+                except Exception as e:
+                    log.error("risk.filter.invalid_order", extra={"extra": {"action": action, "error": repr(e)}})
+                    continue
+
+                # This is a simplification. A robust implementation would fetch the current
+                # market price to calculate the notional value. For now, we assume a fixed price.
+                # This is a known limitation for this implementation phase.
+                notional_value = float(order.qty) * 150.0 # Placeholder average price
+
+                # Rule 1: Check against max position size
+                if notional_value > self.config.max_position_size:
+                    log.warning("risk.filter.reject", extra={"extra": {"symbol": order.symbol, "reason": "exceeds_max_position_size", "notional": notional_value, "limit": self.config.max_position_size}})
+                    continue
+                
+                # Rule 2: Check against max total exposure
+                if (current_exposure + notional_value) > self.config.max_total_exposure:
+                    log.warning("risk.filter.reject", extra={"extra": {"symbol": order.symbol, "reason": "exceeds_max_total_exposure", "new_exposure": current_exposure + notional_value, "limit": self.config.max_total_exposure}})
+                    continue
+                
+                # If approved, add the notional value to our running total for this session
+                current_exposure += notional_value
+
             approved_actions.append(action)
             
-        log.info("risk.filter.end", extra={"extra": {"approved_count": len(approved_actions)}})
+        log.info("risk.filter.end", extra={"extra": {"approved_count": len(approved_actions), "initial_count": len(actions)}})
         return approved_actions
