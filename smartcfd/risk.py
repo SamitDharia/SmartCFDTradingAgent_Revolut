@@ -3,6 +3,7 @@ from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 from smartcfd.alpaca_client import AlpacaClient, OrderRequest
 from smartcfd.config import RiskConfig
+from smartcfd.strategy import Strategy
 
 log = logging.getLogger("risk")
 

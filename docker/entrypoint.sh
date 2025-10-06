@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 set -Eeuo pipefail
 
 echo "[entrypoint] Starting SmartCFDTradingAgent (cloud-first minimal run)"

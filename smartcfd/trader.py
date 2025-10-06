@@ -47,7 +47,7 @@ class Trader:
             if action_type == "log":
                 log.info("trader.action.log", extra={"extra": action})
             
-            elif action_type == "order":
+            elif action_type == "buy":
                 self.execute_order(action)
 
             else:
@@ -59,7 +59,7 @@ class Trader:
         """
         try:
             symbol = order_details["symbol"]
-            side = order_details["side"] # 'buy' or 'sell'
+            side = "buy" # Inferred from the action type
 
             # 1. Get order size from Risk Manager
             qty = self.risk_manager.calculate_order_qty(symbol, side)

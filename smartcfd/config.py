@@ -13,6 +13,7 @@ class AppConfig:
     on_reconnect_reconcile: bool = True
     run_container_smoke_test: bool = True
     order_client_id_prefix: str = "SCFD"
+    run_interval_seconds: int = 60
     offline_behavior: str = "halt"
 
 @dataclass
@@ -37,6 +38,7 @@ def load_config() -> AppConfig:
         on_reconnect_reconcile=_as_bool(os.getenv("ON_RECONNECT_RECONCILE", "true")),
         run_container_smoke_test=_as_bool(os.getenv("RUN_CONTAINER_SMOKE_TEST", "1")),
         order_client_id_prefix=os.getenv("ORDER_CLIENT_ID_PREFIX", "SCFD"),
+        run_interval_seconds=int(os.getenv("RUN_INTERVAL_SECONDS", "60")),
         offline_behavior=os.getenv("OFFLINE_BEHAVIOR", "halt"),
     )
 
