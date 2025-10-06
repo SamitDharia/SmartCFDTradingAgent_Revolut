@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 
 from smartcfd.alpaca_client import AlpacaClient
 from smartcfd.risk import RiskManager
-from SmartCFDTradingAgent.indicators import create_features as calculate_indicators
+from .indicators import create_features as calculate_indicators
 
 log = logging.getLogger("strategy")
 
