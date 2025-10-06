@@ -3,23 +3,15 @@ import requests
 from typing import Callable, Dict, Any
 
 from smartcfd.alpaca import build_headers_from_env
+from .strategy import StrategyHarness
 
 log = logging.getLogger("trader")
 
-# A simple strategy is just a function that takes a session and returns a decision
-StrategyFunction = Callable[[requests.Session], Dict[str, Any]]
-
-def example_strategy(session: requests.Session) -> Dict[str, Any]:
-    """A placeholder strategy that does nothing."""
-    log.info("strategy.example.run")
-    # In the future, this would analyze data and return trade signals
-    return {"action": "hold", "reason": "market is flat"}
-
 class TradingSession:
-    def __init__(self, api_base: str, timeout: float, strategy: StrategyFunction):
+    def __init__(self, api_base: str, timeout: float, harness: StrategyHarness):
         self.api_base = api_base
         self.timeout = timeout
-        self.strategy = strategy
+        self.harness = harness
         self.session = requests.Session()
         self.session.headers.update(build_headers_from_env())
 
@@ -40,11 +32,7 @@ class TradingSession:
         """Executes the trading strategy if the market is open."""
         if self.is_market_open():
             log.info("trader.run.market_open")
-            try:
-                decision = self.strategy(self.session)
-                log.info("trader.strategy.decision", extra={"extra": decision})
-            except Exception as e:
-                log.error("trader.strategy.fail", extra={"extra": {"error": repr(e)}})
+            self.harness.run()
         else:
             log.info("trader.run.market_closed")
 

@@ -73,11 +73,17 @@ def main():
     except Exception as e:
         log.warning("runner.health.server.fail", extra={"extra": {"error": repr(e)}})
 
+    # Initialize the Alpaca client and strategy harness
+    alpaca_client = get_alpaca_client(api_base)
+    strategy_name = os.getenv("STRATEGY", "dry_run")
+    strategy = get_strategy_by_name(strategy_name)
+    harness = StrategyHarness(alpaca_client, strategy)
+
     # Initialize the trading session
     trader = TradingSession(
         api_base=api_base,
         timeout=cfg.api_timeout_seconds,
-        strategy=example_strategy,
+        harness=harness,
     )
 
     log.info(
