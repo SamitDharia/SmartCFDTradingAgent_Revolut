@@ -9,8 +9,9 @@ from smartcfd.logging_setup import setup_logging
 from smartcfd.db import connect as db_connect, init_schema, record_run, record_heartbeat
 from smartcfd.alpaca import build_api_base, build_headers_from_env
 from smartcfd.health_server import start_health_server
-from smartcfd.trader import TradingSession
-from smartcfd.strategy import get_strategy_by_name, StrategyHarness
+from smartcfd.trader import Trader
+from smartcfd.strategy import get_strategy_by_name
+from smartcfd.broker import AlpacaBroker
 from smartcfd.alpaca_client import get_alpaca_client
 from smartcfd.risk import RiskManager
 
@@ -76,19 +77,15 @@ def main():
     except Exception as e:
         log.warning("runner.health.server.fail", extra={"extra": {"error": repr(e)}})
 
-    # Initialize the Alpaca client, Risk Manager, and Strategy Harness
+    # Initialize the Alpaca client, Risk Manager, and Strategy
     alpaca_client = get_alpaca_client(api_base)
+    broker = AlpacaBroker(alpaca_client)
     risk_manager = RiskManager(alpaca_client, risk_cfg)
-    strategy_name = os.getenv("STRATEGY", "dry_run")
+    strategy_name = os.getenv("STRATEGY", "inference")
     strategy = get_strategy_by_name(strategy_name)
-    harness = StrategyHarness(alpaca_client, strategy, risk_manager)
-
-    # Initialize the trading session
-    trader = TradingSession(
-        api_base=api_base,
-        timeout=cfg.api_timeout_seconds,
-        harness=harness,
-    )
+    
+    # Initialize the Trader
+    trader = Trader(strategy, broker, risk_manager)
 
     log.info(
         "runner.start",
@@ -98,49 +95,43 @@ def main():
                 "env": cfg.alpaca_env,
                 "api_base": api_base,
                 "timeout": cfg.api_timeout_seconds,
-                "max_backoff": cfg.network_max_backoff_seconds,
+                "strategy": strategy_name,
             }
         },
     )
 
-    backoff = 2
-    try:
-        while running:
-            ok, detail, status_code, latency_ms, err = check_connectivity(api_base, cfg.api_timeout_seconds)
+    backoff_seconds = 1.0
+    network_max_backoff = float(os.getenv("NETWORK_MAX_BACKOFF_SECONDS", "60"))
 
-            if ok:
-                log.info("runner.health.ok", extra={"extra": {"detail": detail, "latency_ms": latency_ms}})
-                # If connectivity is OK, run the trading logic
-                trader.run_strategy_if_market_open()
-                backoff = 60  # Check every minute when things are healthy
-            else:
-                log.warning("runner.health.fail", extra={"extra": {"detail": detail, "latency_ms": latency_ms}})
-                backoff = min(backoff * 2, int(cfg.network_max_backoff_seconds))
+    while running:
+        ok, status, code, latency, err = check_connectivity(api_base, cfg.api_timeout_seconds)
+        if ok:
+            backoff_seconds = 1.0  # Reset backoff on success
+            if conn:
+                record_heartbeat(conn, run_id, latency, "ok", code)
+            
+            # Run the trading loop
+            trader.run()
 
-            try:
-                if conn is not None:
-                    record_heartbeat(
-                        conn=conn,
-                        ok=ok,
-                        latency_ms=latency_ms,
-                        status_code=status_code,
-                        error=err,
-                        note="connectivity",
-                    )
-            except Exception as e:
-                log.debug("heartbeat.db.write.fail", extra={"extra": {"error": repr(e)}})
+        else:
+            log.warning("runner.connectivity.fail", extra={"extra": {"status": status, "latency": latency, "error": err}})
+            if conn:
+                record_heartbeat(conn, run_id, latency, "error", code)
+            
+            # Exponential backoff with jitter
+            sleep_time = backoff_seconds + (os.urandom(1)[0] / 255.0)
+            log.info(f"runner.backoff", extra={"extra": {"sleep_time": sleep_time}})
+            time.sleep(sleep_time)
+            backoff_seconds = min(backoff_seconds * 2, network_max_backoff)
 
-            log.info("runner.heartbeat", extra={"extra": {"sleep_seconds": backoff}})
-            time.sleep(backoff)
-    finally:
-        try:
-            if conn is not None:
-                log.info("runner.stop")
-                if run_id:
-                    record_run(conn, status="stop", note="signal", run_id=run_id)
-                conn.close()
-        except Exception as e:
-            log.error("runner.stop.fail", extra={"extra": {"error": repr(e)}})
+        # Sleep for the configured interval
+        log.info(f"runner.sleep", extra={"extra": {"interval": cfg.run_interval_seconds}})
+        time.sleep(cfg.run_interval_seconds)
+
+    log.info("runner.exit")
+    if conn:
+        record_run(conn, run_id, status="stop", note="runner")
+        conn.close()
 
 if __name__ == "__main__":
     main()

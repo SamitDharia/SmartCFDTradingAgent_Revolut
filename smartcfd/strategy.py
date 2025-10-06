@@ -3,9 +3,12 @@ import logging
 from typing import List, Dict, Any
 from pathlib import Path
 import joblib
+import pandas as pd
+from datetime import datetime, timedelta
 
 from smartcfd.alpaca_client import AlpacaClient
 from smartcfd.risk import RiskManager
+from SmartCFDTradingAgent.indicators import create_features as calculate_indicators
 
 log = logging.getLogger("strategy")
 
@@ -56,12 +59,15 @@ class InferenceStrategy(Strategy):
     """
     A strategy that uses a trained model to make trading decisions.
     """
-    def __init__(self, symbol: str = "BTC/USD"):
+    def __init__(self, symbol: str = "BTC/USD", model: object = None):
         self.symbol = symbol
-        self.model = None
-        self.model_path = self._find_latest_model()
-        if self.model_path:
-            self.load_model()
+        self.model = model
+        self.model_path = None
+        
+        if self.model is None:
+            self.model_path = self._find_latest_model()
+            if self.model_path:
+                self.load_model()
 
     def _find_latest_model(self) -> Path | None:
         """Finds the latest model file for the given symbol."""
@@ -90,17 +96,64 @@ class InferenceStrategy(Strategy):
             log.warning("strategy.inference.evaluate.no_model", extra={"extra": {"reason": "Model not loaded."}})
             return [{"action": "log", "symbol": self.symbol, "decision": "hold", "reason": "no_model"}]
         
-        # Placeholder for fetching data and generating features
         log.info("strategy.inference.evaluate.start", extra={"extra": {"symbol": self.symbol}})
         
-        # In a real implementation, this is where you would:
         # 1. Fetch live market data for the symbol.
-        # 2. Generate the same features the model was trained on.
-        # 3. Use self.model.predict() or self.model.predict_proba()
-        # 4. Map the prediction to a decision (buy/sell/hold).
+        # We need enough data to calculate the indicators. Let's fetch 100 days of daily data.
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=100)
         
-        # For now, we'll just log and return a hold decision.
-        return [{"action": "log", "symbol": self.symbol, "decision": "hold", "reason": "inference_dry_run"}]
+        bars = client.get_bars(self.symbol, "1D", start_date.isoformat(), end_date.isoformat())
+        if not bars:
+            log.warning("strategy.inference.evaluate.no_data", extra={"extra": {"symbol": self.symbol}})
+            return [{"action": "log", "symbol": self.symbol, "decision": "hold", "reason": "no_data"}]
+
+        df = pd.DataFrame(bars)
+        df['time'] = pd.to_datetime(df['t'])
+        df = df.set_index('time')
+
+        # 2. Generate the same features the model was trained on.
+        df_features = calculate_indicators(df)
+        
+        # Get the latest features
+        latest_features = df_features.iloc[-1:]
+        
+        # Ensure the feature names match the model's expected input
+        if hasattr(self.model, 'feature_names_in_'):
+            model_features = self.model.feature_names_in_
+        elif hasattr(self.model, 'get_booster'): # Fallback for raw XGBoost models
+            model_features = self.model.get_booster().feature_names
+        else:
+            raise AttributeError("Could not determine model's feature names.")
+        
+        latest_features = latest_features[model_features]
+
+        # 3. Use self.model.predict() or self.model.predict_proba()
+        try:
+            prediction = self.model.predict(latest_features)
+            prediction_proba = self.model.predict_proba(latest_features)
+            
+            score = prediction_proba[0][1] # Probability of the 'up' class
+            
+            # 4. Map the prediction to a decision (buy/sell/hold).
+            decision = "hold"
+            if prediction[0] == 1 and score > 0.6: # Example threshold
+                decision = "buy"
+            elif prediction[0] == 0 and score < 0.4: # Example threshold
+                decision = "sell"
+
+            log.info("strategy.inference.evaluate.result", extra={"extra": {
+                "symbol": self.symbol,
+                "decision": decision,
+                "score": score,
+                "prediction": int(prediction[0])
+            }})
+
+            return [{"action": "log", "symbol": self.symbol, "decision": decision, "reason": "inference"}]
+
+        except Exception as e:
+            log.error("strategy.inference.evaluate.fail", extra={"extra": {"error": repr(e)}})
+            return [{"action": "log", "symbol": self.symbol, "decision": "hold", "reason": "evaluation_error"}]
 
 
 class StrategyHarness:

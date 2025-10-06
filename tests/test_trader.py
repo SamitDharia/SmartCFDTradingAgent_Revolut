@@ -1,67 +1,60 @@
 import pytest
-import requests
-import requests_mock
 from unittest.mock import MagicMock
-from smartcfd.trader import TradingSession
 
-def test_trading_session_initialization():
-    """Verify that the TradingSession can be initialized."""
-    mock_harness = MagicMock()
-    session = TradingSession("http://test.com", 1, mock_harness)
-    assert session.api_base == "http://test.com"
-    assert session.timeout == 1
-    assert session.harness is mock_harness
+from smartcfd.trader import Trader
 
 @pytest.fixture
-def session():
-    """Fixture to create a TradingSession with a mock adapter."""
-    api_base = "https://paper-api.alpaca.markets"
-    timeout = 5
-    # Create a mock harness for the session
-    mock_harness = MagicMock()
-    return TradingSession(api_base, timeout, mock_harness)
+def mock_strategy():
+    """Creates a mock strategy."""
+    strategy = MagicMock()
+    strategy.evaluate.return_value = [
+        {"action": "log", "message": "Holding position."},
+        {"action": "order", "symbol": "BTC/USD", "side": "buy"}
+    ]
+    return strategy
 
-def test_is_market_open_true(session, requests_mock):
-    """Verify is_market_open returns True when the API says so."""
-    requests_mock.get(f"{session.api_base}/v2/clock", json={"is_open": True})
-    assert session.is_market_open() is True
+@pytest.fixture
+def mock_broker():
+    """Creates a mock broker."""
+    broker = MagicMock()
+    broker.submit_order.return_value = {"id": "123", "status": "filled"}
+    return broker
 
-def test_is_market_open_false(session, requests_mock):
-    """Verify is_market_open returns False when the API says so."""
-    requests_mock.get(f"{session.api_base}/v2/clock", json={"is_open": False})
-    assert session.is_market_open() is False
+@pytest.fixture
+def mock_risk_manager():
+    """Creates a mock risk manager."""
+    risk_manager = MagicMock()
+    risk_manager.calculate_order_qty.return_value = 1.5
+    return risk_manager
 
-def test_is_market_open_api_error(session, requests_mock):
-    """Verify is_market_open returns False on API error."""
-    requests_mock.get(f"{session.api_base}/v2/clock", status_code=500)
-    assert session.is_market_open() is False
+def test_trader_run(mock_strategy, mock_broker, mock_risk_manager):
+    """Tests the main run loop of the Trader."""
+    trader = Trader(mock_strategy, mock_broker, mock_risk_manager)
+    trader.run()
 
-def test_run_strategy_when_market_open(session, requests_mock):
-    """Verify the strategy runs when the market is open."""
-    requests_mock.get(f"{session.api_base}/v2/clock", json={"is_open": True})
-    
-    session.run_strategy_if_market_open()
-    
-    # Verify that the harness's run method was called
-    session.harness.run.assert_called_once()
+    mock_strategy.evaluate.assert_called_once()
+    mock_broker.submit_order.assert_called_once_with(
+        symbol="BTC/USD",
+        qty=1.5,
+        side="buy",
+        order_type="market",
+        time_in_force="gtc"
+    )
+    mock_risk_manager.calculate_order_qty.assert_called_once_with("BTC/USD", "buy")
 
-def test_do_not_run_strategy_when_market_closed(session, requests_mock):
-    """Verify the strategy does not run when the market is closed."""
-    requests_mock.get(f"{session.api_base}/v2/clock", json={"is_open": False})
-    
-    session.run_strategy_if_market_open()
-    
-    # Verify that the harness's run method was NOT called
-    session.harness.run.assert_not_called()
-    
-    # Mock the strategy to track if it was called
-    strategy_called = False
-    def mock_strategy(s):
-        nonlocal strategy_called
-        strategy_called = True
-        return {"action": "test"}
-    
-    session.strategy = mock_strategy
-    session.run_strategy_if_market_open()
-    
-    assert strategy_called is False
+def test_trader_execute_actions_no_actions(mock_strategy, mock_broker, mock_risk_manager):
+    """Tests that nothing happens when the strategy returns no actions."""
+    mock_strategy.evaluate.return_value = []
+    trader = Trader(mock_strategy, mock_broker, mock_risk_manager)
+    trader.run()
+
+    mock_broker.submit_order.assert_not_called()
+
+def test_trader_execute_order_zero_qty(mock_strategy, mock_broker, mock_risk_manager):
+    """Tests that no order is placed when the risk manager returns zero quantity."""
+    mock_risk_manager.calculate_order_qty.return_value = 0
+    trader = Trader(mock_strategy, mock_broker, mock_risk_manager)
+    trader.run()
+
+    mock_broker.submit_order.assert_not_called()
+
