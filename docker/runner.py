@@ -1,3 +1,4 @@
+import os
 import time
 import logging
 import requests
@@ -6,6 +7,7 @@ from smartcfd.config import load_config
 from smartcfd.logging_setup import setup_logging
 from smartcfd.db import connect as db_connect, init_schema, record_run, record_heartbeat
 from smartcfd.alpaca import build_api_base, build_headers_from_env
+from smartcfd.health_server import start_health_server
 
 def check_connectivity(api_base: str, timeout: float):
     headers = build_headers_from_env()
@@ -33,6 +35,16 @@ def main():
         record_run(conn, status="start", note="runner")
     except Exception as e:
         log.warning("failed to init DB / record run", extra={"extra": {"error": repr(e)}})
+
+    # Start /healthz server (optional)
+    try:
+        if os.getenv("RUN_HEALTH_SERVER", "1") not in ("0", "false", "False", "FALSE"):
+            port = int(os.getenv("HEALTH_PORT", "8080"))
+            max_age = int(os.getenv("HEALTH_MAX_AGE_SECONDS", "120"))
+            start_health_server(port=port, db_path=None, max_age_seconds=max_age)
+            log.info("runner.health.server.start", extra={"extra": {"port": port, "max_age_seconds": max_age}})
+    except Exception as e:
+        log.warning("runner.health.server.fail", extra={"extra": {"error": repr(e)}})
 
     log.info(
         "runner.start",
