@@ -2,6 +2,7 @@ import os
 import time
 import logging
 import requests
+import signal
 
 from smartcfd.config import load_config
 from smartcfd.logging_setup import setup_logging
@@ -12,8 +13,11 @@ from smartcfd.health_server import start_health_server
 def check_connectivity(api_base: str, timeout: float):
     headers = build_headers_from_env()
     start = time.perf_counter()
+    
+    verify_ssl = os.getenv("DANGEROUSLY_DISABLE_SSL_VERIFICATION", "0") not in ("1", "true", "True")
+
     try:
-        r = requests.get(f"{api_base}/v2/clock", timeout=timeout, headers=headers if headers else None)
+        r = requests.get(f"{api_base}/v2/clock", timeout=timeout, headers=headers if headers else None, verify=verify_ssl)
         latency_ms = (time.perf_counter() - start) * 1000.0
         ok = r.status_code == 200
         return ok, str(r.status_code), r.status_code, latency_ms, None
@@ -21,7 +25,21 @@ def check_connectivity(api_base: str, timeout: float):
         latency_ms = (time.perf_counter() - start) * 1000.0
         return False, repr(e), None, latency_ms, repr(e)
 
+# Global connection and run_id to be accessible by the signal handler
+conn = None
+run_id = None
+
+def shutdown_handler(signum, frame):
+    """Gracefully shut down the runner on SIGTERM or SIGINT."""
+    log = logging.getLogger("runner")
+    log.warning("runner.shutdown", extra={"extra": {"signal": signum}})
+    # The main loop will be broken by setting running to False
+    global running
+    running = False
+
 def main():
+    global conn, run_id, running
+    running = True
     setup_logging("INFO")
     log = logging.getLogger("runner")
 
@@ -32,9 +50,15 @@ def main():
     try:
         conn = db_connect()
         init_schema(conn)
-        record_run(conn, status="start", note="runner")
+        run_id = record_run(conn, status="start", note="runner")
     except Exception as e:
         log.warning("failed to init DB / record run", extra={"extra": {"error": repr(e)}})
+
+    # Register signal handlers for graceful shutdown
+    signal.signal(signal.SIGTERM, shutdown_handler)
+    # On Windows, SIGINT is the only signal that can be sent to a subprocess
+    # CTRL_C_EVENT and CTRL_BREAK_EVENT are handled by SIGINT
+    signal.signal(signal.SIGINT, shutdown_handler)
 
     # Start /healthz server (optional)
     try:
@@ -61,7 +85,7 @@ def main():
 
     backoff = 2
     try:
-        while True:
+        while running:
             ok, detail, status_code, latency_ms, err = check_connectivity(api_base, cfg.api_timeout_seconds)
 
             if ok:
@@ -89,9 +113,12 @@ def main():
     finally:
         try:
             if conn is not None:
+                log.info("runner.stop")
+                if run_id:
+                    record_run(conn, status="stop", note="signal", run_id=run_id)
                 conn.close()
-        except Exception:
-            pass
+        except Exception as e:
+            log.error("runner.stop.fail", extra={"extra": {"error": repr(e)}})
 
 if __name__ == "__main__":
     main()

@@ -24,6 +24,7 @@ def init_schema(conn: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS runs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             started_at TEXT NOT NULL,
+            stopped_at TEXT,
             status TEXT NOT NULL,
             note TEXT
         )
@@ -45,7 +46,24 @@ def init_schema(conn: sqlite3.Connection) -> None:
     )
     conn.commit()
 
-def record_run(conn: sqlite3.Connection, status: str, note: Optional[str] = None, started_at: Optional[str] = None) -> int:
+def record_run(
+    conn: sqlite3.Connection,
+    status: str,
+    note: Optional[str] = None,
+    started_at: Optional[str] = None,
+    run_id: Optional[int] = None,
+) -> int:
+    if run_id:
+        # Update existing run
+        ts = datetime.now(timezone.utc).isoformat()
+        cur = conn.execute(
+            "UPDATE runs SET status = ?, note = ?, stopped_at = ? WHERE id = ?",
+            (status, note, ts, run_id),
+        )
+        conn.commit()
+        return run_id
+
+    # Insert new run
     ts = started_at or datetime.now(timezone.utc).isoformat()
     cur = conn.execute(
         "INSERT INTO runs (started_at, status, note) VALUES (?, ?, ?)",
@@ -56,7 +74,7 @@ def record_run(conn: sqlite3.Connection, status: str, note: Optional[str] = None
 
 def get_latest_runs(conn: sqlite3.Connection, limit: int = 5) -> List[Dict]:
     cur = conn.execute(
-        "SELECT id, started_at, status, note FROM runs ORDER BY id DESC LIMIT ?",
+        "SELECT id, started_at, stopped_at, status, note FROM runs ORDER BY id DESC LIMIT ?",
         (int(limit),),
     )
     rows = cur.fetchall()
