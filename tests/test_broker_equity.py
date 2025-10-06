@@ -20,12 +20,12 @@ def test_run_cycle_uses_broker_equity(monkeypatch, tmp_path):
     monkeypatch.setattr(pipeline, "top_n", lambda watch, size: watch)
 
     def fake_price(tickers, start, end, interval="1d"):
-        idx = pd.date_range("2020-01-01", periods=2, freq="D")
+        idx = pd.date_range("2020-01-01", periods=20, freq="D")
         data = {}
         for t in tickers:
-            data[(t, "High")] = pd.Series([10, 10], index=idx)
-            data[(t, "Low")] = pd.Series([8, 8], index=idx)
-            data[(t, "Close")] = pd.Series([9, 9], index=idx)
+            data[(t, "High")] = pd.Series(range(20), index=idx) + 10
+            data[(t, "Low")] = pd.Series(range(20), index=idx) + 8
+            data[(t, "Close")] = pd.Series(range(20), index=idx) + 9
         return pd.DataFrame(data)
 
     monkeypatch.setattr(pipeline, "get_price_data", fake_price)
@@ -85,12 +85,12 @@ def test_run_cycle_handles_none_equity(monkeypatch, tmp_path):
     monkeypatch.setattr(pipeline, "top_n", lambda watch, size: watch)
 
     def fake_price(tickers, start, end, interval="1d"):
-        idx = pd.date_range("2020-01-01", periods=2, freq="D")
+        idx = pd.date_range("2020-01-01", periods=20, freq="D")
         data = {}
         for t in tickers:
-            data[(t, "High")] = pd.Series([10, 10], index=idx)
-            data[(t, "Low")] = pd.Series([8, 8], index=idx)
-            data[(t, "Close")] = pd.Series([9, 9], index=idx)
+            data[(t, "High")] = pd.Series(range(20), index=idx) + 10
+            data[(t, "Low")] = pd.Series(range(20), index=idx) + 8
+            data[(t, "Close")] = pd.Series(range(20), index=idx) + 9
         return pd.DataFrame(data)
 
     monkeypatch.setattr(pipeline, "get_price_data", fake_price)

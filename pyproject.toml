@@ -28,3 +28,11 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 include = ["SmartCFDTradingAgent"]
+
+[tool.pytest.ini_options]
+pythonpath = [
+  ".",
+]
+testpaths = [
+    "tests",
+]

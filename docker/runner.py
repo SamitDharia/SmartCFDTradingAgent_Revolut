@@ -4,7 +4,7 @@ import logging
 import requests
 import signal
 
-from smartcfd.config import load_config
+from smartcfd.config import load_config, load_risk_config
 from smartcfd.logging_setup import setup_logging
 from smartcfd.db import connect as db_connect, init_schema, record_run, record_heartbeat
 from smartcfd.alpaca import build_api_base, build_headers_from_env
@@ -12,6 +12,7 @@ from smartcfd.health_server import start_health_server
 from smartcfd.trader import TradingSession
 from smartcfd.strategy import get_strategy_by_name, StrategyHarness
 from smartcfd.alpaca_client import get_alpaca_client
+from smartcfd.risk import RiskManager
 
 def check_connectivity(api_base: str, timeout: float):
     headers = build_headers_from_env()
@@ -47,6 +48,7 @@ def main():
     log = logging.getLogger("runner")
 
     cfg = load_config()
+    risk_cfg = load_risk_config()
     api_base = build_api_base(cfg.alpaca_env)
 
     conn = None
@@ -59,9 +61,10 @@ def main():
 
     # Register signal handlers for graceful shutdown
     signal.signal(signal.SIGTERM, shutdown_handler)
-    # On Windows, SIGINT is the only signal that can be sent to a subprocess
-    # CTRL_C_EVENT and CTRL_BREAK_EVENT are handled by SIGINT
+    # CTRL_C_EVENT and CTRL_BREAK_EVENT are handled by SIGINT/SIGBREAK
     signal.signal(signal.SIGINT, shutdown_handler)
+    if os.name == "nt":
+        signal.signal(signal.SIGBREAK, shutdown_handler)
 
     # Start /healthz server (optional)
     try:
@@ -73,11 +76,12 @@ def main():
     except Exception as e:
         log.warning("runner.health.server.fail", extra={"extra": {"error": repr(e)}})
 
-    # Initialize the Alpaca client and strategy harness
+    # Initialize the Alpaca client, Risk Manager, and Strategy Harness
     alpaca_client = get_alpaca_client(api_base)
+    risk_manager = RiskManager(alpaca_client, risk_cfg)
     strategy_name = os.getenv("STRATEGY", "dry_run")
     strategy = get_strategy_by_name(strategy_name)
-    harness = StrategyHarness(alpaca_client, strategy)
+    harness = StrategyHarness(alpaca_client, strategy, risk_manager)
 
     # Initialize the trading session
     trader = TradingSession(

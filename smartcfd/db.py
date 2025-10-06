@@ -1,7 +1,7 @@
 import os
 import sqlite3
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Optional
 
 def get_db_path(default: str = "app.db") -> str:
@@ -104,3 +104,27 @@ def get_recent_heartbeats(conn: sqlite3.Connection, limit: int = 10) -> List[Dic
     )
     rows = cur.fetchall()
     return [dict(r) for r in rows]
+
+def get_heartbeat_stats(conn: sqlite3.Connection, hours: int = 24) -> Dict:
+    """
+    Calculates heartbeat statistics over a given period.
+    """
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    cur = conn.execute(
+        "SELECT ok, latency_ms FROM heartbeats WHERE ts >= ?",
+        (since.isoformat(),),
+    )
+    rows = cur.fetchall()
+    
+    total = len(rows)
+    if total == 0:
+        return {"uptime_pct": 0, "avg_latency_ms": 0, "total_checks": 0}
+        
+    ok_count = sum(1 for r in rows if r["ok"])
+    latencies = [r["latency_ms"] for r in rows if r["latency_ms"] is not None]
+    
+    return {
+        "uptime_pct": (ok_count / total) * 100 if total > 0 else 0,
+        "avg_latency_ms": sum(latencies) / len(latencies) if latencies else 0,
+        "total_checks": total,
+    }

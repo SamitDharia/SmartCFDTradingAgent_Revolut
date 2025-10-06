@@ -15,6 +15,19 @@ class AppConfig:
     order_client_id_prefix: str = "SCFD"
     offline_behavior: str = "halt"
 
+@dataclass
+class RiskConfig:
+    max_daily_drawdown_percent: float = -5.0  # e.g. -5.0 for a 5% loss
+    max_position_size: float = 10000.0  # Max notional value for a single position
+    max_total_exposure: float = 25000.0  # Max total notional value of all positions
+
+def load_risk_config() -> RiskConfig:
+    return RiskConfig(
+        max_daily_drawdown_percent=float(os.getenv("MAX_DAILY_DRAWDOWN_PERCENT", "-5.0")),
+        max_position_size=float(os.getenv("MAX_POSITION_SIZE", "10000.0")),
+        max_total_exposure=float(os.getenv("MAX_TOTAL_EXPOSURE", "25000.0")),
+    )
+
 def load_config() -> AppConfig:
     return AppConfig(
         timezone=os.getenv("TIMEZONE", "Europe/Dublin"),

@@ -1,165 +1,218 @@
-from __future__ import annotations
+import logging
+from pathlib import Path
 
-from typing import Dict, List, Tuple
-
-import numpy as np
+import joblib
 import pandas as pd
+import numpy as np
 
-from SmartCFDTradingAgent.indicators import atr
-
-
-def _sig_to_pos(sig: str) -> int:
-    """Convert signal string to numeric position."""
-    return {"Buy": 1, "Sell": -1}.get(sig, 0)
+log = logging.getLogger(__name__)
 
 
-def backtest(price_df: pd.DataFrame, signal_map: Dict[str, str],
-             delay: int = 1, max_hold: int = 20, cost: float = 0.0002,
-             sl_atr: float = 2.0, tp_atr: float = 4.0, trail_atr: float = 0.0,
-             risk_pct: float = 0.01, equity: float = 100_000
-             ) -> Tuple[pd.DataFrame, Dict[str, float], pd.DataFrame]:
-    close = price_df.xs("Close", level=1, axis=1).copy()
-    high_df = price_df.xs("High", level=1, axis=1)
-    low_df = price_df.xs("Low", level=1, axis=1)
-    rets  = close.pct_change().shift(-delay).fillna(0.0)
+class Backtester:
+    """
+    A simple event-driven backtester for evaluating a trading strategy.
+    """
 
-    atrs: Dict[str, float] = {}
-    for tkr in signal_map:
-        high = price_df[tkr]["High"]
-        low = price_df[tkr]["Low"]
-        c = price_df[tkr]["Close"]
-        val = atr(high, low, c).iloc[-1]
-        if pd.isna(val):
-            raise RuntimeError(f"ATR is NaN for {tkr}")
-        atrs[tkr] = float(val)
+    def __init__(self, model_path: str, initial_cash: float = 10000.0):
+        """
+        Initializes the Backtester.
 
-    pnl = pd.DataFrame(index=rets.index, columns=signal_map.keys(), dtype=float).fillna(0.0)
+        Args:
+            model_path: Path to the trained model file.
+            initial_cash: The starting cash for the backtest.
+        """
+        self.model_path = model_path
+        self.initial_cash = initial_cash
+        self.cash = initial_cash
+        self.model = self._load_model()
 
-    trades: List[dict] = []
+        self.positions = {}  # { 'symbol': { 'qty': float, 'entry_price': float } }
+        self.trades = []  # List of trade dictionaries
+        self.equity_curve = []  # List of portfolio values over time
 
-    for tkr, entry_sig in signal_map.items():
-        pos = 0
-        hold = 0
-        entry_price: float | None = None
-        entry_date = None
-        qty = 0
-        entry_slip = 0.0
-        stop = take = trail = None
-        atr_val = atrs[tkr]
+    def _load_model(self):
+        """Loads the trained model from the specified path."""
+        log.info(f"Loading model from {self.model_path}")
+        if not Path(self.model_path).exists():
+            raise FileNotFoundError(f"Model not found at {self.model_path}")
+        return joblib.load(self.model_path)
 
-        for i, date in enumerate(rets.index):
-            price_now = close.at[date, tkr]
-            bar_high = high_df.at[date, tkr]
-            bar_low = low_df.at[date, tkr]
-            if price_now == 0 or np.isnan(price_now):
-                continue
+    def run(self, features_df: pd.DataFrame, signal_threshold: float = 0.5):
+        """
+        Runs the backtest on the provided historical data.
 
-            if pos == 0 and _sig_to_pos(entry_sig) != 0 and i >= delay:
-                pos = _sig_to_pos(entry_sig)
-                risk_budget = equity * risk_pct
-                k = 1.0
-                qty = max(int(risk_budget / max(k * atrs[tkr], 1e-8)), 1)
-                qty = max(int((equity * risk_pct) / max(atr_val, 1e-8)), 1)
+        Args:
+            features_df: DataFrame with engineered features, indexed by timestamp.
+            signal_threshold: The probability threshold to trigger a 'buy' signal.
+        """
+        log.info(f"Starting backtest with initial cash: ${self.initial_cash:,.2f}")
 
-                entry_price = price_now
-                entry_date = date
-                hold = 0
-                signal_price = close.iloc[i - delay][tkr] if i >= delay else price_now
-                entry_slip = abs(entry_price - signal_price)
-                pnl.at[date, tkr] -= cost
-                stop = take = trail = None
-                if sl_atr > 0:
-                    stop = entry_price - pos * sl_atr * atr_val
-                if tp_atr > 0:
-                    take = entry_price + pos * tp_atr * atr_val
-                if trail_atr > 0:
-                    trail = entry_price - pos * trail_atr * atr_val
-                continue
+        # Ensure data is sorted by time and symbol
+        features_df = features_df.sort_values(by=["timestamp", "symbol"])
 
-            if pos != 0:
-                hold += 1
-                pnl.at[date, tkr] += pos * qty * rets.at[date, tkr]
+        # Get the list of feature names the model was trained on
+        model_features = self.model.get_booster().feature_names
 
-                if trail is not None and trail_atr > 0:
-                    if pos == 1:
-                        trail = max(trail, bar_high - trail_atr * atr_val)
-                    else:
-                        trail = min(trail, bar_low + trail_atr * atr_val)
+        for timestamp, group in features_df.groupby("timestamp"):
+            for _, row in group.iterrows():
+                current_price = row["close"]
+                symbol = row["symbol"]
 
-                hit_sl = False
-                hit_tp = False
-                hit_trail = False
-                if stop is not None:
-                    if pos == 1:
-                        hit_sl = bar_low <= stop
-                    else:
-                        hit_sl = bar_high >= stop
-                if take is not None:
-                    if pos == 1:
-                        hit_tp = bar_high >= take
-                    else:
-                        hit_tp = bar_low <= take
-                if trail is not None:
-                    if pos == 1:
-                        hit_trail = bar_low <= trail
-                    else:
-                        hit_trail = bar_high >= trail
-
-                exit_price = None
-                if hit_sl:
-                    exit_price = stop
-                elif hit_tp:
-                    exit_price = take
-                elif hit_trail:
-                    exit_price = trail
-                elif hold >= max_hold:
-                    exit_price = price_now
-
-                if exit_price is not None:
-                    exit_date = date
-                    exit_slip = abs(exit_price - close.iloc[i - 1][tkr]) if i > 0 else 0.0
-                    pnl.at[date, tkr] -= cost
-                    trade_pnl = pos * qty * ((exit_price - entry_price) / entry_price)
-                    trades.append(
-                        {
-                            "ticker": tkr,
-                            "entry_time": entry_date,
-                            "exit_time": exit_date,
-                            "entry_price": entry_price,
-                            "exit_price": exit_price,
-                            "pnl": trade_pnl - (2 * cost),
-                            "slippage": entry_slip + exit_slip,
-                            "commission": 2 * cost,
-                        }
+                # 1. Generate Signal
+                # Ensure all required features are present
+                if not all(f in row for f in model_features):
+                    log.debug(
+                        f"Skipping {timestamp} for {symbol} due to missing features."
                     )
-                    pos = 0
-                    entry_price = None
-                    entry_date = None
-                    entry_slip = 0.0
-                    stop = take = trail = None
+                    continue
 
-    pnl["total"] = pnl.sum(axis=1, skipna=True)
-    pnl["cum_return"] = (1 + pnl["total"].fillna(0)).cumprod() - 1
+                features = row[model_features].to_frame().T.astype(float)
+                probability = self.model.predict_proba(features)[0][
+                    1
+                ]  # Probability of class 1 (price up)
 
-    daily = pnl["total"].fillna(0)
-    if daily.std(ddof=0) == 0:
-        sharpe = 0.0
-    else:
-        sharpe = (daily.mean() / daily.std(ddof=0)) * np.sqrt(len(daily))
+                # 2. Execute Strategy
+                # Simple strategy: Buy if signal > threshold and not in position. Sell after one bar.
+                if symbol not in self.positions and probability > signal_threshold:
+                    # Buy signal
+                    self._execute_trade(
+                        timestamp, symbol, "buy", current_price, 1
+                    )  # Buy 1 share
+                elif symbol in self.positions:
+                    # Sell signal (holding for one bar)
+                    self._execute_trade(
+                        timestamp, symbol, "sell", current_price, self.positions[symbol]["qty"]
+                    )
 
-    cum = pnl["cum_return"]
-    peak = cum.cummax()
-    dd = (cum - peak) / peak
-    max_dd = float(-dd.min()) if len(dd) else 0.0
-    wins = sum(1 for t in trades if t.get("pnl", 0) > 0)
-    win_rate = wins / len(trades) if trades else 0.0
+            # 3. Update Portfolio Equity at the end of each timestamp
+            portfolio_value = self._calculate_portfolio_value(group)
+            self.equity_curve.append({"timestamp": timestamp, "equity": portfolio_value})
 
-    stats = {
-        "sharpe": float(sharpe),
-        "max_drawdown": max_dd,
-        "win_rate": float(win_rate),
-    }
+        log.info("Backtest finished.")
+        return self.generate_results()
 
-    trades_df = pd.DataFrame(trades)
-    return pnl, stats, trades_df
+    def _execute_trade(self, timestamp, symbol, side, price, qty):
+        """Executes a trade and updates portfolio state."""
+        cost = price * qty
+
+        if side == "buy":
+            if self.cash >= cost:
+                self.cash -= cost
+                self.positions[symbol] = {"qty": qty, "entry_price": price}
+                self.trades.append(
+                    {
+                        "timestamp": timestamp,
+                        "symbol": symbol,
+                        "side": "buy",
+                        "qty": qty,
+                        "price": price,
+                    }
+                )
+                log.debug(f"{timestamp}: Bought {qty} {symbol} @ ${price:.2f}")
+            else:
+                log.warning(f"{timestamp}: Insufficient cash to buy {qty} {symbol}.")
+
+        elif side == "sell":
+            if symbol in self.positions and self.positions[symbol]["qty"] == qty:
+                self.cash += cost
+                del self.positions[symbol]
+                self.trades.append(
+                    {
+                        "timestamp": timestamp,
+                        "symbol": symbol,
+                        "side": "sell",
+                        "qty": qty,
+                        "price": price,
+                    }
+                )
+                log.debug(f"{timestamp}: Sold {qty} {symbol} @ ${price:.2f}")
+
+    def _calculate_portfolio_value(self, current_data: pd.DataFrame):
+        """Calculates the current total value of the portfolio."""
+        holdings_value = 0
+        for symbol, position in self.positions.items():
+            # Get the most recent price for the symbol from the current group of data
+            if symbol in current_data["symbol"].values:
+                last_price = current_data[current_data["symbol"] == symbol][
+                    "close"
+                ].iloc[-1]
+                holdings_value += position["qty"] * last_price
+            else:
+                # If symbol not in current data, use entry price (less accurate but a fallback)
+                holdings_value += position["qty"] * position["entry_price"]
+        return self.cash + holdings_value
+
+    def generate_results(self):
+        """Generates a summary of the backtest results."""
+        equity_df = pd.DataFrame(self.equity_curve)
+        if equity_df.empty or len(self.trades) < 2:
+            return {
+                "initial_cash": self.initial_cash,
+                "final_cash": self.cash,
+                "total_return_pct": (self.cash / self.initial_cash - 1) * 100,
+                "num_trades": 0,
+                "sharpe_ratio": 0,
+                "max_drawdown_pct": 0,
+                "win_rate_pct": 0,
+                "trades": pd.DataFrame(self.trades),
+                "equity_curve": equity_df,
+            }
+
+        # --- Calculate Metrics ---
+        # Total Return
+        total_return = (self.cash / self.initial_cash - 1) * 100
+
+        # Sharpe Ratio (simple version, based on period returns)
+        equity_df["returns"] = equity_df["equity"].pct_change().fillna(0)
+        if equity_df["returns"].std() == 0:
+            sharpe_ratio = 0.0
+        else:
+            # Assuming the data frequency allows for this annualization.
+            # This might need adjustment for different timeframes (e.g., 252 for daily, 252*6.5 for hourly)
+            annualization_factor = np.sqrt(252) if len(equity_df) > 1 else 1
+            sharpe_ratio = (equity_df["returns"].mean() / equity_df["returns"].std()) * annualization_factor
+
+        # Max Drawdown
+        equity_df["peak"] = equity_df["equity"].cummax()
+        equity_df["drawdown"] = (equity_df["equity"] - equity_df["peak"]) / equity_df["peak"]
+        max_drawdown = equity_df["drawdown"].min()
+
+        # Win Rate
+        trades_df = pd.DataFrame(self.trades)
+        num_completed_trades = 0
+        win_rate = 0
+        if not trades_df.empty:
+            buys = trades_df[trades_df['side'] == 'buy'].copy()
+            sells = trades_df[trades_df['side'] == 'sell'].copy()
+            
+            if not buys.empty and not sells.empty:
+                buys['trade_num'] = buys.groupby('symbol').cumcount()
+                sells['trade_num'] = sells.groupby('symbol').cumcount()
+                
+                completed_trades = pd.merge(buys, sells, on=['symbol', 'trade_num'], suffixes=('_buy', '_sell'))
+                
+                if not completed_trades.empty:
+                    pnl = (completed_trades["price_sell"] - completed_trades["price_buy"]) * completed_trades["qty_buy"]
+                    wins = (pnl > 0).sum()
+                    num_completed_trades = len(completed_trades)
+                    win_rate = (wins / num_completed_trades) * 100 if num_completed_trades > 0 else 0
+
+        results = {
+            "initial_cash": self.initial_cash,
+            "final_cash": self.cash,
+            "total_return_pct": total_return,
+            "num_trades": num_completed_trades,
+            "sharpe_ratio": sharpe_ratio,
+            "max_drawdown_pct": max_drawdown * 100,
+            "win_rate_pct": win_rate,
+            "trades": trades_df,
+            "equity_curve": equity_df,
+        }
+        log.info(f"Final Portfolio Value: ${self.cash:,.2f}")
+        log.info(f"Total Return: {total_return:.2f}%")
+        log.info(f"Sharpe Ratio: {sharpe_ratio:.2f}")
+        log.info(f"Max Drawdown: {max_drawdown*100:.2f}%")
+        log.info(f"Win Rate: {win_rate:.2f}%")
+        log.info(f"Total Trades: {num_completed_trades}")
+        return results
 

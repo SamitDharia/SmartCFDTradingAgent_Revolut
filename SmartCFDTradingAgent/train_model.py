@@ -1,44 +1,83 @@
-from __future__ import annotations
-
-import argparse
 import logging
 from pathlib import Path
 
+import joblib
 import pandas as pd
-
-from SmartCFDTradingAgent.ml_models import PriceDirectionModel
-from SmartCFDTradingAgent.utils.logger import get_logger
+import xgboost as xgb
 
 log = logging.getLogger(__name__)
 
-ROOT = Path(__file__).resolve().parent
-STORE = ROOT / "storage"
-log = get_logger()
 
+def train_model(features_path: str, model_output_path: str):
+    """
+    Trains an XGBoost model on the engineered features and saves it.
 
-log = get_logger()
+    Args:
+        features_path: Path to the Parquet file with engineered features.
+        model_output_path: Path to save the trained model file.
+    """
+    log.info(f"Loading features from {features_path}")
+    if not Path(features_path).exists():
+        log.error(f"Features file not found at {features_path}")
+        raise FileNotFoundError(f"Features file not found at {features_path}")
 
+    df = pd.read_parquet(features_path)
+    log.info(f"Loaded {len(df)} rows of data.")
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Train ML model for SmartCFD signals")
-    parser.add_argument("csv", help="Path to CSV file containing historical price data")
-    parser.add_argument(
-        "--output",
-        default=str(STORE / "ml_model.pkl"),
-        help="Where to store the trained model (default: storage/ml_model.pkl)",
+    # --- Basic Feature/Target Preparation ---
+    # Define the target variable: 1 if the next close is higher, 0 otherwise.
+    # This is a simple example; a real target would be more sophisticated.
+    df["target"] = (df.groupby("symbol")["close"].shift(-1) > df["close"]).astype(int)
+
+    # Drop rows with NaN values (especially the last row for each symbol due to the shift)
+    df.dropna(subset=["target"], inplace=True)
+
+    # Define features (X) and target (y)
+    # Exclude non-feature columns
+    feature_cols = [
+        col
+        for col in df.columns
+        if col
+        not in [
+            "symbol",
+            "timestamp",
+            "target",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+        ]
+    ]
+    X = df[feature_cols]
+    y = df["target"]
+
+    if X.empty:
+        log.error("No features available for training after processing. Aborting.")
+        return
+
+    log.info(f"Training model on {len(X)} samples with {len(feature_cols)} features.")
+
+    # --- Model Training ---
+    # Initialize and train the XGBoost Classifier
+    model = xgb.XGBClassifier(
+        objective="binary:logistic",
+        eval_metric="logloss",
+        use_label_encoder=False,
+        n_estimators=100,
+        max_depth=3,
+        learning_rate=0.1,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        random_state=42,
     )
-    args = parser.parse_args()
 
-    df = pd.read_csv(args.csv)
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"])
-        df = df.set_index("Date")
+    model.fit(X, y)
+    log.info("Model training completed.")
 
-    model = PriceDirectionModel()
-    model.fit(df)
-    model.save(args.output)
-    log.info("Model saved to %s", args.output)
+    # --- Save the Model ---
+    output_path = Path(model_output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(model, output_path)
+    log.info(f"Model saved successfully to {output_path}")
 
-
-if __name__ == "__main__":
-    main()

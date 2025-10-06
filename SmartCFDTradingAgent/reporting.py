@@ -11,10 +11,13 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
+import plotly.graph_objs as go
+from plotly.offline import plot
 
 from SmartCFDTradingAgent.pipeline import read_last_decisions, is_crypto
-from SmartCFDTradingAgent.data_loader import get_price_data
+from SmartCFDTradingAgent.rank_assets import get_price_data
 from SmartCFDTradingAgent.utils.trade_logger import aggregate_trade_stats, log_trade, CSV_PATH
+from smartcfd.db import connect, get_heartbeat_stats, get_latest_runs
 
 STORE = Path(__file__).resolve().parent / "storage"
 REPORTS_DIR = Path("reports")
@@ -32,6 +35,11 @@ class Digest:
 
     def __init__(self, timezone: str = "Europe/Dublin") -> None:
         self.timezone = timezone
+        self.db_conn = connect()
+
+    def __del__(self):
+        if self.db_conn:
+            self.db_conn.close()
 
     # ------------------------------------------------------------------ helpers
     def latest_decisions(self, count: int = 5) -> list[dict[str, str]]:
@@ -45,6 +53,12 @@ class Digest:
             return aggregate_trade_stats()
         except Exception:
             return {"wins": 0, "losses": 0, "open": 0}
+
+    def heartbeat_stats(self, hours: int = 24) -> dict:
+        try:
+            return get_heartbeat_stats(self.db_conn, hours=hours)
+        except Exception:
+            return {"uptime_pct": 0, "avg_latency_ms": 0, "total_checks": 0}
 
     def yesterday_snapshot(self) -> dict[str, float] | None:
         trade_log = STORE / "trade_log.csv"
@@ -517,6 +531,7 @@ class Digest:
         stats = self.trade_stats()
         snapshot = self.yesterday_snapshot()
         chart_path = self.save_snapshot_chart(snapshot)
+        heartbeat_stats = self.heartbeat_stats()
 
         def _fmt_price(value: object) -> str:
             if value is None:
@@ -583,6 +598,8 @@ class Digest:
             plain_lines.append(f"- Net change: {snapshot['pnl']:+.2f}")
         else:
             plain_lines.append("- Yesterday: no trades were closed.")
+        
+        plain_lines.append(f"- System Health: {heartbeat_stats['uptime_pct']:.2f}% uptime ({heartbeat_stats['total_checks']} checks), {heartbeat_stats['avg_latency_ms']:.0f}ms avg latency")
         plain_lines.append("- Trend note: ATR keeps risk steady — higher ATR automatically means smaller position size.")
 
         plain_lines.append("")
@@ -695,6 +712,11 @@ class Digest:
                 "📆",
                 "Yesterday",
                 f"{snapshot['total']} closed | Net {snapshot['pnl']:+.2f}" if snapshot else "No trades were closed.",
+            ),
+            (
+                "❤️",
+                "System Health",
+                f"{heartbeat_stats['uptime_pct']:.1f}% uptime, {heartbeat_stats['avg_latency_ms']:.0f}ms latency",
             ),
             (
                 "📊",
@@ -829,6 +851,7 @@ class Digest:
         self.backfill_simulated_crypto_trades(target_date, simulation)
         stats = self.trade_stats()
         snapshot = self.yesterday_snapshot()
+        heartbeat_stats = self.heartbeat_stats()
 
         lines = []
         lines.append(f"DAILY TRADING DIGEST | {now}")
@@ -843,6 +866,8 @@ class Digest:
             )
         else:
             lines.append("  Yesterday: no trades were closed")
+        
+        lines.append(f"  Health: {heartbeat_stats['uptime_pct']:.1f}% uptime, {heartbeat_stats['avg_latency_ms']:.0f}ms latency")
 
         lines.append("")
         lines.append("PLAN CHECK")
@@ -889,6 +914,69 @@ class Digest:
             "stats": self.trade_stats(),
         }
         path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+def generate_html_report(results: dict, output_path: str):
+    """
+    Generates an HTML report from backtest results.
+
+    Args:
+        results: The dictionary of results from the backtester.
+        output_path: The path to save the HTML file.
+    """
+    equity_curve = results.get("equity_curve", pd.DataFrame())
+    
+    # Create the equity curve plot
+    fig = go.Figure()
+    if not equity_curve.empty and "timestamp" in equity_curve.columns and "equity" in equity_curve.columns:
+        fig.add_trace(go.Scatter(x=equity_curve["timestamp"], y=equity_curve["equity"], mode='lines', name='Equity'))
+    
+    fig.update_layout(
+        title='Backtest Equity Curve',
+        xaxis_title='Date',
+        yaxis_title='Portfolio Value ($)'
+    )
+
+    # Convert plot to HTML div using plot from plotly.offline
+    plot_div = plot(fig, output_type='div', include_plotlyjs='cdn')
+
+    # Create HTML content
+    html_content = f"""
+    <html>
+    <head>
+        <title>Backtest Report</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 40px; }}
+            h1, h2 {{ color: #333; }}
+            table {{ border-collapse: collapse; width: 50%; margin-bottom: 20px; }}
+            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+            th {{ background-color: #f2f2f2; }}
+        </style>
+    </head>
+    <body>
+        <h1>Backtest Performance Report</h1>
+        
+        <h2>Key Metrics</h2>
+        <table>
+            <tr><th>Metric</th><th>Value</th></tr>
+            <tr><td>Initial Cash</td><td>${results.get('initial_cash', 0):,.2f}</td></tr>
+            <tr><td>Final Cash</td><td>${results.get('final_cash', 0):,.2f}</td></tr>
+            <tr><td>Total Return</td><td>{results.get('total_return_pct', 0):.2f}%</td></tr>
+            <tr><td>Sharpe Ratio</td><td>{results.get('sharpe_ratio', 0):.2f}</td></tr>
+            <tr><td>Max Drawdown</td><td>{results.get('max_drawdown_pct', 0):.2f}%</td></tr>
+            <tr><td>Win Rate</td><td>{results.get('win_rate_pct', 0):.2f}%</td></tr>
+            <tr><td>Number of Trades</td><td>{results.get('num_trades', 0)}</td></tr>
+        </table>
+        
+        <h2>Equity Curve</h2>
+        {plot_div}
+        
+    </body>
+    </html>
+    """
+
+    # Write to file
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(html_content)
 
 
 __all__ = ["Digest", "CHART_PATH"]

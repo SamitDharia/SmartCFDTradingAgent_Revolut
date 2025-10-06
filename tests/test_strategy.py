@@ -25,15 +25,21 @@ def test_strategy_harness_run(mock_alpaca_client):
     """
     Verify that the StrategyHarness calls the strategy's evaluate method.
     """
-    # Create a mock strategy
+    # Create a mock strategy and risk manager
     mock_strategy = MagicMock()
     mock_strategy.evaluate.return_value = [{"action": "test"}]
-    
-    harness = StrategyHarness(mock_alpaca_client, mock_strategy)
+    mock_risk_manager = MagicMock()
+    mock_risk_manager.check_for_halt.return_value = False
+    mock_risk_manager.filter_actions.side_effect = lambda actions: actions
+
+    harness = StrategyHarness(mock_alpaca_client, mock_strategy, mock_risk_manager)
     harness.run()
-    
+
     # Assert that the strategy's evaluate method was called once
     mock_strategy.evaluate.assert_called_once_with(mock_alpaca_client)
+    # Assert that the risk manager was consulted
+    mock_risk_manager.check_for_halt.assert_called_once()
+    mock_risk_manager.filter_actions.assert_called_once()
 
 def test_get_strategy_by_name():
     """

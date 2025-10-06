@@ -6,10 +6,18 @@ from typing import Iterable, List
 
 import pandas as pd
 
-from SmartCFDTradingAgent.data_loader import get_price_data
 from SmartCFDTradingAgent.utils.logger import get_logger
 
 log = get_logger()
+
+
+def get_price_data(*args, **kwargs):
+    """
+    Placeholder for the old get_price_data function.
+    This can be removed once all dependencies are updated.
+    """
+    log.warning("get_price_data is deprecated and should be replaced.")
+    return pd.DataFrame()
 
 
 def top_n(

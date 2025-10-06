@@ -79,19 +79,25 @@ class AlpacaClient:
         Posts an order to the Alpaca API.
         
         Raises:
-            requests.HTTPError: If the API returns a non-2xx status code.
+            requests.HTTPError: If the API returns a non-2xx status code after retries.
         """
         url = f"{self.api_base}/v2/orders"
         try:
-            # Use by_alias to correctly serialize 'type' to 'type'
+            # Use by_alias to correctly serialize 'type' to 'order_type'
             response = self.session.post(url, json=order_data.model_dump(by_alias=True))
             response.raise_for_status()
             return OrderResponse.model_validate(response.json())
         except requests.RequestException as e:
-            log.error("alpaca.post_order.fail", extra={"extra": {"error": repr(e), "order": order_data.model_dump()}})
+            log.error(
+                "alpaca.post_order.fail", 
+                extra={"error": repr(e), "order": order_data.model_dump()}
+            )
             raise
         except Exception as e:
-            log.error("alpaca.post_order.parse_fail", extra={"extra": {"error": repr(e)}})
+            log.error(
+                "alpaca.post_order.parse_fail", 
+                extra={"error": repr(e)}
+            )
             raise
 
 def get_alpaca_client(api_base: str, max_retries: int = 3, backoff_factor: float = 0.3) -> AlpacaClient:

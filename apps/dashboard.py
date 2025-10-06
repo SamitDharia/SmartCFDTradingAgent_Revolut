@@ -98,55 +98,34 @@ with perf_tab:
             .encode(
                 x=alt.X("time:T", title="Time"),
                 y=alt.Y("cum_pnl:Q", title="Cumulative P&L"),
-                tooltip=["time:T", "pnl:Q", "cum_pnl:Q", "ticker:N"],
+                tooltip=["time", "pnl", "cum_pnl"],
             )
-            .properties(height=280)
+            .interactive()
         )
         st.altair_chart(pnl_chart, use_container_width=True)
     else:
-        st.info("No closed trades yet. Once trades close you'll see a P&L timeline here.")
-
-    st.subheader("Trade history")
-    if not trades.empty and "time" in trades.columns:
-        filtered = trades.copy()
-        filtered["time"] = pd.to_datetime(filtered["time"], errors="coerce")
-        filtered = filtered.sort_values("time", ascending=False)
-        st.dataframe(filtered.head(100))
-    else:
-        st.info("No trades recorded yet.")
+        st.info("No closed trades with P&L data yet.")
     st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("<div class='section-card' style='margin-top:20px;'>", unsafe_allow_html=True)
+    st.subheader("Recent Closed Trades")
+    st.dataframe(
+        closed[["time", "ticker", "side", "entry", "exit", "pnl"]]
+        .sort_values("time", ascending=False)
+        .head(10)
+        if not closed.empty
+        else pd.DataFrame()
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
+
 
 with signals_tab:
     st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-    st.subheader("Signal overview")
-    if decisions.empty:
-        st.info("No decisions logged yet. The agent will populate this section once trades are evaluated.")
+    st.subheader("Latest Trading Signals")
+    if not decisions.empty:
+        st.dataframe(decisions.sort_values("ts", ascending=False).head(20))
     else:
-        decisions["timestamp"] = pd.to_datetime(decisions["ts"], errors="coerce")
-        summary = decisions.groupby("side").size().reset_index(name="count")
-        signal_chart = (
-            alt.Chart(summary)
-            .mark_bar(color="#a855f7")
-            .encode(x=alt.X("side:N", title="Signal"), y=alt.Y("count:Q", title="Count"), tooltip=["side", "count"])
-            .properties(height=260)
-        )
-        st.altair_chart(signal_chart, use_container_width=True)
-
-        st.subheader("Latest trade ideas")
-        show_cols = ["ts", "ticker", "side", "price", "sl", "tp", "interval", "adx"]
-        display = decisions.tail(50)[show_cols].rename(
-            columns={
-                "ts": "Timestamp",
-                "ticker": "Ticker",
-                "side": "Action",
-                "price": "Entry Price",
-                "sl": "Stop-Loss",
-                "tp": "Target",
-                "interval": "Timeframe",
-                "adx": "Trend strength (ADX)",
-            }
-        )
-        st.dataframe(display)
+        st.info("No trading signals have been recorded yet.")
     st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown(

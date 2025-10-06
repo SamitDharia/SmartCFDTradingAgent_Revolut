@@ -21,10 +21,9 @@ from dotenv import load_dotenv
 from SmartCFDTradingAgent.utils.logger import get_logger
 from SmartCFDTradingAgent.utils.market_time import market_open
 from SmartCFDTradingAgent.utils.telegram import send as tg_send
-from SmartCFDTradingAgent.rank_assets import top_n
-from SmartCFDTradingAgent.data_loader import get_price_data
+from SmartCFDTradingAgent.rank_assets import top_n, get_price_data
 from SmartCFDTradingAgent.signals import generate_signals
-from SmartCFDTradingAgent.backtester import backtest
+from SmartCFDTradingAgent.backtester import Backtester
 from SmartCFDTradingAgent.position import qty_from_atr
 from SmartCFDTradingAgent.indicators import adx as _adx, atr as _atr
 from SmartCFDTradingAgent.utils.trade_logger import log_trade
@@ -805,28 +804,31 @@ def run_cycle(
     time.sleep(max(0, grace))
 
     # Backtest preview on the same data slice
-    sig_map = {k: (v["action"] if isinstance(v, dict) else v) for k, v in base_sig.items()}
-    pnl, stats, _ = backtest(
-        price,
-        sig_map,
-        max_hold=5,
-        cost=0.0002,
-        sl_atr=defaults["sl_atr"],
-        tp_atr=defaults["tp_atr"],
-        trail_atr=defaults["trail_atr"],
-        risk_pct=risk,
-        equity=equity,
-    )
+    sig_map = {t: (v["action"] if isinstance(v, dict) else v) for t, v in base_sig.items()}
+    
+    # We need a model for the new backtester. For this preview, we can't assume one exists.
+    # We will skip the backtest preview if no model is provided.
+    # A proper implementation would involve training a temporary model if none is available.
+    if ml_model:
+        # The new backtester needs the full dataframe with features, not just signals.
+        # This part of the pipeline is not set up to easily provide that.
+        # For now, we will log a warning and skip this preview.
+        log.warning("Backtest preview in pipeline is not yet compatible with the new Backtester class. Skipping.")
+        pnl, stats, summary = None, {}, f"Summary: signals={len(base_sig)}, orders={len(rows)}"
+    else:
+        log.warning("No ML model available, skipping backtest preview.")
+        pnl, stats, summary = None, {}, f"Summary: signals={len(base_sig)}, orders={len(rows)}"
 
-    last_cum = pnl["cum_return"].iloc[-1]
-    msg = (
-        "Backtest cum return (1yr): "
-        f"{last_cum:.2f}x | Sharpe {stats['sharpe']:.2f} | "
-        f"Max DD {stats['max_drawdown']:.2%} | Win rate {stats['win_rate']:.2%}"
-    )
-    safe_send(msg)
 
-    summary = f"Summary: signals={len(base_sig)}, orders={len(rows)}"
+    if stats:
+        last_cum = pnl["cum_return"].iloc[-1] if pnl is not None and not pnl.empty else 0
+        msg = (
+            "Backtest cum return (1yr): "
+            f"{last_cum:.2f}x | Sharpe {stats.get('sharpe', 0):.2f} | "
+            f"Max DD {stats.get('max_drawdown', 0):.2%} | Win rate {stats.get('win_rate', 0):.2%}"
+        )
+        safe_send(msg)
+
     if limits_hit:
         summary += " | limits: " + ",".join(sorted(limits_hit))
     safe_send(summary)

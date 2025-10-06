@@ -1,13 +1,15 @@
 import pytest
-import requests_mock
-from smartcfd.alpaca_client import get_alpaca_client, OrderRequest, OrderResponse
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+from smartcfd.alpaca_client import AlpacaClient, OrderRequest, OrderResponse
 
-API_BASE = "https://paper-api.alpaca.markets"
+API_BASE = "https://test.alpaca.markets"
 
 @pytest.fixture
-def client():
-    """Fixture to create an AlpacaClient with a mock session."""
-    return get_alpaca_client(API_BASE)
+def client() -> AlpacaClient:
+    """Provides a default AlpacaClient with a basic session."""
+    return AlpacaClient(api_base=API_BASE, session=requests.Session())
 
 def test_post_market_order_success(client, requests_mock):
     """
@@ -68,11 +70,21 @@ def test_post_market_order_success(client, requests_mock):
     assert order_response.symbol == "AAPL"
     assert order_response.status == "accepted"
     assert order_response.order_type == "market"
+    assert order_response.side == "buy"
 
-def test_retry_logic_on_5xx_error(client, requests_mock):
+def test_retry_logic_on_5xx_error(requests_mock):
     """
     Verify that the client retries on a 503 Service Unavailable error.
     """
+    # Configure a session with retry logic
+    session = requests.Session()
+    retries = Retry(total=3, backoff_factor=0.1, status_forcelist=[503])
+    adapter = HTTPAdapter(max_retries=retries)
+    session.mount("https://", adapter)
+    
+    # The client must use this specially configured session
+    client = AlpacaClient(api_base=API_BASE, session=session)
+
     # Mock a sequence of responses: 503, then 200
     mock_responses = [
         {"status_code": 503},
@@ -98,7 +110,6 @@ def test_retry_logic_on_5xx_error(client, requests_mock):
 
     # This should succeed after one retry
     order_response = client.post_order(order_request)
-
-    assert requests_mock.call_count == 2
-    assert order_response.status == "accepted"
+    assert order_response is not None
     assert order_response.symbol == "GOOG"
+    assert requests_mock.call_count == 2

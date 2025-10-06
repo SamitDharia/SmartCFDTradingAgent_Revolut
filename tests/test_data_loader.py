@@ -1,101 +1,134 @@
-import pandas as pd
+import os
 import pytest
-import requests
+from pathlib import Path
+from unittest.mock import patch, MagicMock
+import pandas as pd
+from click.testing import CliRunner
 
-from SmartCFDTradingAgent import data_loader as dl
-from SmartCFDTradingAgent.data_loader import get_price_data
+from SmartCFDTradingAgent.data_loader import fetch_and_cache_data, get_data_client
+from SmartCFDTradingAgent.__main__ import cli
+from alpaca.data.timeframe import TimeFrame
 
+# Set dummy credentials for testing
+@pytest.fixture(autouse=True)
+def set_test_env():
+    os.environ["APCA_API_KEY_ID"] = "test_key"
+    os.environ["APCA_API_SECRET_KEY"] = "test_secret"
+    yield
+    del os.environ["APCA_API_KEY_ID"]
+    del os.environ["APCA_API_SECRET_KEY"]
 
-def test_get_price_data_logs_missing_warning(monkeypatch, caplog):
-    def fake_download(tickers_or_symbol, *_, **__):
-        if isinstance(tickers_or_symbol, list):
-            raise Exception("batch fail")
-        if tickers_or_symbol == "GOOD":
-            idx = pd.date_range("2022-01-01", periods=1)
-            data = {
-                "Open": [1],
-                "High": [1],
-                "Low": [1],
-                "Close": [1],
-                "Adj Close": [1],
-                "Volume": [1],
-            }
-            return pd.DataFrame(data, index=idx)
-        raise Exception("no data")
-
-    monkeypatch.setattr(
-        "SmartCFDTradingAgent.data_loader._download", fake_download
-    )
-
-    caplog.set_level("WARNING", logger="SmartCFD")
-    get_price_data(["GOOD", "BAD"], "2022-01-01", "2022-01-02", max_tries=1, pause=0)
-
-    assert any("Failed downloads" in r.message for r in caplog.records)
-    assert any("BAD" in r.message for r in caplog.records)
-
-
-def test_get_price_data_cache_hit(monkeypatch, tmp_path, caplog):
-    calls = {"n": 0}
-
-    def fake_download(tickers_or_symbol, *_, **__):
-        calls["n"] += 1
-        idx = pd.date_range("2022-01-01", periods=1, freq="1h")
+@pytest.fixture
+def mock_data_client():
+    """Fixture to mock the Alpaca StockHistoricalDataClient."""
+    with patch("SmartCFDTradingAgent.data_loader.StockHistoricalDataClient") as mock_client_class:
+        mock_client_instance = mock_client_class.return_value
+        mock_bars = MagicMock()
+        
         data = {
-            "Open": [1],
-            "High": [1],
-            "Low": [1],
-            "Close": [1],
-            "Adj Close": [1],
-            "Volume": [1],
+            "timestamp": pd.to_datetime(["2023-01-01 10:00:00", "2023-01-01 10:01:00"]),
+            "symbol": ["AAPL", "AAPL"],
+            "open": [150.0, 150.1],
+            "high": [150.2, 150.3],
+            "low": [149.9, 150.0],
+            "close": [150.1, 150.2],
+            "volume": [1000, 1200],
         }
-        return pd.DataFrame(data, index=idx)
+        sample_df = pd.DataFrame(data).set_index(["symbol", "timestamp"])
+        mock_bars.df = sample_df
+        
+        mock_client_instance.get_stock_bars.return_value = mock_bars
+        yield mock_client_instance
 
-    monkeypatch.setenv("DATA_CACHE_DIR", str(tmp_path))
-    monkeypatch.setattr("SmartCFDTradingAgent.data_loader.CACHE_DIR", tmp_path)
-    monkeypatch.setattr("SmartCFDTradingAgent.data_loader._download", fake_download)
+def test_fetch_and_cache_data_success(mock_data_client, tmp_path):
+    """
+    Test successful fetching and caching of data.
+    """
+    cache_dir = tmp_path / "datasets"
+    symbols = ["AAPL"]
+    start_date = "2023-01-01"
+    end_date = "2023-01-02"
 
-    # First call populates cache
-    get_price_data(["AAA"], "2022-01-01", "2022-01-02", interval="1h", max_tries=1, pause=0)
-    assert calls["n"] == 1
+    result_path = fetch_and_cache_data(symbols, start_date, end_date, cache_dir=str(cache_dir))
 
-    caplog.set_level("INFO", logger="SmartCFD")
-    # Second call should hit cache and not increment calls
-    get_price_data(["AAA"], "2022-01-01", "2022-01-02", interval="1h", max_tries=1, pause=0)
-    assert calls["n"] == 1
-    assert any("Cache hit" in r.message for r in caplog.records)
-
-
-def test_coinbase_fallback(monkeypatch):
-    def fail_download(*_, **__):
-        raise Exception("primary download failed")
-
-    def fail_history(*_, **__):
-        return None
-
-    def fail_chart(*_, **__):
-        return None
-
-    def fake_coinbase(ticker, *, start, end, interval, cache_expire=None):
-        idx = pd.date_range(start, periods=2, freq="1h")
-        frame = pd.DataFrame(
-            {
-                "Open": [1.0, 2.0],
-                "High": [1.5, 2.5],
-                "Low": [0.5, 1.5],
-                "Close": [1.2, 2.2],
-                "Adj Close": [1.2, 2.2],
-                "Volume": [10.0, 20.0],
-            },
-            index=idx,
-        )
-        return pd.concat({ticker: frame}, axis=1)
-
-    monkeypatch.setattr("SmartCFDTradingAgent.data_loader._download", fail_download)
-    monkeypatch.setattr("SmartCFDTradingAgent.data_loader._download_history", fail_history)
-    monkeypatch.setattr("SmartCFDTradingAgent.data_loader._download_chart", fail_chart)
-    monkeypatch.setattr("SmartCFDTradingAgent.data_loader._download_coinbase", fake_coinbase)
-
-    df = get_price_data(["BTC-USD"], "2022-01-01", "2022-01-03", interval="1h", max_tries=1, pause=0)
-
+    assert result_path is not None
+    assert result_path.exists()
+    
+    df = pd.read_parquet(result_path)
     assert not df.empty
-    assert ("BTC-USD", "Close") in df.columns
+    assert "AAPL" in df["symbol"].values
+    
+    mock_data_client.get_stock_bars.assert_called_once()
+
+def test_fetch_and_cache_data_uses_cache(mock_data_client, tmp_path):
+    """
+    Test that an existing cache file is used instead of fetching new data.
+    """
+    cache_dir = tmp_path / "datasets"
+    symbols = ["GOOG"]
+    start_date = "2023-01-01"
+    end_date = "2023-01-02"
+
+    fetch_and_cache_data(symbols, start_date, end_date, cache_dir=str(cache_dir))
+    mock_data_client.get_stock_bars.assert_called_once()
+    
+    mock_data_client.get_stock_bars.reset_mock()
+
+    result_path = fetch_and_cache_data(symbols, start_date, end_date, cache_dir=str(cache_dir))
+    
+    assert result_path is not None
+    mock_data_client.get_stock_bars.assert_not_called()
+
+def test_get_data_client_raises_error_if_no_keys(monkeypatch):
+    """
+    Test that get_data_client raises a ValueError if API keys are not set.
+    """
+    monkeypatch.delenv("APCA_API_KEY_ID", raising=False)
+    monkeypatch.delenv("APCA_API_SECRET_KEY", raising=False)
+    
+    with pytest.raises(ValueError, match="Alpaca API keys"):
+        get_data_client()
+
+@patch("SmartCFDTradingAgent.__main__.fetch_and_cache_data")
+def test_cli_build_dataset_success(mock_fetch, tmp_path):
+    """
+    Test the 'build-dataset' CLI command for a successful run.
+    """
+    runner = CliRunner()
+    output_file = tmp_path / "test.parquet"
+    mock_fetch.return_value = output_file
+
+    result = runner.invoke(
+        cli,
+        [
+            "build-dataset",
+            "--symbols", "MSFT",
+            "--start-date", "2023-02-01",
+            "--end-date", "2023-02-02",
+        ],
+    )
+    
+    assert result.exit_code == 0
+    assert f"Successfully created dataset: {output_file}" in result.output
+    mock_fetch.assert_called_once()
+
+@patch("SmartCFDTradingAgent.__main__.fetch_and_cache_data")
+def test_cli_build_dataset_failure(mock_fetch):
+    """
+    Test the 'build-dataset' CLI command for a failure scenario.
+    """
+    runner = CliRunner()
+    mock_fetch.side_effect = Exception("API limit reached")
+
+    result = runner.invoke(
+        cli,
+        [
+            "build-dataset",
+            "--symbols", "TSLA",
+            "--start-date", "2023-03-01",
+            "--end-date", "2023-03-02",
+        ],
+    )
+    
+    assert result.exit_code != 0
+    assert "An error occurred: API limit reached" in result.output
