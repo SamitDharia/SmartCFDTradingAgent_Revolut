@@ -1,14 +1,20 @@
-# Linux Cron Scheduling
+# Linux Cron Scheduling for Docker
 
-Use `cron` to run the trading agent automatically on Unix-like systems.
+Use `cron` to run the trading agent automatically on Unix-like systems using Docker Compose.
 
 ## Example
 Edit your crontab:
 ```bash
 crontab -e
 ```
-Add an entry to run the market loop at 14:30 UTC every weekday:
+Add an entry to start the Docker container at a specific time, for example, at 08:00 UTC every day:
 ```cron
-30 14 * * 1-5 /path/to/SmartCFDTradingAgent_Revolut/scripts/market_loop.sh >> /path/to/market_loop.log 2>&1
+0 8 * * * cd /path/to/SmartCFDTradingAgent_Revolut && docker-compose up -d >> /path/to/cron.log 2>&1
 ```
-The entry changes to the project directory, loads the `.env` file, and runs the helper script. Customize paths, schedule, and command options for your environment.
+This `cron` job will change to the project directory and start the services defined in `docker-compose.yml` in detached mode. Logs will be managed by Docker.
+
+To stop the service, you can set up another cron job:
+```cron
+0 18 * * * cd /path/to/SmartCFDTradingAgent_Revolut && docker-compose down >> /path/to/cron.log 2>&1
+```
+Customize the paths and schedule to fit your needs.
