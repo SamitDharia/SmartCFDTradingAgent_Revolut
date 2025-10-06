@@ -3,20 +3,27 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [ main, refactor/** ]
+    branches: [ main ]
 
 jobs:
-  build-test:
+  test-lint-type:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install pytest only (quick and reliable for smoke test)
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest
-      - name: Run only the smoke test for now
+          pip install -r requirements.txt
+          pip install mypy
+      - name: Lint with ruff
         run: |
-          pytest -q tests/test_smoke.py --maxfail=1 --disable-warnings
+          ruff check .
+      - name: Type check with mypy
+        run: |
+          mypy . --exclude venv --exclude .venv --ignore-missing-imports
+      - name: Run all tests
+        run: |
+          pytest -q tests/ --maxfail=2 --disable-warnings

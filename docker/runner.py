@@ -9,6 +9,7 @@ from smartcfd.logging_setup import setup_logging
 from smartcfd.db import connect as db_connect, init_schema, record_run, record_heartbeat
 from smartcfd.alpaca import build_api_base, build_headers_from_env
 from smartcfd.health_server import start_health_server
+from smartcfd.trader import TradingSession, example_strategy
 
 def check_connectivity(api_base: str, timeout: float):
     headers = build_headers_from_env()
@@ -70,6 +71,13 @@ def main():
     except Exception as e:
         log.warning("runner.health.server.fail", extra={"extra": {"error": repr(e)}})
 
+    # Initialize the trading session
+    trader = TradingSession(
+        api_base=api_base,
+        timeout=cfg.api_timeout_seconds,
+        strategy=example_strategy,
+    )
+
     log.info(
         "runner.start",
         extra={
@@ -90,7 +98,9 @@ def main():
 
             if ok:
                 log.info("runner.health.ok", extra={"extra": {"detail": detail, "latency_ms": latency_ms}})
-                backoff = 2
+                # If connectivity is OK, run the trading logic
+                trader.run_strategy_if_market_open()
+                backoff = 60  # Check every minute when things are healthy
             else:
                 log.warning("runner.health.fail", extra={"extra": {"detail": detail, "latency_ms": latency_ms}})
                 backoff = min(backoff * 2, int(cfg.network_max_backoff_seconds))
