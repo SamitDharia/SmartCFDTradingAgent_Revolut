@@ -9,7 +9,9 @@ from smartcfd.logging_setup import setup_logging
 from smartcfd.db import connect as db_connect, init_schema, record_run, record_heartbeat
 from smartcfd.alpaca import build_api_base, build_headers_from_env
 from smartcfd.health_server import start_health_server
-from smartcfd.trader import TradingSession, example_strategy
+from smartcfd.trader import TradingSession
+from smartcfd.strategy import get_strategy_by_name, StrategyHarness
+from smartcfd.alpaca_client import get_alpaca_client
 
 def check_connectivity(api_base: str, timeout: float):
     headers = build_headers_from_env()
