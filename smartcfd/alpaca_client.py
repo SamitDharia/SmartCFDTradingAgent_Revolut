@@ -154,6 +154,55 @@ class AlpacaClient:
             )
             raise
 
+    def get_account(self):
+        """
+        Fetches account information from Alpaca.
+        """
+        url = f"{self.api_base}/v2/account"
+        log.info("alpaca.get_account.start")
+        try:
+            response = self.session.get(url)
+            response.raise_for_status()
+            log.info("alpaca.get_account.success")
+            # The response is a Pydantic model from the alpaca-trade-api,
+            # so we can return it directly.
+            return response.json()
+        except requests.RequestException:
+            log.error("alpaca.get_account.fail", exc_info=True)
+            return None
+
+    def get_positions(self):
+        """
+        Fetches all open positions from Alpaca.
+        """
+        url = f"{self.api_base}/v2/positions"
+        log.info("alpaca.get_positions.start")
+        try:
+            response = self.session.get(url)
+            response.raise_for_status()
+            log.info("alpaca.get_positions.success")
+            return response.json()
+        except requests.RequestException:
+            log.error("alpaca.get_positions.fail", exc_info=True)
+            return []
+
+    def get_orders(self, status: str = "open"):
+        """
+        Fetches orders from Alpaca, defaulting to open orders.
+        """
+        url = f"{self.api_base}/v2/orders"
+        params = {"status": status}
+        log.info("alpaca.get_orders.start", extra={"extra": {"status": status}})
+        try:
+            response = self.session.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+            log.info("alpaca.get_orders.success", extra={"extra": {"count": len(data)}})
+            return [OrderResponse(**order) for order in data]
+        except requests.RequestException:
+            log.error("alpaca.get_orders.fail", exc_info=True)
+            return []
+
 def get_alpaca_client(api_base: str, max_retries: int = 3, backoff_factor: float = 0.3) -> AlpacaClient:
     """
     Configures and returns an AlpacaClient with a session that has retry logic.

@@ -50,15 +50,16 @@ class PortfolioManager:
         log.info("portfolio.reconcile.start")
         try:
             # 1. Fetch Account Details
-            account_data = self.client.get_account()
-            if account_data:
+            account_data_dict = self.client.get_account()
+            if account_data_dict:
+                # The data is a dict, not an object with attributes
                 self.account = Account(
-                    id=account_data.id,
-                    equity=float(account_data.equity),
-                    last_equity=float(account_data.last_equity),
-                    buying_power=float(account_data.buying_power),
-                    cash=float(account_data.cash),
-                    status=account_data.status,
+                    id=account_data_dict.get('id'),
+                    equity=float(account_data_dict.get('equity')),
+                    last_equity=float(account_data_dict.get('last_equity')),
+                    buying_power=float(account_data_dict.get('buying_power')),
+                    cash=float(account_data_dict.get('cash')),
+                    status=account_data_dict.get('status'),
                 )
                 log.info("portfolio.reconcile.account_updated", extra={"extra": self.account.model_dump()})
             else:
@@ -66,18 +67,18 @@ class PortfolioManager:
                 log.warning("portfolio.reconcile.no_account_data")
 
             # 2. Fetch Open Positions
-            positions_data = self.client.get_positions()
+            positions_data_list = self.client.get_positions()
             self.positions.clear()
-            for pos in positions_data:
+            for pos_dict in positions_data_list:
                 position = Position(
-                    symbol=pos.symbol,
-                    qty=float(pos.qty),
-                    market_value=float(pos.market_value),
-                    unrealized_pl=float(pos.unrealized_pl),
-                    unrealized_plpc=float(pos.unrealized_plpc),
-                    avg_entry_price=float(pos.avg_entry_price),
+                    symbol=pos_dict.get('symbol'),
+                    qty=float(pos_dict.get('qty')),
+                    market_value=float(pos_dict.get('market_value')),
+                    unrealized_pl=float(pos_dict.get('unrealized_pl')),
+                    unrealized_plpc=float(pos_dict.get('unrealized_plpc')),
+                    avg_entry_price=float(pos_dict.get('avg_entry_price')),
                 )
-                self.positions[pos.symbol] = position
+                self.positions[pos_dict.get('symbol')] = position
             log.info("portfolio.reconcile.positions_updated", extra={"extra": {"position_count": len(self.positions)}})
 
             # 3. Fetch Open/Pending Orders
