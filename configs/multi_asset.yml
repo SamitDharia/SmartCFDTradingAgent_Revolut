@@ -8,6 +8,8 @@ profiles:
     interval: "1h"
     adx: 10
     risk: 0.01
+    max_total_exposure_percent: 60.0
+    max_exposure_per_asset_percent: 15.0
     equity: 1000
     class_caps:
       crypto: 1

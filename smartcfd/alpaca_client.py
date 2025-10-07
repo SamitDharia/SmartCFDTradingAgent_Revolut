@@ -80,17 +80,21 @@ class AlpacaClient:
         """
         url = f"{self.api_base.replace('api.', 'data.')}/v1beta3/crypto/us/latest/trades"
         params = {"symbols": symbol}
+        log.info("alpaca.get_latest_crypto_trade.start", extra={"extra": {"symbol": symbol}})
         try:
             response = self.session.get(url, params=params)
             response.raise_for_status()
             data = response.json()
             if symbol in data.get("trades", {}):
+                log.info("alpaca.get_latest_crypto_trade.success", extra={"extra": {"symbol": symbol}})
                 return data["trades"][symbol]
+            log.warning("alpaca.get_latest_crypto_trade.no_trade_in_response", extra={"extra": {"symbol": symbol}})
             return None
-        except requests.RequestException as e:
+        except requests.RequestException:
             log.error(
                 "alpaca.get_latest_crypto_trade.fail",
-                extra={"error": repr(e), "symbol": symbol}
+                extra={"extra": {"symbol": symbol}},
+                exc_info=True
             )
             return None
 
@@ -102,21 +106,26 @@ class AlpacaClient:
             requests.HTTPError: If the API returns a non-2xx status code after retries.
         """
         url = f"{self.api_base}/v2/orders"
+        order_json = order_data.model_dump(by_alias=True)
+        log.info("alpaca.post_order.start", extra={"extra": {"order": order_json}})
         try:
             # Use by_alias to correctly serialize 'type' to 'order_type'
-            response = self.session.post(url, json=order_data.model_dump(by_alias=True))
+            response = self.session.post(url, json=order_json)
             response.raise_for_status()
-            return OrderResponse.model_validate(response.json())
-        except requests.RequestException as e:
+            order_response = OrderResponse.model_validate(response.json())
+            log.info("alpaca.post_order.success", extra={"extra": {"order_response": order_response.model_dump()}})
+            return order_response
+        except requests.RequestException:
             log.error(
                 "alpaca.post_order.fail", 
-                extra={"error": repr(e), "order": order_data.model_dump()}
+                extra={"extra": {"order": order_json}},
+                exc_info=True
             )
             raise
-        except Exception as e:
+        except Exception:
             log.error(
                 "alpaca.post_order.parse_fail", 
-                extra={"error": repr(e)}
+                exc_info=True
             )
             raise
 
@@ -130,15 +139,18 @@ class AlpacaClient:
             "limit": limit,
             "nested": nested,
         }
+        log.info("alpaca.get_orders.start", extra={"extra": {"params": params}})
         try:
             response = self.session.get(url, params=params)
             response.raise_for_status()
             orders_data = response.json()
-            return [OrderResponse.model_validate(order) for order in orders_data]
-        except requests.RequestException as e:
+            validated_orders = [OrderResponse.model_validate(order) for order in orders_data]
+            log.info("alpaca.get_orders.success", extra={"extra": {"order_count": len(validated_orders)}})
+            return validated_orders
+        except requests.RequestException:
             log.error(
                 "alpaca.get_orders.fail",
-                extra={"error": repr(e)}
+                exc_info=True
             )
             raise
 

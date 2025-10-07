@@ -105,6 +105,16 @@ def get_recent_heartbeats(conn: sqlite3.Connection, limit: int = 10) -> List[Dic
     rows = cur.fetchall()
     return [dict(r) for r in rows]
 
+def get_daily_pnl(conn: Optional[sqlite3.Connection] = None) -> float:
+    """
+    Calculates the profit and loss for the current day.
+    
+    TODO: This is a placeholder. This should be calculated from a trades table.
+    For now, it returns 0.0, so the drawdown check will not be triggered
+    unless this function is mocked in tests.
+    """
+    return 0.0
+
 def get_heartbeat_stats(conn: sqlite3.Connection, hours: int = 24) -> Dict:
     """
     Calculates heartbeat statistics over a given period.

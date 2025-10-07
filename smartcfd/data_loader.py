@@ -5,7 +5,7 @@ from alpaca.data.historical import CryptoHistoricalDataClient
 from alpaca.data.requests import CryptoBarsRequest
 from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 log = logging.getLogger(__name__)
 
@@ -126,3 +126,103 @@ def fetch_data(symbol: str, timeframe: TimeFrame, start_date: str, end_date: str
     except Exception as e:
         log.error(f"Failed to fetch data for {symbol}: {e}", exc_info=True)
         return pd.DataFrame()
+
+# --- Data Integrity Checks ---
+
+def is_data_stale(df: pd.DataFrame, max_staleness_minutes: int) -> bool:
+    """
+    Checks if the latest data point is older than the allowed maximum staleness.
+    """
+    if df.empty:
+        log.warning("Data integrity check failed: DataFrame is empty.")
+        return True
+    
+    latest_timestamp = df.index.max()
+    # Ensure latest_timestamp is timezone-aware (UTC)
+    if latest_timestamp.tzinfo is None:
+        latest_timestamp = latest_timestamp.tz_localize('UTC')
+
+    staleness = datetime.now(timezone.utc) - latest_timestamp
+    
+    is_stale = staleness > timedelta(minutes=max_staleness_minutes)
+    if is_stale:
+        log.warning(f"Data is stale. Last update was {staleness.total_seconds() / 60:.2f} minutes ago (threshold: {max_staleness_minutes} mins).")
+    
+    return is_stale
+
+def has_data_gaps(df: pd.DataFrame, expected_interval: TimeFrame) -> bool:
+    """
+    Checks for missing timestamps in the data, indicating gaps.
+    """
+    if len(df) < 2:
+        return False  # Not enough data to detect a gap.
+
+    # Convert Alpaca TimeFrame to pandas frequency string
+    if expected_interval.unit == TimeFrameUnit.Minute:
+        freq_str = f"{expected_interval.amount}min"
+    elif expected_interval.unit == TimeFrameUnit.Hour:
+        freq_str = f"{expected_interval.amount}h"
+    elif expected_interval.unit == TimeFrameUnit.Day:
+        freq_str = f"{expected_interval.amount}D"
+    else:
+        log.warning(f"Unsupported timeframe unit for gap detection: {expected_interval.unit}")
+        return False
+
+    # Ensure index is sorted
+    df = df.sort_index()
+    
+    # Use the generated frequency string
+    expected_timestamps = pd.date_range(start=df.index.min(), end=df.index.max(), freq=freq_str)
+    missing_timestamps = expected_timestamps.difference(df.index)
+    
+    if not missing_timestamps.empty:
+        log.warning(f"Data gap detected. Missing {len(missing_timestamps)} timestamps. First missing: {missing_timestamps[0]}")
+        return True
+        
+    return False
+
+def has_anomalous_data(df: pd.DataFrame, anomaly_threshold: float = 5.0) -> bool:
+    """
+    Performs basic anomaly detection on the data.
+    - Checks for empty or insufficient data.
+    - Checks for zero prices.
+    - Checks for bars with zero volume but price movement.
+    - Checks for sudden price spikes (e.g., > 5x the recent average range).
+    """
+    if df.empty:
+        log.warning("Anomaly detected: DataFrame is empty.")
+        return True
+
+    # Standardize column names to lowercase for robustness
+    df = df.copy()
+    df.columns = [col.lower() for col in df.columns]
+
+    # Check for zero prices in key columns
+    if (df[['open', 'high', 'low', 'close']] <= 0).any().any():
+        log.warning("Anomaly detected: Zero or negative price found in OHLC data.")
+        return True
+
+    # Check for zero volume with price movement (high != low)
+    zero_volume_bars = df[df['volume'] == 0]
+    if not zero_volume_bars.empty:
+        if (zero_volume_bars['high'] != zero_volume_bars['low']).any():
+            log.warning("Anomaly detected: Zero volume found on a bar with price movement.")
+            return True
+
+    # For spike detection, we need a reasonable amount of data
+    if len(df) < 20:
+        return False # Not an anomaly, but not enough data for this specific check
+
+    # Check for sudden price spikes
+    df['range'] = df['high'] - df['low']
+    
+    # Avoid the most recent bar in the average calculation to detect its anomaly
+    average_range = df['range'].iloc[:-1].mean()
+    latest_range = df['range'].iloc[-1]
+
+    # Check for division by zero or near-zero
+    if average_range > 1e-9 and (latest_range / average_range) > anomaly_threshold:
+        log.warning(f"Anomaly detected: Sudden price spike. Latest range ({latest_range:.2f}) is more than {anomaly_threshold}x the average range ({average_range:.2f}).")
+        return True
+
+    return False

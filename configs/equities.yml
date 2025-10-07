@@ -19,6 +19,8 @@ profiles:
     ema_slow: 30
     macd_signal: 7
     risk: 0.01
+    max_total_exposure_percent: 40.0
+    max_exposure_per_asset_percent: 20.0
     equity: 1000
     cooldown_min: 60
     class_caps:

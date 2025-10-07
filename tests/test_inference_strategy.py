@@ -36,7 +36,7 @@ def test_inference_strategy_model_loading(mock_joblib_load, tmp_path):
     model_path = tmp_path / "model.joblib"
     model_path.touch()
 
-    strategy = InferenceStrategy(symbol="BTC/USD", model_path=str(model_path))
+    strategy = InferenceStrategy(model_path=str(model_path))
     
     mock_joblib_load.assert_called_once_with(model_path)
     assert strategy.model is not None
@@ -52,22 +52,35 @@ def test_inference_strategy_evaluate(
     # 1. Setup
     # --- Mock file system and model loading ---
     mock_path_exists.return_value = True  # Pretend the model file exists
+    
+    # This mock needs to be more realistic to match the code's expectations
     mock_model = MagicMock()
+    mock_booster = MagicMock()
+    mock_booster.feature_names = ['feature1', 'feature2']
+    mock_model.get_booster.return_value = mock_booster
     mock_model.predict.return_value = [1]  # Predict 'buy'
     mock_joblib_load.return_value = mock_model # Intercept the model loading
 
     # --- Mock data loading and feature calculation ---
-    mock_df = pd.DataFrame({'close': [100, 110]})
+    timestamps = pd.to_datetime(pd.date_range(end=pd.Timestamp.now(tz='UTC'), periods=200, freq='15min'))
+    mock_df = pd.DataFrame({
+        'Open': [100 + i*0.01 for i in range(200)],
+        'High': [101 + i*0.01 for i in range(200)],
+        'Low': [99 + i*0.01 for i in range(200)],
+        'Close': [100.5 + i*0.01 for i in range(200)],
+        'Volume': [1000 for _ in range(200)]
+    }, index=timestamps)
     mock_data_loader.return_value.get_market_data.return_value = mock_df
 
-    mock_features = pd.DataFrame({"feature1": [0.5], "feature2": [0.6]})
+    # The features returned by the mock must match the model's expected features
+    mock_features = pd.DataFrame([{'feature1': 1, 'feature2': 2}])
     mock_calculate_indicators.return_value = mock_features
 
     # Instantiate the strategy - this will now call joblib.load due to the mocked Path.exists
-    strategy = InferenceStrategy(symbol="BTC/USD", model_path="dummy/path.joblib")
+    strategy = InferenceStrategy(model_path="dummy/path.joblib")
 
     # 2. Action
-    actions = strategy.evaluate(client=MagicMock())
+    actions, _ = strategy.evaluate(portfolio_manager=MagicMock(), watch_list=["BTC/USD"])
 
     # 3. Assertions
     mock_joblib_load.assert_called_once_with(strategy.model_path)
@@ -79,6 +92,6 @@ def test_inference_strategy_evaluate(
     # Verify the action proposed by the strategy
     assert len(actions) == 1
     action = actions[0]
-    assert action["action"] == "order"
+    assert action["action"] == "buy"
     assert action["symbol"] == "BTC/USD"
     assert action["decision"] == "buy"

@@ -1,0 +1,17 @@
+feature,importance
+feature_return_5m,0.07104773
+feature_return_1m,0.07037693
+feature_stoch_d,0.06840358
+feature_bband_hband,0.06820713
+feature_return_15m,0.06774383
+feature_macd_signal,0.06767713
+feature_macd_diff,0.0675598
+feature_volatility_15m,0.06749929
+feature_stoch_k,0.06703766
+feature_bband_lband,0.06601043
+feature_macd,0.06502911
+feature_bband_mavg,0.0645769
+feature_volatility_5m,0.06451045
+feature_hour_of_day,0.063270554
+feature_day_of_week,0.06104948
+feature_minute_of_hour,0.0

@@ -14,6 +14,7 @@ from smartcfd.broker import AlpacaBroker
 from smartcfd.alpaca_client import get_alpaca_client
 from smartcfd.risk import RiskManager
 from smartcfd.data_loader import DataLoader
+from smartcfd.portfolio import PortfolioManager
 
 def check_connectivity(api_base: str, timeout: float):
     headers = build_headers_from_env()
@@ -84,9 +85,10 @@ def main():
     risk_manager = RiskManager(alpaca_client, data_loader, risk_cfg)
     strategy_name = os.getenv("STRATEGY", "inference")
     strategy = get_strategy_by_name(strategy_name)
+    portfolio_manager = PortfolioManager(alpaca_client)
     
     # Initialize the Trader
-    trader = Trader(strategy, broker, risk_manager)
+    trader = Trader(portfolio_manager, strategy, broker, risk_manager)
 
     log.info(
         "runner.start",

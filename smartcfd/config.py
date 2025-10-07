@@ -17,22 +17,23 @@ class AppConfig:
     offline_behavior: str = "halt"
     watch_list: str = "BTC/USD" # Comma-separated list of symbols
     trade_interval: str = "15m" # Interval for trading data
+    max_data_staleness_minutes: int = 30 # Max age of data before it's considered stale
 
 @dataclass
 class RiskConfig:
     max_daily_drawdown_percent: float = -5.0  # e.g. -5.0 for a 5% loss
-    max_position_size: float = 10000.0  # Max notional value for a single position
-    max_total_exposure: float = 25000.0  # Max total notional value of all positions
-    risk_per_trade_percent: float = 0.01 # Risk 1% of equity per trade
-    circuit_breaker_atr_multiplier: float = 0.0 # 0 means disabled
+    max_total_exposure_percent: float = 50.0 # Max total notional value as a % of equity
+    max_exposure_per_asset_percent: float = 25.0 # Max notional value per asset as a % of equity
+    risk_per_trade_percent: float = 1.0 # Risk 1% of equity per trade
+    circuit_breaker_atr_multiplier: float = 3.0 # 0 means disabled. 3.0 means halt if ATR is 3x the recent average.
 
 def load_risk_config() -> RiskConfig:
     return RiskConfig(
         max_daily_drawdown_percent=float(os.getenv("MAX_DAILY_DRAWDOWN_PERCENT", "-5.0")),
-        max_position_size=float(os.getenv("MAX_POSITION_SIZE", "10000.0")),
-        max_total_exposure=float(os.getenv("MAX_TOTAL_EXPOSURE", "25000.0")),
-        risk_per_trade_percent=float(os.getenv("RISK_PER_TRADE_PERCENT", "0.01")),
-        circuit_breaker_atr_multiplier=float(os.getenv("CIRCUIT_BREAKER_ATR_MULTIPLIER", "0.0")),
+        max_total_exposure_percent=float(os.getenv("MAX_TOTAL_EXPOSURE_PERCENT", "50.0")),
+        max_exposure_per_asset_percent=float(os.getenv("MAX_EXPOSURE_PER_ASSET_PERCENT", "25.0")),
+        risk_per_trade_percent=float(os.getenv("RISK_PER_TRADE_PERCENT", "1.0")),
+        circuit_breaker_atr_multiplier=float(os.getenv("CIRCUIT_BREAKER_ATR_MULTIPLIER", "3.0")),
     )
 
 def load_config() -> AppConfig:
@@ -48,6 +49,7 @@ def load_config() -> AppConfig:
         offline_behavior=os.getenv("OFFLINE_BEHAVIOR", "halt"),
         watch_list=os.getenv("WATCH_LIST", "BTC/USD"),
         trade_interval=os.getenv("TRADE_INTERVAL", "15m"),
+        max_data_staleness_minutes=int(os.getenv("MAX_DATA_STALENESS_MINUTES", "30")),
     )
 
 def to_dict(cfg: AppConfig) -> dict:

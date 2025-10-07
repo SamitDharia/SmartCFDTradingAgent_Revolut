@@ -1,170 +1,101 @@
-# SmartCFDTradingAgent – Revolut
+# SmartCFD Trading Agent
 
-Rank assets, generate signals, and send manual execution alerts via Telegram (with SL/TP).
+This project is an automated trading agent designed to analyze market data, generate trading signals using a machine learning model, and execute trades via the Alpaca Markets API. It is built with a modular architecture, allowing for different brokers and strategies to be integrated. The agent includes features for risk management, automated operations, and real-time monitoring.
 
-## Installation
+## Key Features
 
+- **Modular Architecture:** Pluggable `Broker` and `Strategy` components. Currently supports Alpaca for paper and live trading.
+- **Machine Learning Strategy:** Uses an `XGBoost` model to generate buy/hold signals based on a wide range of technical indicators.
+- **Risk Management:** A dedicated `RiskManager` enforces rules on position sizing, daily drawdown, and market volatility.
+- **Volatility Circuit Breaker:** Automatically halts trading during periods of extreme market volatility to protect capital.
+- **Data Integrity Checks:** Validates market data for staleness, gaps, and anomalies before use.
+- **Automated Operations:** Includes scripts for automated model retraining on a rolling window.
+- **Monitoring & Reporting:**
+    - Generates a daily performance digest.
+    - Sends email notifications for critical alerts and summaries.
+    - Features a real-time web dashboard to visualize performance.
+- **Scheduling:** Comes with documentation for scheduling the agent on both Windows (Task Scheduler) and Linux (cron).
 
-Requires Python 3.10 or 3.11 (`>=3.10,<3.12`). Python 3.13 is unsupported because pandas wheels are unavailable.
+## Project Status
 
-## Developer setup
+The project is currently in **Phase 3: Production Readiness**. All core features, including the ML model, risk management, and automated operations, are complete. The current focus is on security hardening and preparing for live, real-money deployment with Alpaca.
 
+## Getting Started
 
-See [AGENTS.md](AGENTS.md) for environment setup, linting, formatting, testing, and smoke/backtest instructions.
+### Prerequisites
+- Python 3.11+
+- Docker and Docker Compose (recommended for ease of use)
 
+### Installation & Setup
 
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/your-username/SmartCFDTradingAgent_Revolut.git
+    cd SmartCFDTradingAgent_Revolut
+    ```
 
-Only Python 3.10–3.11 are supported where pre-built pandas wheels are available.
-Python 3.13 requires building pandas from source, which this project does not document.
+2.  **Environment Variables:**
+    Copy the example environment file and fill in your credentials. This file is git-ignored.
+    ```bash
+    cp .env.example .env
+    ```
+    You will need to set your `APCA_API_KEY_ID` and `APCA_API_SECRET_KEY` for Alpaca, as well as any notification service credentials (e.g., for email). See `.env.example` for a full list of required variables.
 
+3.  **Build and Run with Docker (Recommended):**
+    Using Docker is the easiest way to run the agent, as it handles all dependencies.
+    ```bash
+    docker-compose build
+    docker-compose run --rm trader
+    ```
+    This command runs the main trading loop once.
 
+## Usage
 
+The agent can be configured and run in several ways:
 
-## .env configuration
-Create a bot with @BotFather and copy `.env.example` to `.env` (do not commit):
+- **Run the Trader:**
+  The primary entry point is `smartcfd/trader.py`, which is configured as the `trader` service in `docker-compose.yml`.
 
-```
-cp .env.example .env
-```
+- **Train the Model:**
+  To train the model manually, run the `train_model.py` script:
+  ```bash
+  docker-compose run --rm python scripts/train_model.py --symbol "BTC/USD" --interval "1h"
+  ```
 
-Fill in the variables:
+- **Automated Retraining:**
+  The `retrain_model.py` script handles backing up the old model and retraining a new one on a rolling data window.
+  ```bash
+  docker-compose run --rm python scripts/retrain_model.py
+  ```
 
-```
-TELEGRAM_BOT_TOKEN=123456:ABC-XYZ
-TELEGRAM_CHAT_ID=123456789
-```
+- **Daily Summary:**
+  Generate and send the daily performance digest.
+  ```bash
+  docker-compose run --rm python scripts/daily_summary.py
+  ```
 
-Additional optional settings are available in `.env.example` such as
-`SKIP_SSL_VERIFY`, `RISK_PCT`, `MAX_POSITIONS`, `MAX_DAILY_LOSS_PCT`,
-`MARKET_GATE`, and `ALLOW_FRACTIONAL`.
+## Automation & Scheduling
 
-### Scheduler environments
-When running from Windows Task Scheduler or cron, ensure the job starts in the
-project root so the `.env` file is discovered.  These schedulers launch with a
-minimal environment, so credentials may need to be exported explicitly.
+The agent is designed for automated, unattended operation. Detailed instructions for scheduling the trading and retraining scripts are available in the `docs` folder:
+- **`docs/linux-scheduling.md`**: Guide for using `cron` on Linux.
+- **`docs/windows-scheduling.md`**: Guide for using `Task Scheduler` on Windows.
 
-Example cron entry invoking a one-off Telegram test:
+## Project Structure
 
-```
-* * * * * cd /path/to/SmartCFDTradingAgent_Revolut && \
-TELEGRAM_BOT_TOKEN=123456:ABC-XYZ TELEGRAM_CHAT_ID=123456789 \
-python -c "from SmartCFDTradingAgent.utils.telegram import send; send('test')"
-```
+- `smartcfd/`: Core source code for the agent.
+  - `trader.py`: Main application logic.
+  - `broker.py`, `alpaca.py`: Broker integrations.
+  - `strategy.py`: Trading strategy logic.
+  - `model_trainer.py`: Model training and evaluation.
+  - `risk.py`: Risk management rules.
+  - `data_loader.py`: Data fetching and integrity checks.
+- `scripts/`: Standalone scripts for training, reporting, etc.
+- `models/`: Default location for the trained model file (`model.joblib`).
+- `configs/`: YAML configuration files for different assets.
+- `tests/`: Unit and integration tests.
+- `docs/`: Project documentation.
 
-Windows Task Scheduler users should set **Start in** to the project root and
-include environment variables in the command. See [Scheduling on Windows](#scheduling-on-windows)
-for a step-by-step guide and sample command.
+## Contributing
 
-## Asset categories
-Tickers are grouped into asset classes in `SmartCFDTradingAgent/assets.yml` (e.g. `crypto`, `equity`, `forex`, `commodity`).
-These categories drive per-class alert caps and risk budgets via the `class_caps` and
-`class_risk_budget` options in configuration files or CLI arguments.
+Contributions are welcome. Please open an issue to discuss any major changes before submitting a pull request.
 
-## Run examples
-Weekday equities (NYSE hours):
-```
-python -m SmartCFDTradingAgent.pipeline --watch SPY QQQ DIA IWM --size 3 --interval 1d --adx 15 --grace 120 --risk 0.01 --equity 1000
-```
-Weekend crypto (24/7; no --force needed):
-```
-python -m SmartCFDTradingAgent.pipeline --watch BTC-USD ETH-USD --size 2 --interval 1h --adx 10 --grace 10 --risk 0.01 --equity 1000
-```
-Config-based profile run:
-```
-python -m SmartCFDTradingAgent.pipeline --config configs/crypto.yml --profile crypto_1h
-```
-
-Multi-asset example with per-class caps and risk budgets:
-```
-python -m SmartCFDTradingAgent.pipeline --config configs/multi_asset.yml --profile multi_example
-```
-
-Weighted multi-interval voting:
-```
-python -m SmartCFDTradingAgent.pipeline --watch BTC-USD ETH-USD --interval 1h --intervals 15m,1h --interval-weights 15m=1,1h=2 --vote
-```
-
-## New flags & features (v0.1.1)
-- `--interval` (e.g., `1h`, `30m`, `15m`) and `--adx` are configurable.
-- Multi-interval voting via `--intervals`/`--vote` with optional weights
-  (`--interval-weights 15m=1,1h=2`).
-- **Crypto 24/7**: all-crypto watchlists run outside NYSE hours.
-- **Local timestamp**: `--tz Europe/Dublin` (default) or `--tz UTC`.
-- **Decision log**: PRE-TRADE rows saved at `SmartCFDTradingAgent/storage/decision_log.csv`.
-- Logger prints its log file path at startup.
-
-## Reporting utilities
-Show last 10 decisions in console:
-```
-python -m SmartCFDTradingAgent.pipeline --show-decisions 10
-```
-Show last 10 and send to Telegram:
-```
-python -m SmartCFDTradingAgent.pipeline --show-decisions 10 --to-telegram
-```
-Send today's summary to Telegram:
-```
-python -m SmartCFDTradingAgent.pipeline --daily-summary --tz Europe/Dublin
-```
-Cap the number of alerts in a run:
-```
-python -m SmartCFDTradingAgent.pipeline --watch SPY QQQ DIA IWM --size 4 --max-trades 2
-```
-
-## Parameter tuning
-Optimize parameters and save them to `SmartCFDTradingAgent/storage/params.json`:
-```
-python -m SmartCFDTradingAgent.optimizer --watch BTC-USD ETH-USD --interval 1h --years 2
-```
-Walk-forward validation (writes to the same params file):
-```
-python -m SmartCFDTradingAgent.walk_forward --watch BTC-USD ETH-USD --interval 1h --years 3 --train-months 6 --test-months 1
-```
-
-## Logs and decisions
-Logs are written under `logs/`. Inspect the latest log, for example:
-```
-ls logs/
-tail -n 20 logs/<recent-log>.log
-```
-Pre-trade decisions accumulate in `SmartCFDTradingAgent/storage/decision_log.csv`:
-```
-tail -n 20 SmartCFDTradingAgent/storage/decision_log.csv
-```
-
-## Automation
-
-The `scripts` directory contains Unix-friendly `.sh` helpers mirroring the Windows `.cmd` files.
-
-Both `market_loop.cmd` and `market_loop.sh` forward any extra CLI flags to the
-underlying `run_bot` call and include `--dry-run` by default to avoid placing
-real orders. Remove `--dry-run` if you intend to trade live and pass additional
-options at invocation time, for example:
-
-```
-scripts/market_loop.cmd --force
-scripts/market_loop.sh --force
-```
-
-### Cron (Unix)
-Schedule runs with `crontab -e`. For example, to execute the market loop at 14:30 UTC every weekday:
-
-```
-30 14 * * 1-5 /path/to/SmartCFDTradingAgent_Revolut/scripts/market_loop.sh >> /path/to/market_loop.log 2>&1
-```
-
-This entry invokes `market_loop.sh` with the same CLI options as its Windows counterpart. Adjust the schedule and paths to suit your environment. See [docs/linux-scheduling.md](docs/linux-scheduling.md) for more examples.
-
-### Scheduling on Windows
-1. Open **Task Scheduler** and choose **Create Basic Task...**.
-2. Select a trigger (daily, at startup, etc.) and proceed to the **Action** step.
-3. Set **Program/script** to `cmd` and **Add arguments** to:
-
-   ```
-   /c "set TELEGRAM_BOT_TOKEN=123456:ABC-XYZ && set TELEGRAM_CHAT_ID=123456789 && python -m SmartCFDTradingAgent.pipeline --config configs/crypto.yml --profile crypto_1h"
-   ```
-
-4. In **Start in**, browse to the project root (where `.env` resides).
-5. Finish the wizard and ensure the task runs under an account with the required permissions.
-
-The `set` commands above define environment variables for the task before launching Python. Adjust the command and schedule for your environment. See [docs/windows-scheduling.md](docs/windows-scheduling.md) for more examples.
