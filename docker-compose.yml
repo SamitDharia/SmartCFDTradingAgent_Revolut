@@ -5,6 +5,9 @@ services:
       dockerfile: docker/Dockerfile
     container_name: smartcfd-agent
     restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     env_file:
       - .env
     environment:

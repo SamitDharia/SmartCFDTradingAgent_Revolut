@@ -21,11 +21,61 @@ This document tracks the key learnings, mistakes, and pivotal decisions made thr
 *   **Mistake (AI Agent):** During the fix, I (the AI agent) got into a temporary loop by trying to patch a solution that introduced new errors, rather than stepping back to address the root cause.
 *   **Learning:** User intervention was critical to break the debugging loop. It highlighted the importance of re-evaluating the core problem when a fix becomes overly complicated. The correct solution was simpler: use the `DataLoader` to fetch data within the strategy, respecting the established architecture.
 *   **Learning:** The `FutureWarning` from the `ta` library is a good reminder to keep dependencies in mind and plan for future updates or refactoring to avoid breaking changes.
+*   **Mistake:** The `Trader` was calling `risk_manager.calculate_order_qty()`, but the method did not exist in the `RiskManager` class. This caused an `AttributeError` on every trade attempt, preventing any orders from being placed.
+*   **Learning:** This error emphasized the importance of ensuring the full execution path is wired correctly. While the signal generation was working perfectly, the hand-off to the risk management and execution layer was broken. It also served as the natural next step, forcing the implementation of the critical position-sizing logic.
+*   **Resolution:** Implemented the `calculate_order_qty` method in `risk.py`, which calculates a trade size based on a percentage of equity. This required adding a new `risk_per_trade_percent` setting to `config.py` and a `get_latest_crypto_trade` method to `alpaca_client.py` to fetch the current price.
 
 ## Section 4: Strategic Decisions & Project Management
 
 *   **Pivotal Moment:** The decision to prioritize "Robustness & Safety Mechanisms" in the roadmap. This was a strategic shift from focusing purely on entry signals to building a more complete, production-ready system with risk management at its core.
 *   **Learning:** It's crucial to understand the full lifecycle of a trade (entry, management, exit). We realized that an entry-only strategy is incomplete and carries significant risk, prompting the immediate focus on implementing stop-loss and take-profit logic.
 *   **Good Practice:** Creating the `PROJECT_SUMMARY.md` and this `LESSONS_LEARNED.md` document. This helps formalize the project's progress and learnings, which is invaluable for portfolio building and future reference.
+
+## Section 5: Networking & Deployment
+
+*   **Mistake:** Running the application on a network with an active VPN caused SSL certificate verification failures.
+*   **Symptom:** The application would fail with an `[SSL: CERTIFICATE_VERIFY_FAILED]` error when trying to connect to the Alpaca API.
+*   **Cause:** The corporate VPN was intercepting the HTTPS traffic, presenting its own certificate, which did not match the expected certificate from Alpaca's servers. This is a common security practice on corporate networks but breaks applications that perform strict certificate validation.
+*   **Resolution:** The user disabled the VPN, which allowed for a direct and unfiltered connection to the Alpaca API.
+
+*   **Mistake:** Assuming Docker's default networking would seamlessly handle host network changes, especially on restrictive corporate networks.
+*   **Symptom:** After resolving the VPN issue, the container began failing with a `NameResolutionError`, unable to resolve Alpaca's domain names (e.g., `paper-data.alpaca.markets`). This occurred after switching between different WiFi networks.
+*   **Cause:** The Docker container was not using a reliable DNS server. The host's network configuration, particularly on the corporate WiFi and mobile hotspot, did not automatically provide a working DNS resolver to the container.
+*   **Resolution:** We explicitly configured the Docker container to use reliable public DNS servers by adding the following to `docker-compose.yml`:
+    ```yaml
+    dns:
+      - 8.8.8.8  # Google's public DNS
+      - 1.1.1.1  # Cloudflare's public DNS
+    ```
+*   **Learning:** For applications requiring robust internet connectivity from within a Docker container, it's best practice to explicitly define DNS servers. This decouples the container's networking from the host's potentially restrictive or inconsistent network environment, making the deployment more portable and reliable.
+
+## Section 6: Script Errors & Configuration Management
+
+*   **Mistake:** Encountering an `ImportError` in the `scripts/verify_alpaca_orders.py` script due to incorrect assumptions about the configuration structure.
+*   **Learning:** Utility and verification scripts should have minimal dependencies on the main application's internal logic. When a script needs configuration, it's often better to read directly from environment variables (`.env`) rather than trying to reuse complex configuration objects that might not be designed for standalone execution. This reduces coupling and makes scripts more robust and easier to maintain.
+*   **Resolution:** The script was modified to directly read the necessary configuration from environment variables, making it self-contained and independent of the main application's configuration logic.
+
+*   **Mistake:** After fixing the initial `ImportError` in `scripts/verify_alpaca_orders.py`, a second one occurred. The script tried to import `ALPACA_PAPER_BASE_URL` and `ALPACA_LIVE_BASE_URL` from `smartcfd.alpaca`, which was incorrect.
+*   **Root Cause:** This was a direct result of making an assumption about the location of these constants without verifying. A quick search of the codebase would have revealed that they are defined in `smartcfd.broker`. This highlights a process failure: assuming the location of a variable instead of confirming it.
+*   **Solution:** The import statement was corrected to `from smartcfd.broker import ALPACA_PAPER_BASE_URL, ALPACA_LIVE_BASE_URL`.
+*   **Lesson:** Do not assume the location of variables, functions, or classes. When an `ImportError` occurs, use workspace search tools to find the correct module where the desired object is defined. This simple verification step prevents chained errors and saves debugging time. Trust, but verify—even your own assumptions about the code.
+
+---
+
+### `ImportError` from Non-Existent Variable
+
+**Date:** 2025-10-07
+
+**Problem:**
+After multiple failed attempts to fix an `ImportError` for `ALPACA_PAPER_BASE_URL` by changing the import path, a workspace search revealed that the constant was not defined anywhere in the project's Python code.
+
+**Root Cause:**
+This was a severe process failure. The core mistake was assuming the variable existed at all. Instead of just guessing its location, the first step should have been to confirm its existence. The repeated failures were a direct result of trying to fix the *location* of an import without ever verifying the *existence* of the target.
+
+**Solution:**
+The non-existent import was removed. The required URL strings were defined directly within the `scripts/verify_alpaca_orders.py` script. For a simple utility script, defining constants locally is a much cleaner and more robust solution than creating a dependency on a non-existent variable.
+
+**Lesson:**
+The most critical lesson of all: **Verify, then trust.** Before attempting to import or use any object, first confirm that it actually exists in the codebase. A simple text search is the most powerful tool for this. Chasing `ImportError`s by guessing paths is inefficient and leads to repeated failures. Confirm existence first, then determine location.
 
 *(This document will be updated as the project progresses.)*

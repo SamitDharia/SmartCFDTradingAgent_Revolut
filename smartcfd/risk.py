@@ -31,6 +31,57 @@ class RiskManager:
         self.config = config
         self.is_halted = False
 
+    def calculate_order_qty(self, symbol: str, side: str) -> float:
+        """
+        Calculates the quantity for an order based on a fixed risk percentage.
+        """
+        log.info("risk.calculate_order_qty.start", extra={"extra": {"symbol": symbol, "side": side}})
+
+        if self.is_halted:
+            log.warning("risk.calculate_order_qty.halted", extra={"extra": {"reason": "Trading is halted, returning 0 qty."}})
+            return 0.0
+
+        account = self._get_account_info()
+        if not account:
+            log.error("risk.calculate_order_qty.no_account", extra={"extra": {"reason": "Cannot calculate quantity without account info."}})
+            return 0.0
+
+        try:
+            equity = float(account.equity)
+            
+            # For this simple implementation, we risk a fixed percentage of equity on each trade.
+            risk_amount = equity * self.config.risk_per_trade_percent
+            
+            # To calculate quantity, we need the price.
+            # We'll fetch the latest trade for the symbol.
+            latest_trade = self.client.get_latest_crypto_trade(symbol)
+            if not latest_trade:
+                log.error("risk.calculate_order_qty.no_price", extra={"extra": {"symbol": symbol}})
+                return 0.0
+            
+            price = latest_trade['trade']['p']
+            
+            if price <= 0:
+                log.error("risk.calculate_order_qty.invalid_price", extra={"extra": {"symbol": symbol, "price": price}})
+                return 0.0
+
+            # Simple quantity calculation
+            qty = risk_amount / price
+            
+            log.info("risk.calculate_order_qty.success", extra={"extra": {"symbol": symbol, "equity": equity, "risk_amount": risk_amount, "price": price, "calculated_qty": qty}})
+            
+            # Here we could add checks against max_position_size etc., but for now we keep it simple.
+            # Also, Alpaca requires notional orders for crypto to be >= $1.
+            if (qty * price) < 1.0:
+                log.warning("risk.calculate_order_qty.too_small", extra={"extra": {"symbol": symbol, "notional_value": qty * price}})
+                return 0.0
+
+            return round(qty, 8) # Return a reasonable precision for crypto
+
+        except Exception as e:
+            log.error("risk.calculate_order_qty.fail", extra={"extra": {"error": repr(e)}})
+            return 0.0
+
     def _get_account_info(self) -> Optional[Account]:
         """Fetches and validates the current account state."""
         try:

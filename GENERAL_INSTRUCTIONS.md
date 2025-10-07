@@ -41,4 +41,38 @@ While not an immediate priority, a long-term goal is to develop a sleek, modern,
 
 ---
 
+## ⚙️ Running the Bot: Environment & Networking
+
+For the trading bot to operate correctly, the following conditions must be met:
+
+1.  **Docker:** The application is containerized with Docker and managed with `docker-compose`. Ensure Docker Desktop is running on your system.
+2.  **API Keys:** A valid `.env` file with the correct Alpaca API keys (`APCA_API_KEY_ID` and `APCA_API_SECRET_KEY`) must be present in the root directory.
+3.  **Network Connection:** The bot requires a direct, unfiltered internet connection to communicate with the Alpaca API.
+    *   **VPNs:** Corporate or private VPNs will likely cause `SSL certificate verification` errors and must be **turned off**.
+    *   **Restrictive Networks:** Some corporate or public WiFi networks may block the necessary connections. If you encounter persistent `NameResolutionError` or other network issues, switch to a less restrictive network, such as a mobile hotspot. The `docker-compose.yml` file has been configured to use public DNS servers to improve reliability, but a restrictive network can still cause problems.
+
+To start the bot, run the following command from the project root:
+```bash
+docker-compose up --build -d
+```
+
+To view the logs:
+```bash
+docker-compose logs --tail 100 -f
+```
+
+### Core Development Principle: Verify, Don't Assume
+
+A critical lesson learned during the development of this project is the importance of verification over assumption. Multiple errors and significant delays were caused by assuming the location or even the existence of code elements like variables and functions.
+
+**Before writing code that depends on another part of the project, always:**
+
+1.  **Verify Existence**: Use a simple workspace search to confirm that the variable, function, or class you need actually exists.
+2.  **Verify Location**: Once you know it exists, confirm the correct file and module path.
+3.  **Verify Signature**: Check the function/method signature to ensure you are passing the correct arguments.
+
+This simple, disciplined process prevents `ImportError` and `AttributeError` issues and is much faster than debugging after a failed assumption. For a detailed history of these issues, see the `LESSONS_LEARNED.md` file.
+
+---
+
 This document serves as the central hub. For specifics on **what we are doing next**, always refer to the **[Development Roadmap](docs_ROADMAP.md)**.

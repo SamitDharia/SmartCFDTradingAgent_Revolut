@@ -74,6 +74,26 @@ class AlpacaClient:
         self.api_base = api_base
         self.session = session
 
+    def get_latest_crypto_trade(self, symbol: str) -> Optional[dict]:
+        """
+        Fetches the latest trade for a given crypto symbol.
+        """
+        url = f"{self.api_base.replace('api.', 'data.')}/v1beta3/crypto/us/latest/trades"
+        params = {"symbols": symbol}
+        try:
+            response = self.session.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+            if symbol in data.get("trades", {}):
+                return data["trades"][symbol]
+            return None
+        except requests.RequestException as e:
+            log.error(
+                "alpaca.get_latest_crypto_trade.fail",
+                extra={"error": repr(e), "symbol": symbol}
+            )
+            return None
+
     def post_order(self, order_data: OrderRequest) -> OrderResponse:
         """
         Posts an order to the Alpaca API.
@@ -96,6 +116,28 @@ class AlpacaClient:
         except Exception as e:
             log.error(
                 "alpaca.post_order.parse_fail", 
+                extra={"error": repr(e)}
+            )
+            raise
+
+    def get_orders(self, status: str = "all", limit: int = 100, nested: bool = True) -> list[OrderResponse]:
+        """
+        Fetches a list of orders from the Alpaca API.
+        """
+        url = f"{self.api_base}/v2/orders"
+        params = {
+            "status": status,
+            "limit": limit,
+            "nested": nested,
+        }
+        try:
+            response = self.session.get(url, params=params)
+            response.raise_for_status()
+            orders_data = response.json()
+            return [OrderResponse.model_validate(order) for order in orders_data]
+        except requests.RequestException as e:
+            log.error(
+                "alpaca.get_orders.fail",
                 extra={"error": repr(e)}
             )
             raise

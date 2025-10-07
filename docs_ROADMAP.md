@@ -44,7 +44,7 @@ This document outlines the development plan for the SmartCFD Trading Agent.
 
 ### Section 7: Reporting & Monitoring
 - [ ] **Daily Digest:** Create a script that generates a daily summary of trades, performance, and decisions.
-- [ ] **Notifications:** Implement a notification service (e.g., via Telegram or email) to send out the daily digest and critical alerts (e.g., trading halts).
+- [ ] **Notifications:** Implement an email service to send out the daily digest and critical alerts.
 - [ ] **Dashboarding:** Develop a simple web-based dashboard to visualize performance metrics and trade history in real-time.
 
 ### Section 8: Advanced Modeling & Prediction Accuracy

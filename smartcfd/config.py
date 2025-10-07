@@ -21,12 +21,14 @@ class RiskConfig:
     max_daily_drawdown_percent: float = -5.0  # e.g. -5.0 for a 5% loss
     max_position_size: float = 10000.0  # Max notional value for a single position
     max_total_exposure: float = 25000.0  # Max total notional value of all positions
+    risk_per_trade_percent: float = 0.01 # Risk 1% of equity per trade
 
 def load_risk_config() -> RiskConfig:
     return RiskConfig(
         max_daily_drawdown_percent=float(os.getenv("MAX_DAILY_DRAWDOWN_PERCENT", "-5.0")),
         max_position_size=float(os.getenv("MAX_POSITION_SIZE", "10000.0")),
         max_total_exposure=float(os.getenv("MAX_TOTAL_EXPOSURE", "25000.0")),
+        risk_per_trade_percent=float(os.getenv("RISK_PER_TRADE_PERCENT", "0.01")),
     )
 
 def load_config() -> AppConfig:
