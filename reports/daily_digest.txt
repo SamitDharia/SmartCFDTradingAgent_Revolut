@@ -1,18 +1,24 @@
 Smart CFD Trading Agent - Daily Digest
-Generated on: 2025-10-07 11:15:58 UTC
+Generated on: 2025-10-07 14:10:03 UTC
 ========================================
-Total Trades: 18
+Key Performance Indicators (KPIs)
+----------------------------------------
+Total Trades:         2
+Total Profit/Loss:    $100.00
+Total Volume Traded:  $9,000.00
+Win Rate:             50.00% (1 wins / 1 losses)
+Biggest Winner:       $150.00
+Biggest Loser:        $-50.00
+Average Gain:         $150.00
+Average Loss:         $-50.00
 
 --- Trades by Symbol ---
-- BTC-USD: 6 trade(s)
-- BCH-USD: 6 trade(s)
-- SOL-USD: 3 trade(s)
-- ETH-USD: 2 trade(s)
-- LTC-USD: 1 trade(s)
+- BTC-USD: 1 trade(s)
+- ETH-USD: 1 trade(s)
 
 --- Trades by Side ---
-- Buy: 16 trade(s)
-- Sell: 2 trade(s)
+- Buy: 1 trade(s)
+- Sell: 1 trade(s)
 
 ========================================
 End of Report

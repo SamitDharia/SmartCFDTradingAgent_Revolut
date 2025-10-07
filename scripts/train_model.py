@@ -1,3 +1,10 @@
+import sys
+from pathlib import Path
+
+# Add the project root to the Python path to allow importing from smartcfd
+project_root = Path(__file__).resolve().parent.parent
+sys.path.append(str(project_root))
+
 import pandas as pd
 import joblib
 from sklearn.model_selection import train_test_split

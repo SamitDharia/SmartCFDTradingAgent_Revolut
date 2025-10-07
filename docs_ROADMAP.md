@@ -43,9 +43,9 @@ This document outlines the development plan for the SmartCFD Trading Agent.
 ## 🚀 Phase 2: Enhancement & Intelligence
 
 ### Section 7: Reporting & Monitoring
-- [ ] **Daily Digest:** Create a script that generates a daily summary of trades, performance, and decisions. **(In Progress)**
-- [ ] **Notifications:** Implement an email service to send out the daily digest and critical alerts.
-- [ ] **Dashboarding:** Develop a simple web-based dashboard to visualize performance metrics and trade history in real-time.
+- [x] **Daily Digest:** Create a script that generates a daily summary of trades, performance, and decisions.
+- [x] **Notifications:** Implement an email service to send out the daily digest and critical alerts.
+- [x] **Dashboarding:** Develop a simple web-based dashboard to visualize performance metrics and trade history in real-time.
 
 ### Section 8: Advanced Modeling & Prediction Accuracy
 - [ ] **Feature Engineering:** Go beyond basic technical indicators. Incorporate features like:

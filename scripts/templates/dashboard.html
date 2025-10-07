@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartCFD Trading Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f0f2f5; color: #333; margin: 0; }
+        .container { max-width: 1200px; margin: auto; padding: 20px; }
+        .header { text-align: center; margin-bottom: 40px; }
+        .header h1 { color: #0046be; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+        .card { background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); padding: 20px; }
+        .card h2 { margin-top: 0; color: #0046be; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        #trade-history { grid-column: 1 / -1; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 8px 12px; border-bottom: 1px solid #ddd; text-align: left; }
+        th { background-color: #f7f7f7; }
+        .win { color: #28a745; }
+        .loss { color: #dc3545; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>SmartCFD Trading Performance Dashboard</h1>
+        </div>
+        <div class="grid">
+            <div class="card">
+                <h2>Key Metrics</h2>
+                <div id="kpi-content"></div>
+            </div>
+            <div class="card">
+                <h2>Profit/Loss Chart</h2>
+                <canvas id="pnlChart"></canvas>
+            </div>
+            <div class="card" id="trade-history">
+                <h2>Trade History</h2>
+                <table id="trades-table">
+                    <thead><tr><th>Timestamp</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Entry</th><th>Notional</th><th>PnL</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            fetch('/api/summary').then(res => res.json()).then(data => {
+                const kpi = document.getElementById('kpi-content');
+                kpi.innerHTML = `
+                    <p><strong>Total PnL:</strong> <span class="${data.total_profit_loss >= 0 ? 'win' : 'loss'}">${data.total_profit_loss.toFixed(2)}</span></p>
+                    <p><strong>Win Rate:</strong> ${data.win_rate_percent.toFixed(2)}%</p>
+                    <p><strong>Total Trades:</strong> ${data.total_trades}</p>
+                `;
+            });
+
+            fetch('/api/trades').then(res => res.json()).then(trades => {
+                const tableBody = document.querySelector('#trades-table tbody');
+                trades.forEach(trade => {
+                    const row = document.createElement('tr');
+                    const pnlClass = trade.pnl >= 0 ? 'win' : 'loss';
+                    row.innerHTML = `
+                        <td>${trade.filename.split('_')[0]}</td>
+                        <td>${trade.symbol}</td>
+                        <td>${trade.filename.split('_')[2].split('.')[0]}</td>
+                        <td>${trade.qty}</td>
+                        <td>${trade.entry.toFixed(2)}</td>
+                        <td>${(trade.qty * trade.entry).toFixed(2)}</td>
+                        <td class="${pnlClass}">${trade.pnl.toFixed(2)}</td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+
+                const pnlData = trades.map(t => t.pnl);
+                const cumulativePnl = pnlData.reduce((acc, val) => { acc.push((acc.length > 0 ? acc[acc.length - 1] : 0) + val); return acc; }, []);
+                const labels = trades.map((t, i) => `Trade ${i+1}`);
+
+                new Chart(document.getElementById('pnlChart'), {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Cumulative PnL',
+                            data: cumulativePnl,
+                            borderColor: '#0046be',
+                            tension: 0.1
+                        }]
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

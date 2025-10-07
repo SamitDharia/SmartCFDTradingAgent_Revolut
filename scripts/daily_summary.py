@@ -20,7 +20,7 @@ REPORT_TXT_PATH = os.path.join(REPORT_DIR, "daily_digest.txt")
 REPORT_JSON_PATH = os.path.join(REPORT_DIR, "daily_digest.json")
 
 
-def generate_summary(logs_dir: Path, reports_dir: Path) -> tuple[Path, Path]:
+def generate_summary(logs_dir: Path = LOG_DIR, reports_dir: Path = REPORT_DIR):
     """
     Scans the trade ticket directory, aggregates statistics, and generates reports.
 
@@ -146,42 +146,16 @@ def generate_summary(logs_dir: Path, reports_dir: Path) -> tuple[Path, Path]:
     return json_report_path, text_report_path
 
 def main():
-    """Main function to generate and print the daily summary."""
-    project_root = Path(__file__).resolve().parent.parent
-    logs_dir = project_root / "logs" / "trade_tickets"
-    reports_dir = project_root / "reports"
-
+    """Generates the daily digest reports."""
+    print("=" * 80)
+    print(f"{'DAILY DIGEST':^80}")
+    print("=" * 80)
     try:
-        txt_path, _ = generate_summary(logs_dir, reports_dir)
-
-        # Print the generated report to the console
-        print("\n" + "=" * 80)
-        print(" " * 30 + "DAILY DIGEST")
-        print("=" * 80)
-        with open(txt_path, "r", encoding="utf-8") as f:
-            print(f.read())
-        print("=" * 80)
-
-        # Run the script to send the email digest
-        send_script_path = project_root / "scripts" / "send_digest.py"
-        if send_script_path.exists():
-            print("\n--- Triggering Email Dispatch ---")
-            # Use sys.executable to ensure we run with the same python interpreter
-            result = subprocess.run(
-                [sys.executable, str(send_script_path)],
-                capture_output=True,
-                text=True,
-                check=False  # We will check the result manually
-            )
-            print(result.stdout)
-            if result.returncode != 0:
-                print("--- Email Dispatch Failed ---")
-                print(result.stderr)
-            else:
-                print("--- Email Dispatch Finished ---")
-
-    except FileNotFoundError:
-        print("Error: Logs directory not found. Please ensure the directory structure is correct.")
+        json_path, txt_path = generate_summary()
+        if json_path and txt_path:
+            print(f"Successfully generated JSON digest: {json_path}")
+            print(f"Successfully generated daily digest: {txt_path}")
+        # If paths are None, the generate_summary function already printed the reason.
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
 

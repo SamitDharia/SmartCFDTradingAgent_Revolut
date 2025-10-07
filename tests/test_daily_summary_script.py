@@ -23,15 +23,15 @@ class TestDailySummaryScript(TestCase):
         self.trade_tickets_path = os.path.join(TEST_LOG_DIR, "trade_tickets")
         self.create_fake_trade(
             "2025-10-07T10-00-00Z_BTC-USD_Buy.json",
-            {"symbol": "BTC-USD", "qty": 0.1, "entry": 50000, "pnl": 100.0},
+            {"symbol": "BTC-USD", "qty": 0.1, "entry": 50000, "pnl": 100.0, "notional": 5000.0},
         )
         self.create_fake_trade(
             "2025-10-07T11-00-00Z_ETH-USD_Buy.json",
-            {"symbol": "ETH-USD", "qty": 1.0, "entry": 4000, "pnl": -150.0},
+            {"symbol": "ETH-USD", "qty": 1.0, "entry": 4000, "pnl": -150.0, "notional": 4000.0},
         )
         self.create_fake_trade(
             "2025-10-07T12-00-00Z_BTC-USD_Sell.json",
-            {"symbol": "BTC-USD", "qty": 0.05, "entry": 51000, "pnl": 25.0},
+            {"symbol": "BTC-USD", "qty": 0.05, "entry": 51000, "pnl": 25.0, "notional": 2550.0},
         )
 
     def tearDown(self):
@@ -62,20 +62,37 @@ class TestDailySummaryScript(TestCase):
         self.assertEqual(summary_data["total_trades"], 3)
         self.assertEqual(summary_data["trades_by_symbol"], {"BTC-USD": 2, "ETH-USD": 1})
         self.assertEqual(summary_data["trades_by_side"], {"buy": 2, "sell": 1})
+        self.assertEqual(summary_data["total_profit_loss"], -25.0)
+        
+        # --- Assertions for new performance metrics ---
+        self.assertAlmostEqual(summary_data["total_volume"], 11550.0)
+        self.assertEqual(summary_data["win_count"], 2)
+        self.assertEqual(summary_data["loss_count"], 1)
+        self.assertAlmostEqual(summary_data["win_rate_percent"], (2/3) * 100)
+        self.assertEqual(summary_data["biggest_winner"], 100.0)
+        self.assertEqual(summary_data["biggest_loser"], -150.0)
+        self.assertAlmostEqual(summary_data["average_gain"], 62.5) # (100 + 25) / 2
+        self.assertAlmostEqual(summary_data["average_loss"], -150.0)
+
 
         # --- Assertions for text report ---
         with open(text_report_path, "r") as f:
             text_report = f.read()
 
         self.assertIn("Smart CFD Trading Agent - Daily Digest", text_report)
-        self.assertIn("Total Trades: 3", text_report)
+        self.assertIn("Total Trades:         3", text_report)
         self.assertIn("- BTC-USD: 2 trade(s)", text_report)
         self.assertIn("- ETH-USD: 1 trade(s)", text_report)
         self.assertIn("- Buy: 2 trade(s)", text_report)
         self.assertIn("- Sell: 1 trade(s)", text_report)
-        self.assertIn("Total Profit/Loss: $-25.00", text_report)
+        self.assertIn("Total Profit/Loss:    $-25.00", text_report)
+        self.assertIn("Total Volume Traded:  $11,550.00", text_report)
+        self.assertIn("Win Rate:             66.67% (2 wins / 1 losses)", text_report)
+        self.assertIn("Biggest Winner:       $100.00", text_report)
+        self.assertIn("Biggest Loser:        $-150.00", text_report)
+        self.assertIn("Average Gain:         $62.50", text_report)
+        self.assertIn("Average Loss:         $-150.00", text_report)
         
-        self.assertEqual(summary_data["total_profit_loss"], -25.0)
 
     def test_no_trades_found(self):
         """
