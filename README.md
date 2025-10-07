@@ -99,3 +99,24 @@ The agent is designed for automated, unattended operation. Detailed instructions
 
 Contributions are welcome. Please open an issue to discuss any major changes before submitting a pull request.
 
+---
+
+## ⚠️ Live Trading Warning
+
+This trading bot is capable of executing trades with real money. Before switching to a live environment, you MUST understand and accept the risks involved.
+
+### How to Enable Live Trading
+
+1.  **Open the `.env` file** in the root of the project directory.
+2.  **Change the `ALPACA_ENV` variable** from `paper` to `live`.
+    ```
+    # .env file
+    # ... other variables
+    ALPACA_ENV=live
+    ```
+3.  **Ensure your Alpaca API keys** (`APCA_API_KEY_ID` and `APCA_API_SECRET_KEY`) are for your **live trading account**.
+
+When you start the bot with `ALPACA_ENV=live`, you will see a critical warning message in the logs, and the bot will pause for 5 seconds. This is your final opportunity to stop the execution if you enabled live mode by mistake.
+
+**RISK DISCLAIMER:** Trading financial markets involves substantial risk of loss and is not suitable for every investor. The creators of this software are not liable for any financial losses incurred by its use. **Use at your own risk.**
+

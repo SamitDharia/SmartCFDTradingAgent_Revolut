@@ -1,5 +1,18 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any
+from pydantic import BaseModel
+
+class Order(BaseModel):
+    """A standardized model for an order."""
+    id: str
+    symbol: str
+    qty: float
+    side: str
+    status: str
+    filled_qty: float | None = None
+    filled_avg_price: float | None = None
+    created_at: Any
+
 
 class Broker(ABC):
     """

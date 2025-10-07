@@ -78,6 +78,33 @@ class InferenceStrategy(Strategy):
             log.warning(f"strategy.inference.no_model_found", extra={"extra": {"path": str(self.model_path)}})
             return None
 
+    def evaluate_backtest(self, feature_row: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Evaluates the strategy for a given row of pre-calculated features.
+        """
+        if not self.model:
+            log.warning("strategy.inference.evaluate.no_model")
+            return {"decision": "hold", "reason": "no_model"}
+
+        try:
+            # Features are pre-calculated, just align and predict
+            model_features = self.model.get_booster().feature_names
+            latest_features_aligned = feature_row[model_features]
+            
+            prediction = self.model.predict(latest_features_aligned)[0]
+
+            # 3. Translate prediction to action
+            if prediction == 1:
+                return {"decision": "buy"}
+            elif prediction == 2:
+                return {"decision": "sell"}
+            else:
+                return {"decision": "hold"}
+
+        except Exception:
+            log.error("strategy.inference.evaluate.backtest.fail", exc_info=True)
+            return {"decision": "hold", "reason": "evaluation_exception"}
+
     def evaluate(self, portfolio_manager: PortfolioManager, watch_list: List[str]) -> Tuple[List[Dict[str, Any]], Dict[str, pd.DataFrame]]:
         if not self.model:
             log.warning("strategy.inference.evaluate.no_model", extra={"extra": {"reason": "Model not loaded."}})

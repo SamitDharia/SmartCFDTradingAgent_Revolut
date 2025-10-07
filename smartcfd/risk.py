@@ -10,6 +10,7 @@ from smartcfd.db import get_daily_pnl
 from smartcfd.indicators import atr
 from smartcfd.strategy import Strategy
 from smartcfd.portfolio import Account, Position, PortfolioManager
+from smartcfd.backtest_portfolio import BacktestPortfolio
 
 log = logging.getLogger("risk")
 
@@ -345,3 +346,51 @@ class RiskManager:
         return False
 
         return False
+
+class BacktestRiskManager:
+    def __init__(self, risk_config: RiskConfig):
+        self.config = risk_config
+
+    def calculate_order_qty(self, symbol: str, price: float, portfolio: BacktestPortfolio) -> float:
+        # Risk a percentage of total equity, not just available cash
+        total_equity = portfolio.get_total_equity({symbol: price})
+        risk_amount = total_equity * (self.config.risk_per_trade_percent / 100.0)
+        
+        # Calculate potential quantity based on risk amount
+        qty = risk_amount / price
+
+        # Enforce a minimum order size to avoid dust trades
+        min_notional_value = 1.0  # $1 minimum, similar to Alpaca
+        if (qty * price) < min_notional_value:
+            # This is a common case (no signal or not enough to trade), so we don't log it
+            # to avoid noise. A zero quantity is the intended result.
+            return 0.0
+        
+        # Ensure we don't try to buy more than we have cash for
+        if (qty * price) > portfolio.cash:
+            log.debug(
+                "risk.backtest.calculate_order_qty.cash_limited",
+                extra={"extra": {"symbol": symbol, "requested_qty": qty, "cash_available": portfolio.cash, "price": price}}
+            )
+            qty = portfolio.cash / price
+            # After adjusting for cash, re-check if it's still above the minimum notional value
+            if (qty * price) < min_notional_value:
+                log.debug(
+                    "risk.backtest.calculate_order_qty.below_min_after_cash_limit",
+                    extra={"extra": {"symbol": symbol, "adjusted_qty": qty, "notional_value": qty * price}}
+                )
+                return 0.0
+
+        log.debug(
+            "risk.backtest.calculate_order_qty.success",
+            extra={
+                "extra": {
+                    "symbol": symbol,
+                    "price": price,
+                    "total_equity": total_equity,
+                    "risk_per_trade_percent": self.config.risk_per_trade_percent,
+                    "calculated_qty": qty,
+                }
+            },
+        )
+        return qty

@@ -10,18 +10,32 @@ from datetime import datetime, timedelta, timezone
 log = logging.getLogger(__name__)
 
 def _parse_interval(interval_str: str) -> TimeFrame:
-    """Parses a string like '15m', '1h', '1d' into an Alpaca TimeFrame."""
+    """Parses a string like '15m', '1h', '1d', '1Hour', '1Day' into an Alpaca TimeFrame."""
     try:
+        # More robust parsing
+        import re
+        match = re.match(r"(\d+)\s*([a-zA-Z]+)", interval_str)
+        if not match:
+            raise ValueError(f"Invalid interval format: {interval_str}")
+
+        amount = int(match.group(1))
+        unit_str = match.group(2).lower()
+
         unit_map = {
-            'm': TimeFrameUnit.Minute,
-            'h': TimeFrameUnit.Hour,
-            'd': TimeFrameUnit.Day,
+            'm': TimeFrameUnit.Minute, 'min': TimeFrameUnit.Minute, 'minute': TimeFrameUnit.Minute,
+            'h': TimeFrameUnit.Hour, 'hr': TimeFrameUnit.Hour, 'hour': TimeFrameUnit.Hour,
+            'd': TimeFrameUnit.Day, 'day': TimeFrameUnit.Day,
         }
-        amount = int(interval_str[:-1])
-        unit_char = interval_str[-1].lower()
-        unit = unit_map.get(unit_char)
+
+        unit = None
+        for k, v in unit_map.items():
+            if unit_str.startswith(k):
+                unit = v
+                break
+
         if not unit:
             raise ValueError(f"Invalid time unit in interval: {interval_str}")
+
         return TimeFrame(amount, unit)
     except (ValueError, IndexError) as e:
         log.error("data_loader.parse_interval.fail", extra={"extra": {"interval": interval_str, "error": repr(e)}})
@@ -39,6 +53,39 @@ class DataLoader:
         # HACK: Disable SSL verification for corporate proxies.
         # The session object is part of the underlying REST client.
         self.client._session.verify = False
+
+    def fetch_historical_range(self, symbol: str, start_date: str, end_date: str, interval: str) -> pd.DataFrame | None:
+        """
+        Fetches historical crypto data for a single symbol between two dates.
+        """
+        log.info(f"Fetching historical data for {symbol} from {start_date} to {end_date}")
+        try:
+            timeframe = _parse_interval(interval)
+            request = CryptoBarsRequest(
+                symbol_or_symbols=[symbol],
+                timeframe=timeframe,
+                start=pd.to_datetime(start_date).tz_localize('UTC'),
+                end=pd.to_datetime(end_date).tz_localize('UTC')
+            )
+            bars = self.client.get_crypto_bars(request)
+            df = bars.df
+
+            # If the symbol is in a multi-index, extract it
+            if isinstance(df.index, pd.MultiIndex):
+                if 'symbol' in df.index.names and not df.index.get_level_values('symbol').empty:
+                    if symbol in df.index.get_level_values('symbol'):
+                        df = df.loc[symbol]
+                    else:
+                        log.warning(f"Symbol {symbol} not found in fetched multi-index data.")
+                        return pd.DataFrame()
+                else:
+                    pass # Assume single-symbol response
+
+            log.info(f"Successfully fetched {len(df)} bars for {symbol}")
+            return df
+        except Exception as e:
+            log.error(f"Failed to fetch historical data for {symbol}: {e}", exc_info=True)
+            return pd.DataFrame()
 
     def get_market_data(self, symbols: list[str], interval: str, limit: int) -> pd.DataFrame | None:
         """

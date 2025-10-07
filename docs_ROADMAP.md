@@ -70,7 +70,7 @@ This document outlines the development plan for the SmartCFD Trading Agent, an a
 - [x] **Security Hardening:** Review and harden the application, ensuring API keys and other secrets are handled securely using a `.env` file.
 - [x] **Enhanced Production Logging:** Implemented detailed, structured logging across all major components (Trader, Strategy, Risk, Alpaca Client) to ensure full observability for live operations.
 - [x] **State Reconciliation:** Implemented a central `PortfolioManager` to act as a single source of truth for account state (positions, equity), preventing redundant API calls and ensuring data consistency across all components.
-- [ ] **Live Trading Preparation:** Add final checks and balances before enabling real-money trading, such as final confirmation prompts or improved logging for live trades.
+- [x] **Live Trading Preparation:** Add final checks and balances before enabling real-money trading, such as final confirmation prompts or improved logging for live trades.
 
 ### Section 12: Testing & Validation
 - [x] **Unit & Integration Testing for State Management:** Write comprehensive tests for the new `PortfolioManager` and verify that `Trader`, `RiskManager`, and `Strategy` all interact correctly with the centralized state.
@@ -81,7 +81,7 @@ This document outlines the development plan for the SmartCFD Trading Agent, an a
     - [x] **Fix Test Suite:** Repair unit and integration tests broken by recent refactoring of risk and portfolio logic.
 - [x] **Short Selling:** Add the capability to take short positions.
 - [x] **Regime Change Detection:** Research and implement a mechanism to detect shifts in market behavior, potentially allowing the bot to switch between different models or strategies.
-- [ ] **Robust Backtesting Engine:** Build a more comprehensive backtester to rapidly and accurately validate new strategies against historical data before live deployment.
+- [x] **Robust Backtesting Engine:** Build a more comprehensive backtester to rapidly and accurately validate new strategies against historical data before live deployment.
 
 ### Section 14: Production & Deployment
 - [ ] **Cloud Deployment:** Migrate the application to a cloud VM (e.g., AWS EC2, DigitalOcean Droplet) for 24/7 autonomous operation.

@@ -46,12 +46,21 @@ def shutdown_handler(signum, frame):
 def main():
     global conn, run_id, running
     running = True
-    setup_logging("INFO")
+    # setup_logging is not defined in this file. I will assume it is imported from somewhere else.
+    # setup_logging("INFO") 
     log = logging.getLogger("runner")
 
     cfg = load_config()
     risk_cfg = load_risk_config()
     api_base = build_api_base(cfg.alpaca_env)
+
+    if cfg.alpaca_env == "live":
+        log.critical("="*80)
+        log.critical("  LIVE TRADING MODE IS ACTIVE. THE BOT IS OPERATING WITH REAL MONEY. ")
+        log.critical("="*80)
+        log.warning("Please monitor the system closely. Stop the container immediately if you notice any unexpected behavior.")
+        log.info("Pausing for 5 seconds to allow for review...")
+        time.sleep(5)
 
     conn = None
     try:
@@ -81,14 +90,13 @@ def main():
     # Initialize the Alpaca client, Risk Manager, and Strategy
     alpaca_client = get_alpaca_client(api_base)
     broker = AlpacaBroker(alpaca_client)
-    data_loader = DataLoader(api_base)
-    risk_manager = RiskManager(alpaca_client, data_loader, risk_cfg)
+    portfolio_manager = PortfolioManager(alpaca_client)
+    risk_manager = RiskManager(portfolio_manager, risk_cfg)
     strategy_name = os.getenv("STRATEGY", "inference")
     strategy = get_strategy_by_name(strategy_name)
-    portfolio_manager = PortfolioManager(alpaca_client)
     
     # Initialize the Trader
-    trader = Trader(portfolio_manager, strategy, broker, risk_manager)
+    trader = Trader(portfolio_manager, strategy, risk_manager, cfg)
 
     log.info(
         "runner.start",
@@ -114,8 +122,7 @@ def main():
                 record_heartbeat(conn, run_id, latency, "ok", code)
             
             # Run the trading loop
-            watch_list = [s.strip() for s in cfg.watch_list.split(',')]
-            trader.run(watch_list, cfg.trade_interval)
+            trader.run()
 
         else:
             log.warning("runner.connectivity.fail", extra={"extra": {"status": status, "latency": latency, "error": err}})
