@@ -1,4 +1,4 @@
-This document has been moved to the `docs` directory. Please refer to `docs/PROJECT_SUMMARY.md`.# Project Summary: Smart CFD Trading Agent
+# Project Summary: Smart CFD Trading Agent
 
 ## High-Level Summary
 This project is an autonomous trading agent that uses machine learning to analyze market data, generate trading signals, and manage risk, with full integration for paper and live trading via the Alpaca Markets API. It is designed for continuous, unattended operation and is fully containerized with Docker for portability and reliability. The system has evolved from a baseline model to an advanced agent with sophisticated safety mechanisms and automated maintenance features.

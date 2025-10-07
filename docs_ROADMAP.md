@@ -1,4 +1,4 @@
-# SmartCFD Trading Agent - Project Roadmap
+This document has been moved to the `docs` directory. Please refer to `docs/ROADMAP.md`.# SmartCFD Trading Agent - Project Roadmap
 
 This document outlines the development plan for the SmartCFD Trading Agent, an automated trading bot using the Alpaca Markets API.
 
@@ -64,39 +64,56 @@ This document outlines the development plan for the SmartCFD Trading Agent, an a
 
 ---
 
-## 🌟 Phase 3: Production Readiness & Advanced Features (Current)
+## ✅ Phase 3: Production Readiness (Completed)
 
-### Section 11: Security & Real-Money Trading
-- [x] **Security Hardening:** Review and harden the application, ensuring API keys and other secrets are handled securely using a `.env` file.
-- [x] **Enhanced Production Logging:** Implemented detailed, structured logging across all major components (Trader, Strategy, Risk, Alpaca Client) to ensure full observability for live operations.
-- [x] **State Reconciliation:** Implemented a central `PortfolioManager` to act as a single source of truth for account state (positions, equity), preventing redundant API calls and ensuring data consistency across all components.
-- [x] **Live Trading Preparation:** Add final checks and balances before enabling real-money trading, such as final confirmation prompts or improved logging for live trades.
+### Section 11: Security & State Management
+- [x] **Security Hardening:** Reviewed and hardened the application, ensuring API keys and other secrets are handled securely using a `.env` file with `override=True`.
+- [x] **Centralized State Management:** Implemented a central `PortfolioManager` to act as a single source of truth for account state (positions, equity), preventing redundant API calls and ensuring data consistency.
+- [x] **Live Trading Preparation:** Added final checks and balances, including explicit warnings and a startup delay when `ALPACA_ENV` is set to `live`.
 
 ### Section 12: Testing & Validation
-- [x] **Unit & Integration Testing for State Management:** Write comprehensive tests for the new `PortfolioManager` and verify that `Trader`, `RiskManager`, and `Strategy` all interact correctly with the centralized state.
+- [x] **Comprehensive Test Suite Repair:** Systematically fixed the entire test suite after major refactoring, ensuring all unit and integration tests pass.
+- [x] **Docker Verification:** Completed an extensive, iterative debugging process to resolve a series of startup errors in the Docker container, resulting in a stable and runnable application.
 
-### Section 13: Advanced Strategies & Portfolio Management
-- [x] **Multi-Asset Trading:** Adapt the system to trade multiple symbols/assets concurrently.
-- [x] **Portfolio Management:** Implement logic to manage a portfolio of assets, considering overall risk and allocation.
-    - [x] **Fix Test Suite:** Repair unit and integration tests broken by recent refactoring of risk and portfolio logic.
-- [x] **Short Selling:** Add the capability to take short positions.
-- [x] **Regime Change Detection:** Research and implement a mechanism to detect shifts in market behavior, potentially allowing the bot to switch between different models or strategies.
-- [x] **Robust Backtesting Engine:** Build a more comprehensive backtester to rapidly and accurately validate new strategies against historical data before live deployment.
+### Section 13: Core Feature Expansion
+- [x] **Multi-Asset Trading:** Adapted the system to trade multiple symbols/assets concurrently.
+- [x] **Regime Change Detection:** Implemented a mechanism to detect shifts in market volatility (low vs. high).
 
-### Section 14: Production & Deployment
+---
+
+## 🚀 Phase 4: Strategic Improvement & Validation (Current)
+
+*Based on the SWOT analysis, this phase is dedicated to addressing key weaknesses and unlocking new opportunities. The primary focus is on building a robust validation framework and enhancing the predictive power of the model.*
+
+### Section 14: Robust Backtesting Engine
+- [ ] **Build Core Backtester:** Develop a script (`scripts/backtest.py`) that can run a strategy against historical data and generate performance metrics.
+- [ ] **Performance Metrics:** Implement key metrics like Sharpe Ratio, Sortino Ratio, Max Drawdown, and Win/Loss Rate.
+- [ ] **Realistic Simulation:** Ensure the backtester accurately simulates broker commissions, slippage, and order execution delays.
+- [ ] **Visualization:** Generate visual reports from backtests, such as equity curves and trade distributions.
+
+### Section 15: Advanced Feature Engineering
+- [ ] **Feature Research:** Research and identify new, potentially more predictive features beyond standard technical indicators.
+- [ ] **Alternative Data Integration:** Develop a pipeline to incorporate an alternative data source (e.g., on-chain crypto data, market sentiment).
+- [ ] **Feature Importance Pipeline:** Refine the process for evaluating the importance of new features and their impact on model performance.
+
+### Section 16: Sophisticated Strategy Development
+- [ ] **Develop New Strategy Classes:** Implement new strategy templates (e.g., mean-reversion, momentum-following).
+- [ ] **Dynamic Strategies:** Create strategies that can adapt to the market regime detected by the `RegimeDetector` (e.g., use different parameters in high vs. low volatility).
+- [ ] **Add Short Selling:** Implement the capability to take short positions.
+
+---
+
+## ☁️ Phase 5: Production & Deployment (Upcoming)
+
+### Section 17: Cloud Deployment
 - [ ] **Cloud Deployment:** Migrate the application to a cloud VM (e.g., AWS EC2, DigitalOcean Droplet) for 24/7 autonomous operation.
 - [ ] **CI/CD Pipeline:** Set up a GitHub Actions workflow to automatically test and deploy new versions of the bot.
 
 ---
 
-## 📚 Phase 4: Review & Strategy (Upcoming)
+## 📚 Phase 6: Review & Documentation (Ongoing)
 
-### Section 15: Comprehensive Review
-- [ ] **SWOT Analysis:** Conduct a SWOT analysis to identify strengths, weaknesses, opportunities, and threats related to the trading bot and its performance.
-- [ ] **Lessons Learned:** Document lessons learned throughout the project, focusing on key takeaways that can inform future development and trading strategies.
-- [ ] **Performance Review:** Evaluate the trading bot's performance against initial objectives and benchmarks, identifying areas for improvement.
-
-### Section 16: Strategic Planning
-- [ ] **Roadmap Revision:** Revise the project roadmap based on the comprehensive review, prioritizing high-impact improvements and features.
-- [ ] **Long-term Strategy Development:** Develop a long-term strategy for the trading bot, considering market trends, technological advancements, and potential expansion opportunities.
-- [ ] **Resource Allocation Planning:** Plan for resource allocation (time, budget, personnel) required to execute the revised roadmap and long-term strategy.
+### Section 18: Continuous Improvement
+- [ ] **Performance Review:** Continuously evaluate the trading bot's performance against initial objectives and benchmarks.
+- [ ] **Roadmap Revision:** Revise the project roadmap based on new findings and priorities.
+- [ ] **Documentation:** Keep all project documents (`PROJECT_SUMMARY.md`, `LESSONS_LEARNED.md`, etc.) up-to-date with the latest developments.

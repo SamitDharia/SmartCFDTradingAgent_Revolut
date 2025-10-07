@@ -1,4 +1,4 @@
-This document has been moved to the `docs` directory. Please refer to `docs/LESSONS_LEARNED.md`.# Project Learnings & Retrospective
+# Project Learnings & Retrospective
 
 This document tracks the key learnings, mistakes, and pivotal decisions made throughout the development of the Smart CFD Trading Agent. It serves as a living journal to reflect on the development process and improve future work.
 

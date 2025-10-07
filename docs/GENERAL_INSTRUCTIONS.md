@@ -11,15 +11,19 @@ This project is guided by a set of living documents that track our progress, pla
 
 1.  **[Project Summary (`PROJECT_SUMMARY.md`)](PROJECT_SUMMARY.md)**
     *   **Purpose:** A high-level overview of the project, suitable for resumes and external showcases.
-    *   **Content:** Defines the project's objectives, technologies, key achievements, and clearly outlines our respective roles as Project Lead and AI Development Partner.
+    *   **Content:** Defines the project's objectives, technologies, key achievements, and clearly outlines our respective roles.
 
-2.  **[Development Roadmap (`docs_ROADMAP.md`)](docs_ROADMAP.md)**
+2.  **[Development Roadmap (`ROADMAP.md`)](ROADMAP.md)**
     *   **Purpose:** The strategic plan outlining all development phases, from initial setup to future features.
     *   **Content:** Contains a detailed, section-by-section breakdown of tasks. We will follow this roadmap to guide our development priorities.
 
 3.  **[Lessons Learned (`LESSONS_LEARNED.md`)](LESSONS_LEARNED.md)**
     *   **Purpose:** A project retrospective and journal.
     *   **Content:** We continuously update this document with key learnings, mistakes, and important decisions. It helps us reflect on our process and improve as we go.
+
+4.  **[SWOT Analysis (`SWOT_ANALYSIS.md`)](SWOT_ANALYSIS.md)**
+    *   **Purpose:** A strategic analysis of the project's internal strengths/weaknesses and external opportunities/threats.
+    *   **Content:** Informs the strategic direction and helps prioritize tasks on the roadmap.
 
 ---
 
