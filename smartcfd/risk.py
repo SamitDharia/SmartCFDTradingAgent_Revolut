@@ -1,8 +1,12 @@
 import logging
 from typing import List, Dict, Any, Optional
+import pandas as pd
 from pydantic import BaseModel
+
 from smartcfd.alpaca_client import AlpacaClient, OrderRequest
 from smartcfd.config import RiskConfig
+from smartcfd.data_loader import DataLoader
+from smartcfd.indicators import atr
 from smartcfd.strategy import Strategy
 
 log = logging.getLogger("risk")
@@ -26,10 +30,12 @@ class RiskManager:
     """
     Manages and enforces risk rules for trading.
     """
-    def __init__(self, client: AlpacaClient, config: RiskConfig):
+    def __init__(self, client: AlpacaClient, data_loader: DataLoader, config: RiskConfig):
         self.client = client
+        self.data_loader = data_loader
         self.config = config
         self.is_halted = False
+        self.halt_reason = ""
 
     def calculate_order_qty(self, symbol: str, side: str) -> float:
         """
@@ -38,10 +44,10 @@ class RiskManager:
         log.info("risk.calculate_order_qty.start", extra={"extra": {"symbol": symbol, "side": side}})
 
         if self.is_halted:
-            log.warning("risk.calculate_order_qty.halted", extra={"extra": {"reason": "Trading is halted, returning 0 qty."}})
+            log.warning("risk.calculate_order_qty.halted", extra={"extra": {"reason": self.halt_reason, "symbol": symbol}})
             return 0.0
 
-        account = self._get_account_info()
+        account = self.client.get_account()
         if not account:
             log.error("risk.calculate_order_qty.no_account", extra={"extra": {"reason": "Cannot calculate quantity without account info."}})
             return 0.0
@@ -85,9 +91,10 @@ class RiskManager:
     def _get_account_info(self) -> Optional[Account]:
         """Fetches and validates the current account state."""
         try:
-            r = self.client.session.get(f"{self.client.api_base}/v2/account")
-            r.raise_for_status()
-            return Account.model_validate(r.json())
+            account_data = self.client.get_account()
+            if account_data:
+                return Account.model_validate(account_data.model_dump())
+            return None
         except Exception as e:
             log.error("risk.account_info.fail", extra={"extra": {"error": repr(e)}})
             return None
@@ -95,88 +102,139 @@ class RiskManager:
     def _get_positions(self) -> List[Position]:
         """Fetches and validates the current open positions."""
         try:
-            r = self.client.session.get(f"{self.client.api_base}/v2/positions")
-            r.raise_for_status()
-            return [Position.model_validate(p) for p in r.json()]
+            positions_data = self.client.get_positions()
+            if positions_data:
+                return [Position.model_validate(p.model_dump()) for p in positions_data]
+            return []
         except Exception as e:
             log.error("risk.positions.fail", extra={"extra": {"error": repr(e)}})
             return []
 
-    def check_for_halt(self) -> bool:
-        """
-        Checks if the max daily drawdown has been exceeded. If so, halts trading.
-        Drawdown is a negative value, so we check if it's *less than* the configured max.
-        e.g., if drawdown is -6% and limit is -5%, trading should halt.
-        """
-        if self.is_halted:
-            log.warning("risk.check.halted", extra={"extra": {"reason": "already halted"}})
-            return True
+    def _check_volatility_for_symbol(self, symbol: str, interval: str) -> bool:
+        """Checks if the volatility for a symbol exceeds the circuit breaker threshold."""
+        multiplier = self.config.circuit_breaker_atr_multiplier
+        if not multiplier or multiplier <= 0:
+            return False # Circuit breaker is disabled
 
-        account = self._get_account_info()
-        if not account:
-            log.error("risk.halt_check.no_account", extra={"extra": {"reason": "Cannot check drawdown without account info"}})
-            # Fail safe: if we can't get account info, halt trading
-            self.is_halted = True
-            return True
+        # Fetch recent data to calculate ATR. We need enough for the ATR window + 1 for previous close.
+        data = self.data_loader.get_market_data([symbol], interval, limit=50)
+        if data is None or data.empty or len(data) < 2:
+            log.warning("risk.volatility_check.no_data", extra={"extra": {"symbol": symbol, "reason": "Not enough data for volatility check."}})
+            return False # Cannot perform check
 
-        equity = float(account.equity)
-        last_equity = float(account.last_equity)
-        
-        if last_equity == 0: # Avoid division by zero on new accounts
+        # Ensure data is sorted by time
+        data = data.sort_index()
+
+        # Calculate ATR for the series, excluding the most recent bar
+        # Ensure we have enough data for the ATR calculation window
+        atr_window = 14 # A common setting for ATR
+        if len(data) < atr_window + 2:
+            log.warning("risk.volatility_check.no_data", extra={"extra": {"symbol": symbol, "reason": "Not enough data for ATR calculation."}})
             return False
 
-        drawdown_percent = ((equity - last_equity) / last_equity) * 100.0
+        historical_atr = atr(data['high'].iloc[:-1], data['low'].iloc[:-1], data['close'].iloc[:-1], window=atr_window).iloc[-1]
 
-        # max_daily_drawdown_percent is negative, e.g., -5.0
-        if drawdown_percent < self.config.max_daily_drawdown_percent:
-            log.critical("risk.halt.drawdown_exceeded", extra={"extra": {"drawdown_percent": round(drawdown_percent, 2), "limit_percent": self.config.max_daily_drawdown_percent}})
+        # Calculate the True Range of the most recent bar
+        last_bar = data.iloc[-1]
+        prev_close = data['close'].iloc[-2]
+        true_range = max(
+            last_bar['high'] - last_bar['low'],
+            abs(last_bar['high'] - prev_close),
+            abs(last_bar['low'] - prev_close)
+        )
+
+        if historical_atr <= 0: # Avoid division by zero or nonsensical checks
+            return False
+
+        # Check if the current true range exceeds the historical average by the multiplier
+        if true_range > historical_atr * multiplier:
             self.is_halted = True
+            self.halt_reason = f"Volatility circuit breaker tripped for {symbol}. True Range ({true_range:.2f}) > ATR ({historical_atr:.2f}) * {multiplier}"
+            log.critical("risk.halt.volatility_exceeded", extra={"extra": {"symbol": symbol, "true_range": true_range, "atr": historical_atr, "multiplier": multiplier}})
             return True
-        
+
         return False
 
-    def filter_actions(self, actions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def check_for_halt(self, watch_list: List[str], interval: str) -> bool:
         """
-        Filters a list of proposed actions based on risk rules.
-        - Max Position Size: No single position can exceed this notional value.
-        - Max Total Exposure: The sum of all position market values cannot exceed this.
+        Checks all halt conditions. If any are met, sets the halt flag and returns True.
+        If no conditions are met, it ensures the halt is lifted and returns False.
         """
+        # --- Check for conditions that would CAUSE a halt ---
+
+        # 1. Check for daily drawdown
+        account = self._get_account_info()
+        if account:
+            try:
+                equity = float(account.equity)
+                last_equity = float(account.last_equity)
+                drawdown = (equity / last_equity) - 1
+                
+                if drawdown < self.config.max_daily_drawdown_percent:
+                    self.is_halted = True
+                    self.halt_reason = f"Max daily drawdown exceeded: {drawdown:.2%} < {self.config.max_daily_drawdown_percent:.2%}"
+                    log.critical("risk.halt.drawdown_exceeded", extra={"extra": {"drawdown": drawdown, "max_drawdown": self.config.max_daily_drawdown_percent}})
+                    return True # Halt immediately
+            except (ValueError, ZeroDivisionError) as e:
+                log.error("risk.halt_check.drawdown_error", extra={"extra": {"error": repr(e)}})
+                self.is_halted = True
+                self.halt_reason = "Could not calculate drawdown due to invalid account data."
+                return True
+        else:
+            log.error("risk.halt_check.no_account", extra={"extra": {"reason": "Cannot check drawdown without account info"}})
+            # In a fail-safe mode, we might halt if we can't get account info
+            self.is_halted = True
+            self.halt_reason = "Could not retrieve account information to verify drawdown."
+            return True
+
+        # 2. Check for volatility circuit breaker for each symbol in the watch list
+        for symbol in watch_list:
+            if self._check_volatility_for_symbol(symbol, interval):
+                self.is_halted = True # The reason is set inside the check
+                return True # Halt immediately
+
+        # --- If we've reached this point, no halt conditions were met ---
         if self.is_halted:
-            log.warning("risk.filter.halted", extra={"extra": {"reason": "Trading is halted, no actions will be approved."}})
-            return []
+            log.info("risk.halt.reset", extra={"extra": {"reason": "All risk conditions are now normal."}})
+            self.is_halted = False
+            self.halt_reason = ""
+        
+        return self.is_halted
+    
+    def manage_open_positions(self, strategy: Strategy):
+        """
+        Manages open positions according to the defined strategy and risk rules.
+        """
+        log.info("risk.manage_open_positions.start", extra={"extra": {}})
+        
+        if self.is_halted:
+            log.warning("risk.manage_open_positions.halted", extra={"extra": {"reason": self.halt_reason}})
+            return # Do not manage positions if halted
 
         positions = self._get_positions()
-        current_exposure = sum(float(p.market_value) for p in positions)
-        
-        approved_actions = []
-        for action in actions:
-            # We only apply these risk rules to opening new positions
-            if action.get("action") == "buy":
-                try:
-                    order = OrderRequest.model_validate(action.get("order_details", {}))
-                except Exception as e:
-                    log.error("risk.filter.invalid_order", extra={"extra": {"action": action, "error": repr(e)}})
-                    continue
+        if not positions:
+            log.info("risk.manage_open_positions.no_positions", extra={"extra": {}})
+            return # No positions to manage
 
-                # This is a simplification. A robust implementation would fetch the current
-                # market price to calculate the notional value. For now, we assume a fixed price.
-                # This is a known limitation for this implementation phase.
-                notional_value = float(order.qty) * 150.0 # Placeholder average price
+        for position in positions:
+            symbol = position.symbol
+            qty = float(position.qty)
+            market_value = float(position.market_value)
+            unrealized_pl = float(position.unrealized_pl)
 
-                # Rule 1: Check against max position size
-                if notional_value > self.config.max_position_size:
-                    log.warning("risk.filter.reject", extra={"extra": {"symbol": order.symbol, "reason": "exceeds_max_position_size", "notional": notional_value, "limit": self.config.max_position_size}})
-                    continue
-                
-                # Rule 2: Check against max total exposure
-                if (current_exposure + notional_value) > self.config.max_total_exposure:
-                    log.warning("risk.filter.reject", extra={"extra": {"symbol": order.symbol, "reason": "exceeds_max_total_exposure", "new_exposure": current_exposure + notional_value, "limit": self.config.max_total_exposure}})
-                    continue
-                
-                # If approved, add the notional value to our running total for this session
-                current_exposure += notional_value
-
-            approved_actions.append(action)
+            log.info("risk.manage_open_positions.evaluating", extra={"extra": {"symbol": symbol, "qty": qty, "market_value": market_value, "unrealized_pl": unrealized_pl}})
             
-        log.info("risk.filter.end", extra={"extra": {"approved_count": len(approved_actions), "initial_count": len(actions)}})
-        return approved_actions
+            # Example rule: Close positions with high unrealized loss
+            if unrealized_pl < -100: # Arbitrary threshold for example
+                log.info("risk.manage_open_positions.closing_loss", extra={"extra": {"symbol": symbol, "unrealized_pl": unrealized_pl}})
+                # Here we would place a market order to close the position
+                # self.client.close_position(symbol)
+            
+            # Example rule: Reduce position size if too large
+            if qty > 10: # Arbitrary max qty for example
+                new_qty = qty / 2
+                log.info("risk.manage_open_positions.reducing_size", extra={"extra": {"symbol": symbol, "old_qty": qty, "new_qty": new_qty}})
+                # Here we would place a reduce-only order
+                # self.client.reduce_position_size(symbol, new_qty)
+        
+        log.info("risk.manage_open_positions.end", extra={"extra": {}})

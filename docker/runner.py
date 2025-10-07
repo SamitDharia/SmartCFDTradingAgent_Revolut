@@ -5,7 +5,6 @@ import requests
 import signal
 
 from smartcfd.config import load_config, load_risk_config
-from smartcfd.logging_setup import setup_logging
 from smartcfd.db import connect as db_connect, init_schema, record_run, record_heartbeat
 from smartcfd.alpaca import build_api_base, build_headers_from_env
 from smartcfd.health_server import start_health_server
@@ -14,6 +13,7 @@ from smartcfd.strategy import get_strategy_by_name
 from smartcfd.broker import AlpacaBroker
 from smartcfd.alpaca_client import get_alpaca_client
 from smartcfd.risk import RiskManager
+from smartcfd.data_loader import DataLoader
 
 def check_connectivity(api_base: str, timeout: float):
     headers = build_headers_from_env()
@@ -80,7 +80,8 @@ def main():
     # Initialize the Alpaca client, Risk Manager, and Strategy
     alpaca_client = get_alpaca_client(api_base)
     broker = AlpacaBroker(alpaca_client)
-    risk_manager = RiskManager(alpaca_client, risk_cfg)
+    data_loader = DataLoader(api_base)
+    risk_manager = RiskManager(alpaca_client, data_loader, risk_cfg)
     strategy_name = os.getenv("STRATEGY", "inference")
     strategy = get_strategy_by_name(strategy_name)
     
@@ -111,7 +112,8 @@ def main():
                 record_heartbeat(conn, run_id, latency, "ok", code)
             
             # Run the trading loop
-            trader.run()
+            watch_list = [s.strip() for s in cfg.watch_list.split(',')]
+            trader.run(watch_list, cfg.trade_interval)
 
         else:
             log.warning("runner.connectivity.fail", extra={"extra": {"status": status, "latency": latency, "error": err}})

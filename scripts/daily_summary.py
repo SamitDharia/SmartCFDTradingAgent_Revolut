@@ -32,12 +32,14 @@ def generate_summary(logs_dir: Path, reports_dir: Path) -> tuple[Path, Path]:
         A tuple containing the paths to the generated text and JSON reports.
     """
     if not os.path.exists(logs_dir):
-        return {}, "Error: Trade ticket log directory not found."
+        print(f"Error: Trade ticket log directory not found at {logs_dir}")
+        return None, None
 
     trade_files = [f for f in os.listdir(logs_dir) if f.endswith(".json")]
     
     if not trade_files:
-        return {}, "No trades found for today."
+        print("No trades found for today.")
+        return None, None
 
     all_trades = []
     for trade_file in trade_files:
@@ -58,6 +60,7 @@ def generate_summary(logs_dir: Path, reports_dir: Path) -> tuple[Path, Path]:
     total_trades = len(all_trades)
     trades_by_symbol = Counter(t["filename_symbol"] for t in all_trades)
     trades_by_side = Counter(t["filename_side"].lower() for t in all_trades)
+    total_profit_loss = sum(float(t.get("pnl", 0.0)) for t in all_trades)
 
     # --- Prepare Reports ---
     summary_data = {
@@ -65,15 +68,20 @@ def generate_summary(logs_dir: Path, reports_dir: Path) -> tuple[Path, Path]:
         "total_trades": total_trades,
         "trades_by_symbol": dict(trades_by_symbol),
         "trades_by_side": dict(trades_by_side),
+        "total_profit_loss": total_profit_loss,
         "trades": all_trades,
     }
 
     # --- Format Text Report ---
+    pnl_color = "green" if total_profit_loss >= 0 else "red"
+    pnl_str = f"${total_profit_loss:,.2f}"
+    
     report_lines = [
         "Smart CFD Trading Agent - Daily Digest",
         f"Generated on: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}",
         "=" * 40,
         f"Total Trades: {total_trades}",
+        f"Total Profit/Loss: {pnl_str}",
         "\n--- Trades by Symbol ---",
     ]
     for symbol, count in trades_by_symbol.items():
@@ -98,13 +106,12 @@ def generate_summary(logs_dir: Path, reports_dir: Path) -> tuple[Path, Path]:
     print(f"Successfully generated JSON digest: {json_report_path}")
 
     # Write the text report
-    txt_report_path = os.path.join(reports_dir, "daily_digest.txt")
-    with open(txt_report_path, "w") as f:
+    text_report_path = os.path.join(reports_dir, "daily_digest.txt")
+    with open(text_report_path, "w") as f:
         f.write(text_report)
-    print(f"Successfully generated daily digest: {txt_report_path}")
-    
-    return txt_report_path, json_report_path
+    print(f"Successfully generated daily digest: {text_report_path}")
 
+    return json_report_path, text_report_path
 
 def main():
     """Main function to generate and print the daily summary."""

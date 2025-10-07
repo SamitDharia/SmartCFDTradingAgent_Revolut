@@ -34,8 +34,8 @@ def main():
     """Fetches and displays all orders from the Alpaca account."""
     print("--- Verifying Alpaca Paper Trading Orders ---")
     
-    # Load environment variables (.env file)
-    load_dotenv()
+    # Load environment variables (.env file), overriding any existing system variables
+    load_dotenv(override=True)
 
     # Get Alpaca configuration
     try:

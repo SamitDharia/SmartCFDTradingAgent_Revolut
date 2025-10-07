@@ -17,8 +17,8 @@ sys.path.append(str(project_root))
 from dotenv import load_dotenv
 from SmartCFDTradingAgent.emailer import send_email
 
-# Load environment variables from .env file
-load_dotenv()
+# Load environment variables from .env file, overriding system variables
+load_dotenv(override=True)
 
 REPORTS_DIR = project_root / "reports"
 TEXT_REPORT_PATH = REPORTS_DIR / "daily_digest.txt"

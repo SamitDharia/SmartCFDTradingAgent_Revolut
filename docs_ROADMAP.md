@@ -43,7 +43,7 @@ This document outlines the development plan for the SmartCFD Trading Agent.
 ## 🚀 Phase 2: Enhancement & Intelligence
 
 ### Section 7: Reporting & Monitoring
-- [ ] **Daily Digest:** Create a script that generates a daily summary of trades, performance, and decisions.
+- [ ] **Daily Digest:** Create a script that generates a daily summary of trades, performance, and decisions. **(In Progress)**
 - [ ] **Notifications:** Implement an email service to send out the daily digest and critical alerts.
 - [ ] **Dashboarding:** Develop a simple web-based dashboard to visualize performance metrics and trade history in real-time.
 
@@ -62,7 +62,7 @@ This document outlines the development plan for the SmartCFD Trading Agent.
 - [ ] **Automated Model Retraining:** Create a workflow to automatically retrain the model on a schedule (e.g., weekly) to adapt to new market data and prevent model drift.
 - [ ] **Data Integrity Checks:** Implement a pre-processing step to validate live market data for gaps, staleness, and anomalous values before it's used for inference.
 - [ ] **Overfitting Mitigation:** Enhance the training process with rigorous cross-validation and feature importance analysis to ensure the model learns general patterns, not just market noise.
-- [ ] **Volatility & "Black Swan" Defense:** Upgrade the `RiskManager` to include a circuit breaker that can halt trading or flatten the portfolio if it detects extreme, abnormal market volatility (e.g., a flash crash).
+- [x] **Volatility & "Black Swan" Defense:** Upgrade the `RiskManager` to include a circuit breaker that can halt trading or flatten the portfolio if it detects extreme, abnormal market volatility (e.g., a flash crash).
 - [ ] **Regime Change Detection:** Research and implement a mechanism to analyze market volatility and correlations to detect shifts in market behavior, potentially allowing the bot to switch between different models or strategies.
 
 ### Section 10: Advanced Trading & Portfolio Management

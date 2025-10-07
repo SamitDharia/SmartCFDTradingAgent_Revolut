@@ -7,7 +7,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 from smartcfd.alpaca_client import AlpacaClient
-from smartcfd.data_loader import fetch_data
+from smartcfd.data_loader import DataLoader
 from alpaca.data.timeframe import TimeFrame
 from .indicators import create_features as calculate_indicators
 
@@ -76,63 +76,43 @@ class InferenceStrategy(Strategy):
         
         log.info("strategy.inference.evaluate.start", extra={"extra": {"symbol": self.symbol}})
         
-        # 1. Fetch live market data for the symbol.
-        # We need enough data to calculate the indicators. Let's fetch data for the last 100 days.
-        end_date = datetime.utcnow()
-        start_date = end_date - timedelta(days=100)
-        
         try:
-            df = fetch_data(self.symbol, TimeFrame.Hour, start_date.isoformat(), end_date.isoformat())
-        except Exception as e:
-            log.error("strategy.inference.evaluate.data_fetch_fail", extra={"extra": {"error": repr(e)}})
-            return [{"action": "log", "symbol": self.symbol, "decision": "hold", "reason": "data_fetch_fail"}]
+            # 1. Fetch live market data for the symbol.
+            data_loader = DataLoader(api_base=client.api_base)
+            data = data_loader.get_market_data([self.symbol], "15m", limit=100)
+            if data is None or data.empty:
+                log.warning("strategy.inference.evaluate.no_data", extra={"extra": {"symbol": self.symbol}})
+                return [{"action": "log", "symbol": self.symbol, "decision": "hold", "reason": "no_data"}]
 
-        if df.empty:
-            log.warning("strategy.inference.evaluate.no_data", extra={"extra": {"symbol": self.symbol}})
-            return [{"action": "log", "symbol": self.symbol, "decision": "hold", "reason": "no_data"}]
+            # 2. Calculate features from the data.
+            features = calculate_indicators(data)
+            if features.empty:
+                log.warning("strategy.inference.evaluate.no_features", extra={"extra": {"symbol": self.symbol}})
+                return [{"action": "log", "symbol": self.symbol, "decision": "hold", "reason": "feature_calculation_failed"}]
 
-        # The Alpaca API might return a multi-index (symbol, timestamp).
-        # We need to set the timestamp as the primary index for feature calculation.
-        if isinstance(df.index, pd.MultiIndex):
-            df.index = df.index.get_level_values('timestamp')
-
-        # 2. Generate the same features the model was trained on.
-        df_features = calculate_indicators(df)
-        
-        # Get the latest features
-        latest_features = df_features.iloc[-1:]
-        
-        # Ensure the feature names match the model's expected input
-        model_features = self.model.feature_names_in_
-        latest_features = latest_features[model_features]
-
-        # 3. Use self.model.predict() or self.model.predict_proba()
-        try:
-            prediction = self.model.predict(latest_features)
-            prediction_proba = self.model.predict_proba(latest_features)
+            # 3. Make a prediction using the model.
+            latest_features = features.iloc[-1:]
             
-            score = prediction_proba[0][1] # Probability of the 'up' class
+            prediction = self.model.predict(latest_features)[0]
             
-            # 4. Map the prediction to a decision (buy/sell/hold).
-            decision = "hold"
-            if prediction[0] == 1 and score > 0.55: # Example threshold
+            # 4. Translate the prediction into an action.
+            if prediction == 1:
                 decision = "buy"
-            
-            log.info("strategy.inference.evaluate.result", extra={"extra": {
-                "symbol": self.symbol,
-                "decision": decision,
-                "score": score,
-                "prediction": int(prediction[0])
-            }})
-
-            if decision == "buy":
-                return [{"action": "buy", "symbol": self.symbol, "reason": "inference", "score": score}]
+            elif prediction == -1:
+                decision = "sell"
             else:
-                return [{"action": "log", "symbol": self.symbol, "decision": "hold", "reason": "inference_hold", "score": score}]
+                decision = "hold"
+            
+            log.info("strategy.inference.evaluate.prediction", extra={"extra": {"symbol": self.symbol, "prediction": prediction, "decision": decision}})
 
+            if decision in ["buy", "sell"]:
+                return [{"action": "order", "symbol": self.symbol, "decision": decision}]
+            else:
+                return [{"action": "log", "symbol": self.symbol, "decision": "hold", "reason": "model_hold"}]
+        
         except Exception as e:
-            log.error("strategy.inference.evaluate.fail", extra={"extra": {"error": repr(e)}})
-            return [{"action": "log", "symbol": self.symbol, "decision": "hold", "reason": "evaluation_error"}]
+            log.error("strategy.inference.evaluate.fail", extra={"extra": {"symbol": self.symbol, "error": repr(e)}})
+            return [{"action": "log", "symbol": self.symbol, "decision": "hold", "reason": "evaluation_exception"}]
 
 
 def get_strategy_by_name(name: str) -> Strategy:

@@ -15,6 +15,8 @@ class AppConfig:
     order_client_id_prefix: str = "SCFD"
     run_interval_seconds: int = 60
     offline_behavior: str = "halt"
+    watch_list: str = "BTC/USD" # Comma-separated list of symbols
+    trade_interval: str = "15m" # Interval for trading data
 
 @dataclass
 class RiskConfig:
@@ -22,6 +24,7 @@ class RiskConfig:
     max_position_size: float = 10000.0  # Max notional value for a single position
     max_total_exposure: float = 25000.0  # Max total notional value of all positions
     risk_per_trade_percent: float = 0.01 # Risk 1% of equity per trade
+    circuit_breaker_atr_multiplier: float = 0.0 # 0 means disabled
 
 def load_risk_config() -> RiskConfig:
     return RiskConfig(
@@ -29,6 +32,7 @@ def load_risk_config() -> RiskConfig:
         max_position_size=float(os.getenv("MAX_POSITION_SIZE", "10000.0")),
         max_total_exposure=float(os.getenv("MAX_TOTAL_EXPOSURE", "25000.0")),
         risk_per_trade_percent=float(os.getenv("RISK_PER_TRADE_PERCENT", "0.01")),
+        circuit_breaker_atr_multiplier=float(os.getenv("CIRCUIT_BREAKER_ATR_MULTIPLIER", "0.0")),
     )
 
 def load_config() -> AppConfig:
@@ -42,6 +46,8 @@ def load_config() -> AppConfig:
         order_client_id_prefix=os.getenv("ORDER_CLIENT_ID_PREFIX", "SCFD"),
         run_interval_seconds=int(os.getenv("RUN_INTERVAL_SECONDS", "60")),
         offline_behavior=os.getenv("OFFLINE_BEHAVIOR", "halt"),
+        watch_list=os.getenv("WATCH_LIST", "BTC/USD"),
+        trade_interval=os.getenv("TRADE_INTERVAL", "15m"),
     )
 
 def to_dict(cfg: AppConfig) -> dict:

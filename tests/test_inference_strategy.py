@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, PropertyMock
 from pathlib import Path
 import pandas as pd
 import joblib
@@ -32,53 +32,53 @@ def mock_alpaca_client():
 
 @patch("joblib.load")
 def test_inference_strategy_model_loading(mock_joblib_load, tmp_path):
-    """Tests that the InferenceStrategy correctly loads the latest model."""
-    # 1. Setup
-    storage_path = tmp_path / "storage"
-    storage_path.mkdir()
+    """Tests that the InferenceStrategy correctly loads a model."""
+    model_path = tmp_path / "model.joblib"
+    model_path.touch()
 
-    # Create dummy files, the content doesn't matter as joblib.load is mocked
-    model_path1 = storage_path / "model__BTCUSD__20230101.joblib"
-    model_path2 = storage_path / "model__BTCUSD__20230102.joblib"
-    model_path1.touch()
-    time.sleep(0.1) # Ensure mtime is different
-    model_path2.touch()
-
-    # 2. Action
-    with patch("smartcfd.strategy.STORAGE_PATH", storage_path):
-        strategy = InferenceStrategy(symbol="BTC/USD")
-
-    # 3. Assert
+    strategy = InferenceStrategy(symbol="BTC/USD", model_path=str(model_path))
+    
+    mock_joblib_load.assert_called_once_with(model_path)
     assert strategy.model is not None
-    assert strategy.model_path == model_path2
-    mock_joblib_load.assert_called_once_with(model_path2)
 
-
+@patch("smartcfd.strategy.joblib.load")
 @patch("smartcfd.strategy.calculate_indicators")
-def test_inference_strategy_evaluate(mock_calculate_indicators, mock_model, mock_alpaca_client):
+@patch("smartcfd.strategy.DataLoader")
+@patch("smartcfd.strategy.Path.exists")
+def test_inference_strategy_evaluate(
+    mock_path_exists, mock_data_loader, mock_calculate_indicators, mock_joblib_load
+):
     """Tests the evaluation logic of the InferenceStrategy by injecting a mock model."""
     # 1. Setup
-    mock_calculate_indicators.return_value = pd.DataFrame({
-        "feature1": [0.5], "feature2": [0.6]
-    })
+    # --- Mock file system and model loading ---
+    mock_path_exists.return_value = True  # Pretend the model file exists
+    mock_model = MagicMock()
+    mock_model.predict.return_value = [1]  # Predict 'buy'
+    mock_joblib_load.return_value = mock_model # Intercept the model loading
 
-    # Instantiate the strategy and directly inject the mock model
-    strategy = InferenceStrategy(symbol="BTC/USD", model=mock_model)
+    # --- Mock data loading and feature calculation ---
+    mock_df = pd.DataFrame({'close': [100, 110]})
+    mock_data_loader.return_value.get_market_data.return_value = mock_df
+
+    mock_features = pd.DataFrame({"feature1": [0.5], "feature2": [0.6]})
+    mock_calculate_indicators.return_value = mock_features
+
+    # Instantiate the strategy - this will now call joblib.load due to the mocked Path.exists
+    strategy = InferenceStrategy(symbol="BTC/USD", model_path="dummy/path.joblib")
 
     # 2. Action
-    actions = strategy.evaluate(mock_alpaca_client)
+    actions = strategy.evaluate(client=MagicMock())
 
-    # 3. Assert
+    # 3. Assertions
+    mock_joblib_load.assert_called_once_with(strategy.model_path)
+    mock_path_exists.assert_called_once()
+    mock_data_loader.return_value.get_market_data.assert_called_once()
+    mock_calculate_indicators.assert_called_once()
+    mock_model.predict.assert_called_once()
+
+    # Verify the action proposed by the strategy
     assert len(actions) == 1
     action = actions[0]
-    assert action["action"] == "log"
+    assert action["action"] == "order"
     assert action["symbol"] == "BTC/USD"
     assert action["decision"] == "buy"
-    assert action["reason"] == "inference"
-    
-    mock_alpaca_client.get_bars.assert_called_once()
-    mock_calculate_indicators.assert_called_once()
-    
-    # Assert that the methods on our injected mock model were called
-    mock_model.predict.assert_called_once()
-    mock_model.predict_proba.assert_called_once()

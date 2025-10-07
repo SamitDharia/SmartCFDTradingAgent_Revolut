@@ -19,14 +19,22 @@ class Trader:
         self.broker = broker
         self.risk_manager = risk_manager
 
-    def run(self):
+    def run(self, watch_list: List[str], interval: str):
         """
         Runs the trading loop.
         """
         log.info("trader.run.start")
         try:
-            # The strategy's client is the broker's client
+            # 1. Check for halt conditions before doing anything else
+            if self.risk_manager.check_for_halt(watch_list, interval):
+                log.critical("trader.run.halted", extra={"extra": {"reason": self.risk_manager.halt_reason}})
+                # If trading is halted, we stop here.
+                return
+
+            # 2. The strategy's client is the broker's client
             actions = self.strategy.evaluate(self.broker.client)
+            
+            # 3. Execute actions
             self.execute_actions(actions)
             log.info("trader.run.end")
         except Exception as e:

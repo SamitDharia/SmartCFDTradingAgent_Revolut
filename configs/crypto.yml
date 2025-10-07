@@ -23,3 +23,7 @@
       crypto: 2
     max_trades: 10
     grace: 0
+    # --- Circuit Breaker Settings ---
+    # Halt trading if the current true range exceeds ATR by this multiplier.
+    # A value of 0 disables the circuit breaker.
+    circuit_breaker_atr_multiplier: 3.5
