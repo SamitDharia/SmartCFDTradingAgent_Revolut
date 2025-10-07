@@ -6,20 +6,24 @@ project_root = Path(__file__).resolve().parent.parent
 sys.path.append(str(project_root))
 
 import pandas as pd
-import joblib
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, RandomizedSearchCV
 from sklearn.ensemble import RandomForestClassifier
+from xgboost import XGBClassifier
 from sklearn.metrics import classification_report
+import joblib
+from alpaca.data.timeframe import TimeFrame
 from smartcfd.data_loader import fetch_data
 from smartcfd.indicators import create_features
-from alpaca.data.timeframe import TimeFrame
+from smartcfd.config import load_config
+import numpy as np
 
 # --- Configuration ---
-SYMBOL = "BTC/USD"
+config = load_config()
+SYMBOL = config.watch_list.split(',')[0].strip() # Use the first symbol from the watchlist
 START_DATE = "2022-01-01"
 END_DATE = "2024-01-01"
 TIMEFRAME = TimeFrame.Hour
-MODEL_OUTPUT_PATH = "model.joblib"
+MODEL_OUTPUT_PATH = "models/model.joblib"
 
 def create_target(df: pd.DataFrame, period: int = 1) -> pd.Series:
     """
@@ -65,10 +69,43 @@ def main():
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, shuffle=False)
 
     print(f"Training model on {len(X_train)} samples...")
-    model = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)
-    model.fit(X_train, y_train)
+    
+    # --- Hyperparameter Tuning using RandomizedSearchCV for XGBoost ---
+    print("Performing hyperparameter tuning for XGBoost...")
 
-    print("Evaluating model...")
+    # Define the parameter distribution for Randomized Search
+    param_dist = {
+        'n_estimators': [int(x) for x in np.linspace(start=100, stop=1000, num=10)],
+        'learning_rate': [0.01, 0.05, 0.1, 0.2],
+        'max_depth': [3, 4, 5, 6, 7, 8],
+        'colsample_bytree': [0.3, 0.5, 0.7, 1.0],
+        'subsample': [0.6, 0.8, 1.0],
+        'gamma': [0, 0.1, 0.2, 0.3]
+    }
+
+    # Create a base model
+    xgb = XGBClassifier(random_state=42, use_label_encoder=False, eval_metric='logloss')
+
+    # Instantiate the random search model
+    random_search = RandomizedSearchCV(
+        estimator=xgb,
+        param_distributions=param_dist,
+        n_iter=30,  # Increased iterations for a more thorough search
+        cv=3,
+        verbose=2,
+        random_state=42,
+        n_jobs=-1
+    )
+
+    # Fit the random search model
+    random_search.fit(X_train, y_train)
+
+    print("Best parameters found: ", random_search.best_params_)
+    
+    # Use the best estimator found by the search
+    model = random_search.best_estimator_
+
+    print("Evaluating best XGBoost model found...")
     y_pred = model.predict(X_test)
     print(classification_report(y_test, y_pred))
 

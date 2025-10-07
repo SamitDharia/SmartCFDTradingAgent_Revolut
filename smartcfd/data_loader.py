@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import requests
 from alpaca.data.historical import CryptoHistoricalDataClient
 from alpaca.data.requests import CryptoBarsRequest
 from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
@@ -35,6 +36,9 @@ class DataLoader:
         # api_base is not directly used by CryptoHistoricalDataClient,
         # but it's good practice for consistency.
         self.client = CryptoHistoricalDataClient()
+        # HACK: Disable SSL verification for corporate proxies.
+        # The session object is part of the underlying REST client.
+        self.client._session.verify = False
 
     def get_market_data(self, symbols: list[str], interval: str, limit: int) -> pd.DataFrame | None:
         """
@@ -84,3 +88,41 @@ class DataLoader:
         except Exception as e:
             log.error("data_loader.get_market_data.fail", extra={"extra": {"symbols": symbols, "error": repr(e)}})
             return None
+
+
+def fetch_data(symbol: str, timeframe: TimeFrame, start_date: str, end_date: str) -> pd.DataFrame:
+    """
+    Fetches historical crypto data for a single symbol between two dates.
+    """
+    log.info(f"Fetching data for {symbol} from {start_date} to {end_date}")
+    client = CryptoHistoricalDataClient()
+    # HACK: Disable SSL verification for corporate proxies.
+    client._session.verify = False
+    try:
+        request = CryptoBarsRequest(
+            symbol_or_symbols=[symbol],
+            timeframe=timeframe,
+            start=pd.to_datetime(start_date).tz_localize('UTC'),
+            end=pd.to_datetime(end_date).tz_localize('UTC')
+        )
+        bars = client.get_crypto_bars(request)
+        df = bars.df
+        
+        # If the symbol is in a multi-index, extract it
+        if isinstance(df.index, pd.MultiIndex):
+            # Check if the symbol level exists and is not empty
+            if 'symbol' in df.index.names and not df.index.get_level_values('symbol').empty:
+                 if symbol in df.index.get_level_values('symbol'):
+                    df = df.loc[symbol]
+                 else:
+                    log.warning(f"Symbol {symbol} not found in fetched multi-index data.")
+                    return pd.DataFrame()
+            else:
+                # If there's no symbol index, we assume it's a single-symbol response
+                pass
+
+        log.info(f"Successfully fetched {len(df)} bars for {symbol}")
+        return df
+    except Exception as e:
+        log.error(f"Failed to fetch data for {symbol}: {e}", exc_info=True)
+        return pd.DataFrame()

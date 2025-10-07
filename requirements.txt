@@ -14,10 +14,17 @@ streamlit==1.39.0
 matplotlib==3.9.2
 scikit-learn==1.4.2
 ta
-
-
 xgboost
 scikit-learn
 plotly
 kaleido
+urllib3
+pandas
+scikit-learn
+joblib
+requests
+flask
+ta
+xgboost
+numpy
 

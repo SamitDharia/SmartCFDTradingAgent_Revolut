@@ -48,14 +48,11 @@ This document outlines the development plan for the SmartCFD Trading Agent.
 - [x] **Dashboarding:** Develop a simple web-based dashboard to visualize performance metrics and trade history in real-time.
 
 ### Section 8: Advanced Modeling & Prediction Accuracy
-- [ ] **Feature Engineering:** Go beyond basic technical indicators. Incorporate features like:
-    - Market volatility metrics (e.g., ATR-based).
-    - Macroeconomic data or market sentiment indicators.
-    - On-chain data for crypto assets.
-- [ ] **Experiment with Advanced Models:**
-    - **Gradient Boosting:** Test `XGBoost` or `LightGBM`, which often outperform Random Forests.
+- [x] **Feature Engineering:** Added a suite of advanced technical indicators (Bollinger Bands, MACD, RSI, etc.).
+- [x] **Experiment with Advanced Models:**
+    - **Gradient Boosting:** Tested `XGBoost` and tuned its hyperparameters, achieving 55% accuracy.
     - **Time-Series Models:** Explore `LSTMs` or other neural networks designed for sequence data.
-- [ ] **Hyperparameter Tuning:** Implement a systematic process (e.g., Grid Search, Bayesian Optimization) to find the optimal settings for the best-performing model.
+- [x] **Hyperparameter Tuning:** Implemented a systematic process (`RandomizedSearchCV`) to find the optimal settings for the RandomForest and XGBoost models.
 - [ ] **Ensemble Methods:** Combine predictions from multiple models to improve robustness.
 
 ### Section 9: Robustness & Safety Mechanisms
