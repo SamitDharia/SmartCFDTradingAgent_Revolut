@@ -52,8 +52,8 @@ class RegimeDetector:
 
         try:
             # Calculate short-term and long-term ATR
-            short_atr = atr(historical_data['High'], historical_data['Low'], historical_data['Close'], window=self.short_window).iloc[-1]
-            long_atr = atr(historical_data['High'], historical_data['Low'], historical_data['Close'], window=self.long_window).iloc[-1]
+            short_atr = atr(historical_data['high'], historical_data['low'], historical_data['close'], window=self.short_window).iloc[-1]
+            long_atr = atr(historical_data['high'], historical_data['low'], historical_data['close'], window=self.long_window).iloc[-1]
 
             if pd.isna(short_atr) or pd.isna(long_atr) or long_atr == 0:
                 log.warning("regime_detector.detect_regime.atr_calculation_failed")
