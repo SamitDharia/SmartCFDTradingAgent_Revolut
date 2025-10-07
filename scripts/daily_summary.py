@@ -60,28 +60,60 @@ def generate_summary(logs_dir: Path, reports_dir: Path) -> tuple[Path, Path]:
     total_trades = len(all_trades)
     trades_by_symbol = Counter(t["filename_symbol"] for t in all_trades)
     trades_by_side = Counter(t["filename_side"].lower() for t in all_trades)
-    total_profit_loss = sum(float(t.get("pnl", 0.0)) for t in all_trades)
+    
+    # --- New Performance Metrics ---
+    pnl_values = [float(t.get("pnl", 0.0)) for t in all_trades]
+    total_profit_loss = sum(pnl_values)
+    winning_trades = [p for p in pnl_values if p > 0]
+    losing_trades = [p for p in pnl_values if p < 0]
+    
+    win_count = len(winning_trades)
+    loss_count = len(losing_trades)
+    win_rate = (win_count / total_trades) * 100 if total_trades > 0 else 0
+    
+    biggest_winner = max(winning_trades) if winning_trades else 0
+    biggest_loser = min(losing_trades) if losing_trades else 0
+    
+    average_gain = sum(winning_trades) / win_count if win_count > 0 else 0
+    average_loss = sum(losing_trades) / loss_count if loss_count > 0 else 0
+    
+    total_volume = sum(float(t.get("notional", 0.0)) for t in all_trades)
 
     # --- Prepare Reports ---
     summary_data = {
         "generated_at": datetime.utcnow().isoformat(),
         "total_trades": total_trades,
+        "total_profit_loss": total_profit_loss,
+        "total_volume": total_volume,
+        "win_count": win_count,
+        "loss_count": loss_count,
+        "win_rate_percent": win_rate,
+        "biggest_winner": biggest_winner,
+        "biggest_loser": biggest_loser,
+        "average_gain": average_gain,
+        "average_loss": average_loss,
         "trades_by_symbol": dict(trades_by_symbol),
         "trades_by_side": dict(trades_by_side),
-        "total_profit_loss": total_profit_loss,
         "trades": all_trades,
     }
 
     # --- Format Text Report ---
-    pnl_color = "green" if total_profit_loss >= 0 else "red"
     pnl_str = f"${total_profit_loss:,.2f}"
     
     report_lines = [
         "Smart CFD Trading Agent - Daily Digest",
         f"Generated on: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}",
         "=" * 40,
-        f"Total Trades: {total_trades}",
-        f"Total Profit/Loss: {pnl_str}",
+        "Key Performance Indicators (KPIs)",
+        "-" * 40,
+        f"Total Trades:         {total_trades}",
+        f"Total Profit/Loss:    {pnl_str}",
+        f"Total Volume Traded:  ${total_volume:,.2f}",
+        f"Win Rate:             {win_rate:.2f}% ({win_count} wins / {loss_count} losses)",
+        f"Biggest Winner:       ${biggest_winner:,.2f}",
+        f"Biggest Loser:        ${biggest_loser:,.2f}",
+        f"Average Gain:         ${average_gain:,.2f}",
+        f"Average Loss:         ${average_loss:,.2f}",
         "\n--- Trades by Symbol ---",
     ]
     for symbol, count in trades_by_symbol.items():
