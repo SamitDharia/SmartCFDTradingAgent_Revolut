@@ -96,6 +96,23 @@ To ensure that the `.env` file is always the single source of truth for the appl
 For applications that should be configured primarily by a local `.env` file, always use `load_dotenv(override=True)`. This makes the project more portable and eliminates a major source of "it works on my machine" problems by ensuring that the local configuration takes precedence over any potentially stale or incorrect system-level environment variables.
 ---
 
+### Health Checks and Startup Race Conditions
+
+**Date:** 2025-10-08
+
+**Problem:**
+After successfully retraining the model and fixing all core logic, the application would start in Docker but immediately report as unhealthy. The logs showed the health check endpoint (`/healthz`) returning `503 Service Unavailable` because the data feed was being flagged as anomalous at startup.
+
+**Root Cause:**
+This was a classic race condition. The health check server started at the same time as the main trading application. The first few data points fetched by the `DataLoader` were sometimes incomplete or had unusual values (e.g., zero volume) right as the market opened or the bot first connected. The `has_anomalous_data` check was too strict and immediately flagged the data feed as unhealthy. This caused a cascading failure where the application was marked as down before it had a chance to stabilize and fetch a clean data set.
+
+**Solution:**
+A 60-second startup grace period was implemented in the `health_server.py`. During this initial period, the `/healthz` endpoint will always return a `200 OK` status, regardless of the underlying component health. This gives the `DataLoader` and other components enough time to initialize, connect, and fetch a stable stream of data before health monitoring begins in earnest.
+
+**Lesson:**
+Health checks for complex, multi-component systems must account for startup and initialization time. A "grace period" is a common and effective pattern to prevent transient, startup-related issues from triggering false-positive health check failures. This makes the system more resilient and prevents it from being prematurely terminated by an orchestrator (like Kubernetes or Docker Swarm) in a production environment.
+---
+
 ### Unit Testing & Mocking Complexity
 
 **Date:** 2025-10-08

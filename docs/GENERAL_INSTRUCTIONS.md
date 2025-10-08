@@ -36,12 +36,13 @@ The core of this project is an adaptive strategy engine. The system will:
 -   Evolve to potentially adjust parameters or strategies based on performance data.
 
 ### 📊 Reporting & Monitoring
-A key goal is to have clear, data-rich reporting. This includes:
+A key goal is to have clear, data-rich reporting and monitoring. This includes:
 -   A daily digest summarizing trades, performance, and key statistics (P/L, drawdown, etc.).
+-   A robust health check endpoint for real-time system status.
 -   The digest should be professional and clear, suitable for external review.
 
-### ✨ Future Ambitions: A Premium Dashboard
-While not an immediate priority, a long-term goal is to develop a sleek, modern, and interactive dashboard (e.g., using Streamlit) to visualize the bot's performance and operations in real-time. The design philosophy should be clean and professional.
+### ✨ Future Ambitions: A Premium Dashboard & Advanced Monitoring
+While not an immediate priority, a long-term goal is to develop a sleek, modern, and interactive dashboard (e.g., using Streamlit) to visualize the bot's performance and operations in real-time. This will be complemented by a full-fledged monitoring stack (e.g., Prometheus/Grafana) for production-grade observability. The design philosophy should be clean and professional.
 
 ---
 

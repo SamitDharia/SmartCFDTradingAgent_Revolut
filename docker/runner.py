@@ -89,7 +89,7 @@ def main():
     
     risk_manager = RiskManager(portfolio_manager, risk_cfg)
     strategy_name = os.getenv("STRATEGY", "inference")
-    strategy = get_strategy_by_name(strategy_name)
+    strategy = get_strategy_by_name(strategy_name, app_cfg)
     
     # Initialize the Trader
     trader = Trader(portfolio_manager, strategy, risk_manager, app_cfg)

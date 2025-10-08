@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 from smartcfd.db import connect, get_recent_heartbeats, get_heartbeat_stats
 from smartcfd.health_checks import check_data_feed_health
-from smartcfd.config import load_config
+from smartcfd.config import load_config_from_file
 
 log = logging.getLogger("health")
 
@@ -22,13 +22,20 @@ _health_status_cache = {
         "data_feed": {"ok": True, "reason": "ok"}
     }
 }
+_start_time = time.time()
 
-def compute_health(db_path: Optional[str] = None, max_age_seconds: int = 120) -> Tuple[bool, str, Dict[str, Any]]:
+
+def compute_health(db_path: Optional[str] = None, max_age_seconds: int = 120, startup_grace_period: int = 60) -> Tuple[bool, str, Dict[str, Any]]:
     """
     Checks the latest heartbeat from the database and data feed health.
     Returns (is_healthy, overall_reason, component_statuses).
     """
     global _health_status_cache
+
+    # During the grace period, report as healthy to allow startup to complete
+    if time.time() - _start_time < startup_grace_period:
+        return True, "startup_grace_period", _health_status_cache['components']
+
     component_statuses = {}
 
     # 1. Database Health
@@ -56,8 +63,8 @@ def compute_health(db_path: Optional[str] = None, max_age_seconds: int = 120) ->
 
     # 2. Data Feed Health
     try:
-        config = load_config() # Load config to get watchlist
-        data_feed_status = check_data_feed_health(config)
+        app_cfg, _, _ = load_config_from_file() # Load config to get watchlist
+        data_feed_status = check_data_feed_health(app_cfg)
         component_statuses["data_feed"] = data_feed_status
     except Exception as e:
         log.error("health.compute.data_feed_fail", extra={"extra": {"error": repr(e)}})
@@ -92,6 +99,10 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
             # Here, we just read from the cache.
             status = _health_status_cache
             is_healthy = status["is_healthy"]
+
+            # Override health status during grace period
+            if time.time() - _start_time < 60: # Use a fixed value here for simplicity
+                is_healthy = True
             
             if is_healthy:
                 self.send_response(200)
@@ -112,31 +123,37 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(b"Not Found")
 
-def _run_server(port: int, db_path: Optional[str], max_age_seconds: int):
-    """Target for the server thread."""
-    # Periodically update the health status in the background
-    def health_updater():
+class HealthCheckServer(Thread):
+    def __init__(self, port: int, db_path: Optional[str], max_age_seconds: int, check_interval: int = 15):
+        super().__init__()
+        self.port = port
+        self.db_path = db_path
+        self.max_age_seconds = max_age_seconds
+        self.check_interval = check_interval
+        self.httpd = None
+        self.daemon = True
+
+    def run(self):
+        # Start the HTTP server in a separate thread
+        server_thread = Thread(target=self._run_server, daemon=True)
+        server_thread.start()
+
+        # Periodically compute health status and update the cache
         while True:
-            log.info("health.updater.tick")
-            compute_health(db_path, max_age_seconds)
-            time.sleep(max_age_seconds / 2) # Update more frequently than the staleness check
+            compute_health(self.db_path, self.max_age_seconds)
+            time.sleep(self.check_interval)
 
-    updater_thread = Thread(target=health_updater, daemon=True, name="HealthUpdater")
-    updater_thread.start()
+    def _run_server(self):
+        self.httpd = HTTPServer(("", self.port), HealthCheckHandler)
+        log.info(f"health.server.running on port {self.port}")
+        self.httpd.serve_forever()
 
-    server_address = ("", port)
-    httpd = HTTPServer(server_address, HealthCheckHandler)
-    
-    log.info("health.server.listen", extra={"extra": {"port": port}})
-    httpd.serve_forever()
+    def stop(self):
+        if self.httpd:
+            self.httpd.shutdown()
 
-def start_health_server(port: int, db_path: Optional[str] = None, max_age_seconds: int = 120):
-    """Starts the health check server in a background thread."""
-    server_thread = Thread(
-        target=_run_server,
-        args=(port, db_path, max_age_seconds),
-        daemon=True,
-        name="HealthServer",
-    )
-    server_thread.start()
-    log.info("health.server.started", extra={"extra": {"port": port}})
+
+def start_health_server(port: int, db_path: Optional[str], max_age_seconds: int):
+    server = HealthCheckServer(port, db_path, max_age_seconds)
+    server.start()
+    return server

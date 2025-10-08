@@ -7,35 +7,96 @@ from sklearn.model_selection import train_test_split, RandomizedSearchCV, TimeSe
 from xgboost import XGBClassifier
 from sklearn.metrics import classification_report
 import joblib
-from alpaca.data.timeframe import TimeFrame
-from smartcfd.data_loader import fetch_data
-from smartcfd.indicators import create_features
-from smartcfd.config import load_config
+from smartcfd.data_loader import DataLoader
+from .indicators import (
+    atr, rsi, macd, bollinger_bands, adx,
+    stochastic_oscillator, volume_profile, price_rate_of_change
+)
+from smartcfd.config import load_config_from_file
 import numpy as np
 import os
 from pathlib import Path
 import matplotlib.pyplot as plt
 
 # --- Default Configuration ---
-config = load_config()
-DEFAULT_SYMBOL = config.watch_list.split(',')[0].strip()
+app_cfg, _, _ = load_config_from_file()
+DEFAULT_SYMBOL = app_cfg.watch_list.split(',')[0].strip()
 DEFAULT_START_DATE = "2022-01-01"
 DEFAULT_END_DATE = "2024-01-01"
-DEFAULT_TIMEFRAME = TimeFrame.Hour
+DEFAULT_TIMEFRAME = app_cfg.trade_interval
 DEFAULT_MODEL_PATH = "models/model.joblib"
 REPORTS_DIR = "reports"
 
-def create_target(df: pd.DataFrame, period: int = 1) -> pd.Series:
+def create_target(df: pd.DataFrame, period: int = 5) -> pd.Series:
     """
-    Create the target variable. 1 for price increase, 0 for price decrease.
+    Creates the target variable for classification.
+    - 1: Buy (price is expected to increase significantly)
+    - 2: Sell (price is expected to decrease significantly)
+    - 0: Hold (price is not expected to move significantly)
     """
-    return (df['close'].shift(-period) > df['close']).astype(int)
+    future_returns = df['close'].pct_change(periods=period).shift(-period)
+    
+    # Define thresholds for buy/sell signals
+    # These should be tuned based on asset volatility and strategy goals
+    buy_threshold = 0.01  # e.g., 1% increase
+    sell_threshold = -0.01 # e.g., 1% decrease
+
+    conditions = [
+        future_returns > buy_threshold,
+        future_returns < sell_threshold
+    ]
+    choices = [1, 2] # 1 for Buy, 2 for Sell
+    
+    return np.select(conditions, choices, default=0) # 0 for Hold
+
+
+def create_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Create a rich set of features for the model from historical data.
+    """
+    if df.empty:
+        return pd.DataFrame()
+
+    df.columns = [x.lower() for x in df.columns]
+    features = pd.DataFrame(index=df.index)
+
+    # Basic returns
+    features['feature_return_1m'] = df['close'].pct_change(1)
+    features['feature_return_5m'] = df['close'].pct_change(5)
+    features['feature_return_15m'] = df['close'].pct_change(15)
+
+    # Volatility
+    features['feature_volatility_5m'] = features['feature_return_1m'].rolling(5).std()
+    features['feature_volatility_15m'] = features['feature_return_1m'].rolling(15).std()
+
+    # Technical Indicators
+    bollinger = bollinger_bands(df['close'])
+    features['feature_bband_mavg'] = bollinger['BBM_20_2.0']
+    features['feature_bband_hband'] = bollinger['BBH_20_2.0']
+    features['feature_bband_lband'] = bollinger['BBL_20_2.0']
+
+    macd_df = macd(df['close'])
+    features['feature_macd'] = macd_df['MACD_12_26_9']
+    features['feature_macd_signal'] = macd_df['MACDs_12_26_9']
+    features['feature_macd_diff'] = macd_df['MACDh_12_26_9']
+
+    stoch = stochastic_oscillator(df['high'], df['low'], df['close'])
+    features['feature_stoch_k'] = stoch['STOCHk_14_3_3']
+    features['feature_stoch_d'] = stoch['STOCHd_14_3_3']
+
+    # Time-based features
+    features['feature_day_of_week'] = df.index.dayofweek
+    features['feature_hour_of_day'] = df.index.hour
+    features['feature_minute_of_hour'] = df.index.minute
+
+    return features.dropna()
+
 
 def train_and_evaluate_model(
     symbol: str = DEFAULT_SYMBOL,
     start_date: str = DEFAULT_START_DATE,
     end_date: str = DEFAULT_END_DATE,
-    timeframe: TimeFrame = DEFAULT_TIMEFRAME,
+    timeframe_str: str = DEFAULT_TIMEFRAME,
     model_output_path: str = DEFAULT_MODEL_PATH
 ):
     """
@@ -43,7 +104,8 @@ def train_and_evaluate_model(
     evaluates it, and saves it to disk.
     """
     print(f"Fetching data for {symbol} from {start_date} to {end_date}...")
-    df = fetch_data(symbol, timeframe, start_date, end_date)
+    loader = DataLoader()
+    df = loader.fetch_historical_range(symbol, start_date, end_date, timeframe_str)
     
     if df.empty:
         print("No data fetched. Exiting.")
@@ -56,17 +118,32 @@ def train_and_evaluate_model(
     df_features = create_features(df)
 
     print("Creating target variable...")
-    df_features['target'] = create_target(df_features)
+    target = create_target(df)
+    target = pd.Series(target, index=df.index) # Ensure target is a Series with the correct index
+
+    # Align features and target by index
+    aligned_index = df_features.index.intersection(target.index)
+    df_features = df_features.loc[aligned_index]
+    df_features['target'] = target.loc[aligned_index]
 
     df_features.dropna(inplace=True)
 
-    features = [col for col in df_features.columns if col not in ['open', 'high', 'low', 'close', 'volume', 'trade_count', 'vwap', 'target']]
+    # Align dataframes by index
+    df = df.loc[df_features.index]
+    
+    # Ensure all feature columns are included
+    features = [col for col in df_features.columns if col.startswith('feature_')]
     X = df_features[features]
     y = df_features['target']
 
     if len(X) == 0:
         print("Not enough data to train after processing. Exiting.")
         return
+
+    # Save feature names
+    feature_names = X.columns.tolist()
+    joblib.dump(feature_names, 'models/feature_names.joblib')
+    print(f"Saved {len(feature_names)} feature names to models/feature_names.joblib")
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, shuffle=False)
 
@@ -82,7 +159,7 @@ def train_and_evaluate_model(
         'gamma': [0, 0.1, 0.2, 0.3]
     }
 
-    xgb = XGBClassifier(random_state=42, use_label_encoder=False, eval_metric='logloss')
+    xgb = XGBClassifier(random_state=42, use_label_encoder=False, eval_metric='mlogloss', objective='multi:softprob', num_class=3)
 
     # Use TimeSeriesSplit for cross-validation
     tscv = TimeSeriesSplit(n_splits=3)

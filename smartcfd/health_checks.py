@@ -1,6 +1,6 @@
 import logging
 import pandas as pd
-from smartcfd.data_loader import DataLoader, is_data_stale, has_data_gaps, has_anomalous_data
+from smartcfd.data_loader import DataLoader, is_data_stale, has_data_gaps, has_anomalous_data, parse_interval
 from smartcfd.config import AppConfig
 
 log = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ def check_data_feed_health(config: AppConfig) -> dict:
         # Perform integrity checks
         # Use a slightly more tolerant staleness for a health check
         is_stale_flag = is_data_stale(symbol_df, max_staleness_minutes=30)
-        has_gaps_flag = has_data_gaps(symbol_df, loader.client.parse_interval(interval))
+        has_gaps_flag = has_data_gaps(symbol_df, parse_interval(interval))
         is_anomalous_flag = has_anomalous_data(symbol_df)
 
         if is_stale_flag or has_gaps_flag or is_anomalous_flag:

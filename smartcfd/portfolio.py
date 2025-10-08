@@ -56,20 +56,28 @@ class PortfolioManager:
         log.info("portfolio.reconcile.start")
         try:
             # 1. Fetch Account Details
-            account_data = self.client.get_account()
+            account_data = self.client.get_account_info()
             if account_data:
                 # The client might return a dict or an object, handle both
                 if isinstance(account_data, dict):
                     self.account = Account(**account_data)
                 else:
-                    self.account = account_data
+                    # Assuming the object has attributes that match the Pydantic model
+                    self.account = Account(
+                        id=str(account_data.id),
+                        equity=float(account_data.equity),
+                        last_equity=float(account_data.last_equity),
+                        buying_power=float(account_data.buying_power),
+                        cash=float(account_data.cash),
+                        status=str(account_data.status)
+                    )
                 log.info("portfolio.reconcile.account_updated", extra={"extra": self.account.model_dump()})
             else:
                 self.account = None
                 log.warning("portfolio.reconcile.no_account_data")
 
             # 2. Fetch Open Positions
-            positions_data = self.client.get_positions()
+            positions_data = self.client.list_positions()
             self.positions.clear()
             if positions_data:
                 for pos_obj in positions_data:

@@ -1,6 +1,51 @@
 ## ✅ Phase 3: Core Engine & Foundations (Completed)
 
-*   **[x] Section 11: Production Stability:** Hardened security, centralized state with `PortfolioManager`, and stabilized the Docker container.
+*   **[x] Sectio# Development Roadmap
+
+This document outlines the strategic development phases for the Smart CFD Trading Agent.
+
+---
+
+### Phase 1: Core Functionality & Foundation (Completed)
+
+- [x] **Initial Setup**: Configure the development environment with Docker, Git, and VS Code.
+- [x] **Modular Architecture**: Design and implement the core classes: `Broker`, `Strategy`, `RiskManager`.
+- [x] **Alpaca Integration**: Connect to the Alpaca paper trading API and fetch market data.
+- [x] **Baseline ML Model**: Create an initial machine learning pipeline using `RandomForestClassifier`.
+- [x] **Containerization**: Dockerize the application for portable and reproducible deployment.
+- [x] **Basic Logging**: Implement structured logging to monitor the application's behavior.
+
+### Phase 2: Intelligence & Safety (Completed)
+
+- [x] **Advanced Modeling**: Upgrade the model from `RandomForestClassifier` to a tuned `XGBoost` classifier.
+- [x] **Hyperparameter Tuning**: Implement a systematic process for finding the best model parameters using `RandomizedSearchCV`.
+- [x] **Feature Engineering**: Enhance the feature set with a wide array of technical indicators (Bollinger Bands, MACD, RSI, etc.).
+- [x] **Volatility Circuit Breaker**: Implement an ATR-based mechanism in the `RiskManager` to halt trading during extreme market volatility.
+- [x] **Overfitting Mitigation**: Use `TimeSeriesSplit` for cross-validation to build more generalizable models.
+- [x] **Data Integrity Monitoring**: Add robust checks for data gaps, stale data, and anomalies to prevent trading on bad data.
+
+### Phase 3: Automation & Reporting (Completed)
+
+- [x] **Automated Retraining Pipeline**: Create a script (`scripts/retrain_model.py`) to automatically retrain the model on a rolling basis.
+- [x] **Daily Digest Reporting**: Implement a script (`scripts/daily_summary.py`) to generate and email a daily performance summary.
+- [x] **Backtesting Engine**: Build a script (`scripts/backtest.py`) to evaluate strategy performance on historical data.
+- [x] **Comprehensive Test Suite**: Achieve high test coverage with `pytest` to ensure code reliability and prevent regressions.
+- [x] **State Management & Debugging**: Centralize portfolio state management and resolve complex bugs related to environment, configuration, and data flow.
+- [x] **Health Check Endpoint**: Implement a `/healthz` endpoint to monitor the application's health status.
+
+### Phase 4: Advanced Trade & Risk Management (Completed)
+
+- [x] **Multi-Symbol Trading**: The agent is capable of trading multiple symbols concurrently, with risk managed on a per-trade basis.
+- [x] **Advanced Risk Management**: All trades are protected by dynamic, ATR-based stop-loss and take-profit orders, with position sizes calculated based on a fixed risk percentage of the portfolio.
+- [x] **Market Regime Detection**: Implement a `RegimeDetector` to classify market conditions (e.g., Bullish, Bearish) and allow the strategy to adapt.
+
+### Phase 5: Production Hardening & Deployment (In Progress)
+
+- [x] **Startup Grace Period**: Implement a grace period for the health check to allow the application to stabilize during startup.
+- [ ] **Enhanced Monitoring and Alerting**: Implement a more sophisticated monitoring solution (e.g., Prometheus/Grafana) and set up alerts for critical events.
+- [ ] **Cloud Deployment & CI/CD**: Deploy the agent to a cloud environment (e.g., AWS, GCP) and establish a continuous integration and deployment pipeline.
+- [ ] **Live Trading**: After extensive testing and validation in the paper environment, transition the agent to live trading with real capital.
+oduction Stability:** Hardened security, centralized state with `PortfolioManager`, and stabilized the Docker container.
 *   **[x] Section 12: Foundational Features:**
     *   **[x] Multi-Asset Architecture:** Core components (`Trader`, `PortfolioManager`) can handle multiple assets.
     *   **[x] Automated Retraining:** Implemented a complete pipeline in `scripts/retrain_model.py` to retrain the model on a rolling basis.
@@ -64,3 +109,13 @@
 - **[ ] Final Code Review & Cleanup**: Perform a full review of the new code, add comments, and ensure all configurations are production-ready.
 - **[ ] Long-Duration Test in Docker**: Run the agent in Docker for an extended period (e.g., 12-24 hours) to monitor for any memory leaks, performance degradation, or other long-term stability issues.
 - **[ ] Final Deployment Documentation**: Update `README-DEPLOY.md` with the final, verified steps for deploying and managing the production agent.
+
+---
+
+## Phase 4: Production Hardening & Advanced Features
+
+- [ ] **Enhanced Monitoring and Alerting**: Implement a more sophisticated monitoring solution (e.g., Prometheus/Grafana) and set up alerts for critical events like repeated trade failures, significant drawdowns, or prolonged data feed issues.
+- [ ] **Cloud Deployment & CI/CD**: Deploy the agent to a cloud environment (e.g., AWS, GCP) and establish a continuous integration and deployment pipeline for automated testing and releases.
+- [ ] **Multi-Symbol Trading**: Expand the agent's capability to trade multiple symbols concurrently, including portfolio-level risk management.
+- [ ] **Advanced Risk Management**: Introduce more sophisticated risk models, such as portfolio-level VaR (Value at Risk) calculations.
+- [ ] **Live Trading**: After extensive testing and validation in the paper environment, transition the agent to live trading with real capital.

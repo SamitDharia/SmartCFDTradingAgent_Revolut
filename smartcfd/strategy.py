@@ -7,9 +7,12 @@ import joblib
 
 from .portfolio import PortfolioManager
 from .data_loader import DataLoader, has_data_gaps, has_zero_volume_anomaly
-from .indicators import atr, rsi, macd, bollinger_bands, adx
+from .indicators import (
+    atr, rsi, macd, bollinger_bands, adx,
+    stochastic_oscillator, volume_profile, price_rate_of_change
+)
 from .regime_detector import MarketRegime
-from .config import AppConfig, load_config
+from .config import AppConfig
 from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 
 log = logging.getLogger(__name__)
@@ -17,37 +20,43 @@ log = logging.getLogger(__name__)
 
 def create_features(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Create features for the model from historical data.
+    Create a rich set of features for the model from historical data.
+    This function must be identical to the one in `model_trainer.py`.
     """
     if df.empty:
         return pd.DataFrame()
 
-    # Ensure columns are lowercase for consistency
     df.columns = [x.lower() for x in df.columns]
-
-    # Basic features
     features = pd.DataFrame(index=df.index)
-    features['returns'] = df['close'].pct_change()
+
+    # Basic returns
+    features['feature_return_1m'] = df['close'].pct_change(1)
+    features['feature_return_5m'] = df['close'].pct_change(5)
+    features['feature_return_15m'] = df['close'].pct_change(15)
+
+    # Volatility
+    features['feature_volatility_5m'] = features['feature_return_1m'].rolling(5).std()
+    features['feature_volatility_15m'] = features['feature_return_1m'].rolling(15).std()
 
     # Technical Indicators
-    features['rsi'] = rsi(df['close']).values
-    macd_df = macd(df['close'])
-    features['macd'] = macd_df['MACD_12_26_9'].values
-    features['macdsignal'] = macd_df['MACDs_12_26_9'].values
-    
     bollinger = bollinger_bands(df['close'])
-    features['bollinger_mavg'] = bollinger['BBM_20_2.0'].values
-    features['bollinger_hband'] = bollinger['BBH_20_2.0'].values
-    features['bollinger_lband'] = bollinger['BBL_20_2.0'].values
+    features['feature_bband_mavg'] = bollinger['BBM_20_2.0']
+    features['feature_bband_hband'] = bollinger['BBH_20_2.0']
+    features['feature_bband_lband'] = bollinger['BBL_20_2.0']
 
-    adx_df = adx(df['high'], df['low'], df['close'])
-    # The adx function returns a series, not a dataframe
-    features['adx'] = adx_df.values
+    macd_df = macd(df['close'])
+    features['feature_macd'] = macd_df['MACD_12_26_9']
+    features['feature_macd_signal'] = macd_df['MACDs_12_26_9']
+    features['feature_macd_diff'] = macd_df['MACDh_12_26_9']
 
-    # Lagged features
-    for lag in [1, 2, 3, 5, 10]:
-        features[f'returns_lag_{lag}'] = features['returns'].shift(lag)
-        features[f'rsi_lag_{lag}'] = features['rsi'].shift(lag)
+    stoch = stochastic_oscillator(df['high'], df['low'], df['close'])
+    features['feature_stoch_k'] = stoch['STOCHk_14_3_3']
+    features['feature_stoch_d'] = stoch['STOCHd_14_3_3']
+
+    # Time-based features
+    features['feature_day_of_week'] = df.index.dayofweek
+    features['feature_hour_of_day'] = df.index.hour
+    features['feature_minute_of_hour'] = df.index.minute
 
     return features.dropna()
 
@@ -110,7 +119,7 @@ class InferenceStrategy(Strategy):
         self.model_path = model_path
         self.model = self.load_model(model_path)
         self.data_loader = data_loader or DataLoader()
-        self.config = config or load_config()
+        self.config = config
 
     def load_model(self, model_path: str):
         if not Path(model_path).exists():
@@ -134,42 +143,32 @@ class InferenceStrategy(Strategy):
     ) -> Tuple[List[Dict[str, Any]], Dict[str, pd.DataFrame]]:
         actions = []
         
-        # If historical_data is not provided, we are in data-gathering mode.
-        if historical_data is None:
-            historical_data = {}
-            try:
-                # Fetch data for all symbols in the watchlist at once
-                data = self.data_loader.get_market_data(
+        # If market_regimes is None, it's a data-gathering pass.
+        if market_regimes is None:
+            log.info("inference_strategy.evaluate.data_gathering_pass")
+            # If historical_data is not provided, fetch it.
+            if historical_data is None:
+                historical_data = self.data_loader.get_market_data(
                     symbols=watch_list,
                     interval=self.config.trade_interval,
-                    limit=200  # A reasonable lookback for feature calculation
+                    limit=200 # Fetch enough data for feature creation
                 )
-                
-                # If data is a DataFrame (multi-symbol), split it
-                if isinstance(data, pd.DataFrame) and isinstance(data.index, pd.MultiIndex):
-                    for symbol in watch_list:
-                        if symbol in data.index.get_level_values('symbol'):
-                            historical_data[symbol] = data.loc[symbol]
-                        else:
-                            historical_data[symbol] = pd.DataFrame()
-                # If data is a dict (from a mock or other source), use it directly
-                elif isinstance(data, dict):
-                    historical_data = data
-                else:
-                    log.warning("inference_strategy.evaluate.no_data_returned_for_watchlist")
-                    for symbol in watch_list:
-                        historical_data[symbol] = pd.DataFrame()
+            return [], historical_data
 
-            except Exception:
-                log.error("inference_strategy.evaluate.data_load_fail", exc_info=True)
-                # On critical data failure, return empty dict to signal this to the caller
-                return [], {}
+        # If we are in the action phase but no regimes were detected, exit early.
+        if not market_regimes:
+            log.warning("inference_strategy.evaluate.no_regimes_dict")
+            # Return historical_data if it exists, otherwise an empty dict
+            return [], historical_data or {}
 
-        # If we are here, it's the second pass (market_regimes is not None).
-        # The historical_data from the first pass is used to generate actions.
-        if not historical_data:
-            log.warning("inference_strategy.evaluate.no_data_in_dict")
-            return [], {}
+        # If historical_data was passed, use it; otherwise, fetch it.
+        if historical_data is None:
+            log.info("inference_strategy.evaluate.fetching_data")
+            historical_data = self.data_loader.get_market_data(
+                symbols=watch_list,
+                interval=self.config.trade_interval,
+                limit=200  # Fetch enough data for feature creation
+            )
 
         for symbol in watch_list:
             if symbol not in historical_data or historical_data[symbol].empty:
@@ -189,6 +188,10 @@ class InferenceStrategy(Strategy):
                 if features.empty:
                     log.warning("inference_strategy.evaluate.no_features", extra={"extra": {"symbol": symbol}})
                     continue
+
+                # Align columns with the model's expected features
+                model_features = joblib.load('models/feature_names.joblib')
+                features = features[model_features]
 
                 prediction = self.model.predict(features.tail(1))
                 action = self.map_prediction_to_action(prediction[0], symbol, current_regime)
@@ -211,14 +214,14 @@ class InferenceStrategy(Strategy):
         return {"action": decision, "symbol": symbol, "decision": decision}
 
 
-def get_strategy_by_name(name: str) -> Strategy:
+def get_strategy_by_name(name: str, app_config: AppConfig) -> Strategy:
     """
     A simple factory to get a strategy instance by name.
     """
     if name == "dry_run":
         return DryRunStrategy()
     elif name == "inference":
-        return InferenceStrategy()
+        return InferenceStrategy(config=app_config)
     # Add other strategies here
     # elif name == "moving_average_crossover":
     #     return MovingAverageCrossoverStrategy()

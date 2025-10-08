@@ -1,5 +1,6 @@
 from dataclasses import dataclass, asdict
 import os
+import configparser
 
 def _as_bool(value: str) -> bool:
     return str(value).strip().lower() in ("1", "true", "yes", "on")
@@ -33,30 +34,10 @@ class RiskConfig:
     circuit_breaker_atr_multiplier: float = 3.0 # 0 means disabled. 3.0 means halt if ATR is 3x the recent average.
     min_order_notional: float = 1.0 # Minimum notional value for an order
 
-from dataclasses import dataclass, asdict
-import os
-import configparser
-
-def _as_bool(value: str) -> bool:
-    return str(value).strip().lower() in ("1", "true", "yes", "on")
-
 @dataclass
 class AlpacaConfig:
     api_key: str
     secret_key: str
-
-@dataclass
-class AppConfig:
-    timezone: str = "Europe/Dublin"
-# ... existing code ...
-    feed: str = "iex" # Default feed
-
-
-@dataclass
-class RiskConfig:
-# ... existing code ...
-    circuit_breaker_atr_multiplier: float = 3.0 # 0 means disabled. 3.0 means halt if ATR is 3x the recent average.
-    min_order_notional: float = 1.0 # Minimum notional value for an order
 
 def load_config_from_file(path: str = 'config.ini') -> tuple[AppConfig, RiskConfig, AlpacaConfig]:
     """Loads configuration from a .ini file."""
@@ -80,6 +61,7 @@ def load_config_from_file(path: str = 'config.ini') -> tuple[AppConfig, RiskConf
         watch_list=parser.get('settings', 'watch_list', fallback=os.getenv("WATCH_LIST", "BTC/USD")),
         trade_interval=parser.get('settings', 'trade_interval', fallback=os.getenv("TRADE_INTERVAL", "15m")),
         max_data_staleness_minutes=parser.getint('settings', 'max_data_staleness_minutes', fallback=int(os.getenv("MAX_DATA_STALENESS_MINUTES", "30"))),
+        feed=parser.get('settings', 'feed', fallback=os.getenv("FEED", "iex")),
     )
 
     # --- Load RiskConfig ---
@@ -107,10 +89,6 @@ def load_config_from_file(path: str = 'config.ini') -> tuple[AppConfig, RiskConf
     alpaca_cfg = AlpacaConfig(api_key=alpaca_api_key, secret_key=alpaca_secret_key)
 
     return app_cfg, risk_cfg, alpaca_cfg
-
-def to_dict(cfg: AppConfig) -> dict:
-    return asdict(cfg)
-
 
 def to_dict(cfg: AppConfig) -> dict:
     return asdict(cfg)

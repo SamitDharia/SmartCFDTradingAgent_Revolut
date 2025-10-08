@@ -48,10 +48,9 @@ class Trader:
                 market_regimes=None # Pass None to signal data gathering pass
             )
 
-            # If the initial data load failed completely, historical_data might be empty.
-            # In this case, we should not proceed.
-            if not historical_data:
-                log.warning("trader.run.no_data_from_strategy")
+            # If the initial data load failed or returned no valid data, we should not proceed.
+            if not historical_data or all(df.empty for df in historical_data.values()):
+                log.warning("trader.run.no_valid_data_from_strategy")
                 return
 
             # 3. Check for global halt conditions (e.g., max drawdown, high volatility)

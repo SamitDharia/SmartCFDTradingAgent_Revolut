@@ -55,6 +55,35 @@ def adx(high: pd.Series, low: pd.Series, close: pd.Series, window: int = 14) -> 
     return ta.trend.adx(high=high, low=low, close=close, window=window)
 
 
+def stochastic_oscillator(high: pd.Series, low: pd.Series, close: pd.Series, window: int = 14, smooth_window: int = 3) -> pd.DataFrame:
+    """
+    Calculate Stochastic Oscillator.
+    Returns a DataFrame with %K and %D.
+    """
+    stoch_indicator = ta.momentum.StochasticOscillator(
+        high=high, low=low, close=close, window=window, smooth_window=smooth_window
+    )
+    df = pd.DataFrame()
+    df[f'STOCHk_{window}_{smooth_window}_{smooth_window}'] = stoch_indicator.stoch()
+    df[f'STOCHd_{window}_{smooth_window}_{smooth_window}'] = stoch_indicator.stoch_signal()
+    return df
+
+
+def volume_profile(price: pd.Series, volume: pd.Series, bins: int = 10):
+    """
+    A simple volume profile implementation.
+    This is a complex indicator and this is a simplified version.
+    """
+    # This is a placeholder for a more complex implementation
+    log.warning("volume_profile is a complex indicator and this is a simplified placeholder.")
+    return pd.Series(index=price.index, dtype=float)
+
+
+def price_rate_of_change(series: pd.Series, window: int = 12) -> pd.Series:
+    """Calculate Price Rate of Change (ROC)."""
+    return ta.momentum.roc(close=series, window=window)
+
+
 def create_features(df: pd.DataFrame) -> pd.DataFrame:
     """
     Generates a comprehensive set of technical analysis features for a given OHLCV DataFrame.

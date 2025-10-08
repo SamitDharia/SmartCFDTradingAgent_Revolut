@@ -2,8 +2,8 @@ import logging
 import os
 from typing import Any, List
 from alpaca.trading.client import TradingClient
-from alpaca.trading.requests import MarketOrderRequest
-from alpaca.trading.enums import OrderSide, TimeInForce
+from alpaca.trading.requests import MarketOrderRequest, GetOrdersRequest
+from alpaca.trading.enums import OrderSide, TimeInForce, QueryOrderStatus
 from .broker import Broker
 
 log = logging.getLogger(__name__)
@@ -52,6 +52,23 @@ class AlpacaBroker(Broker):
             return positions
         except Exception as e:
             log.error(f"Failed to fetch Alpaca positions: {e}", exc_info=True)
+            raise
+
+    def get_orders(self, status: str = 'open') -> List[Any]:
+        """Retrieves a list of orders from the broker."""
+        log.debug(f"Fetching Alpaca orders with status: {status}")
+        try:
+            if status == 'open':
+                order_status = QueryOrderStatus.OPEN
+            else:
+                order_status = QueryOrderStatus.ALL
+
+            order_request = GetOrdersRequest(status=order_status)
+            orders = self.trading_client.get_orders(filter=order_request)
+            log.info(f"Successfully fetched {len(orders)} orders with status '{status}'.")
+            return orders
+        except Exception as e:
+            log.error(f"Failed to fetch Alpaca orders: {e}", exc_info=True)
             raise
 
     def submit_order(self, symbol: str, qty: float, side: str, order_type: str, time_in_force: str) -> Any:
