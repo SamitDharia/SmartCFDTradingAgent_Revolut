@@ -194,6 +194,21 @@ class InferenceStrategy(Strategy):
                 features = features[model_features]
 
                 prediction = self.model.predict(features.tail(1))
+                prediction_proba = self.model.predict_proba(features.tail(1))
+                confidence = prediction_proba.max()
+
+                log.info(
+                    "inference_strategy.evaluate.predict",
+                    extra={
+                        "extra": {
+                            "symbol": symbol,
+                            "prediction": int(prediction[0]),
+                            "confidence": float(confidence),
+                            "regime": current_regime.value,
+                        }
+                    },
+                )
+
                 action = self.map_prediction_to_action(prediction[0], symbol, current_regime)
                 if action['action'] != 'hold':
                     actions.append(action)

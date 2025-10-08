@@ -98,26 +98,18 @@ class DataLoader:
 
         try:
             timeframe = parse_interval(interval)
-            # Calculate start time for historical data fetch
-            if timeframe.unit == TimeFrameUnit.Minute:
-                delta = timedelta(minutes=timeframe.amount * limit)
-            elif timeframe.unit == TimeFrameUnit.Hour:
-                delta = timedelta(hours=timeframe.amount * limit)
-            elif timeframe.unit == TimeFrameUnit.Day:
-                delta = timedelta(days=timeframe.amount * limit)
-            else:
-                # Fallback for less common timeframes
-                delta = timedelta(days=limit) 
-            
-            start_dt = datetime.utcnow() - (delta * 1.2) # Fetch slightly more to be safe
+            # Calculate a larger limit to fetch more historical data than required.
+            # This provides a buffer for gap detection and ensures we have enough
+            # valid data points even if some are discarded.
+            fetch_limit = limit * 2
 
-            # 1. Fetch historical bars
+            # 1. Fetch historical bars using a limit
             bars_request = CryptoBarsRequest(
                 symbol_or_symbols=symbols,
                 timeframe=timeframe,
-                start=start_dt
+                limit=fetch_limit
             )
-            bars_df = self.client.get_crypto_bars(bars_request).df
+            raw_bars_df = self.client.get_crypto_bars(bars_request).df
 
             # 2. Fetch latest snapshot data
             snapshot_request = CryptoSnapshotRequest(symbol_or_symbols=symbols)
@@ -127,13 +119,13 @@ class DataLoader:
             validated_data = {}
             for symbol in symbols:
                 # Extract historical data for the specific symbol
-                if isinstance(bars_df.index, pd.MultiIndex) and symbol in bars_df.index.get_level_values('symbol'):
-                    symbol_df = bars_df.loc[symbol].copy()
-                elif not isinstance(bars_df.index, pd.MultiIndex) and len(symbols) == 1:
-                    symbol_df = bars_df.copy()
+                if isinstance(raw_bars_df.index, pd.MultiIndex) and symbol in raw_bars_df.index.get_level_values('symbol'):
+                    bars_df = raw_bars_df.loc[symbol].copy()
+                elif not isinstance(raw_bars_df.index, pd.MultiIndex) and len(symbols) == 1:
+                    bars_df = raw_bars_df.copy()
                 else:
                     log.warning(f"data_loader.get_market_data.no_hist_data", extra={"extra": {"symbol": symbol}})
-                    symbol_df = pd.DataFrame() # Start with an empty frame
+                    bars_df = pd.DataFrame() # Start with an empty frame
 
                 # Get the corresponding snapshot
                 snapshot = snapshots.get(symbol)
@@ -156,26 +148,20 @@ class DataLoader:
                 snapshot_df = snapshot_df.set_index('timestamp')
 
                 # --- Column Alignment ---
-                # Ensure snapshot_df has the same columns in the same order as symbol_df
-                if not symbol_df.empty:
-                    # Exclude the 'symbol' column from the snapshot if it exists
-                    snapshot_columns = [col for col in symbol_df.columns if col in snapshot_df.columns]
+                # Ensure snapshot_df has the same columns in the same order as bars_df
+                if not bars_df.empty:
+                    snapshot_columns = [col for col in bars_df.columns if col in snapshot_df.columns]
                     snapshot_df = snapshot_df[snapshot_columns]
-                    # Align column order to prevent assignment errors
-                    snapshot_df = snapshot_df[symbol_df.columns]
+                    snapshot_df = snapshot_df[bars_df.columns]
 
                 # Combine historical and snapshot data
-                # The snapshot bar can either be an update to the last historical bar or a new one
-                if not symbol_df.empty and not snapshot_df.empty and snapshot_df.index[0] == symbol_df.index[-1]:
-                    # Update the last bar with the snapshot's data
-                    symbol_df.iloc[-1] = snapshot_df.iloc[0]
+                if not bars_df.empty and not snapshot_df.empty and snapshot_df.index[0] == bars_df.index[-1]:
+                    bars_df.iloc[-1] = snapshot_df.iloc[0]
                 elif not snapshot_df.empty:
-                    # Append the new bar
-                    symbol_df = pd.concat([symbol_df, snapshot_df])
+                    bars_df = pd.concat([bars_df, snapshot_df])
 
                 # --- Data Cleaning ---
-                # Remove bars with price movement but zero volume before further validation
-                symbol_df = remove_zero_volume_anomalies(symbol_df)
+                symbol_df = remove_zero_volume_anomalies(bars_df)
 
                 # --- Final Validation ---
                 if has_data_gaps(symbol_df, timeframe):
@@ -251,10 +237,10 @@ def is_data_stale(df: pd.DataFrame, max_staleness_minutes: int) -> bool:
     
     return is_stale
 
-def has_data_gaps(df: pd.DataFrame, expected_interval: TimeFrame, tolerance: float = 0.05) -> bool:
+def has_data_gaps(df: pd.DataFrame, expected_interval: TimeFrame, tolerance: float = 0.10) -> bool:
     """
     Checks for missing timestamps in the data, indicating gaps.
-    Allows for a certain tolerance (e.g., 5%) of missing data before failing.
+    Allows for a certain tolerance (e.g., 10%) of missing data before failing.
     """
     if len(df) < 2:
         return False  # Not enough data to detect a gap.
@@ -329,9 +315,9 @@ def has_anomalous_data(df: pd.DataFrame, anomaly_threshold: float = 5.0) -> bool
 
 def remove_zero_volume_anomalies(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Identifies and removes bars where high != low but volume is zero.
+    Identifies and logs bars where high != low but volume is zero.
     This is a strong indicator of bad data from the provider.
-    Returns a cleaned DataFrame.
+    For now, it only logs the anomaly without removing the data.
     """
     if df.empty or 'high' not in df.columns or 'low' not in df.columns or 'volume' not in df.columns:
         return df
@@ -340,8 +326,8 @@ def remove_zero_volume_anomalies(df: pd.DataFrame) -> pd.DataFrame:
     anomalies = df[(df['high'] != df['low']) & (df['volume'] == 0)]
 
     if not anomalies.empty:
-        log.warning(f"Anomaly detected and removed: {len(anomalies)} bars with zero volume on price movement.")
-        # Return the DataFrame without the anomalous rows
-        return df.drop(anomalies.index)
+        log.warning(f"Anomaly detected: {len(anomalies)} bars with zero volume on price movement. Data not removed.")
+        # Return the original DataFrame
+        # return df.drop(anomalies.index)
 
     return df

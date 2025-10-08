@@ -18,7 +18,7 @@ class RegimeDetector:
     """
     Detects the current market regime based on historical data.
     """
-    def __init__(self, short_window: int = 20, long_window: int = 100, threshold_multiplier: float = 1.25):
+    def __init__(self, short_window: int = 14, long_window: int = 50, threshold_multiplier: float = 1.25):
         """
         Initializes the RegimeDetector.
 

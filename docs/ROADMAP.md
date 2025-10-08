@@ -56,10 +56,11 @@ This phase introduced sophisticated trading logic and hardened the system for st
 
 ---
 
-### Phase 5: Future Enhancements & Live Deployment (Next Steps)
+### Phase 5: Pre-Deployment Validation & Live Operations (Next Steps)
 
-This phase focuses on deploying the agent to a live environment and continuously improving its capabilities.
+This phase focuses on final validation, deploying the agent to a live environment, and continuously improving its capabilities.
 
+- [ ] **Comprehensive Peer Review & Code Audit**: Conduct a thorough peer review of the entire codebase, focusing on logic, security, and adherence to best practices. Engage a third-party expert to audit the strategy and risk management components before deploying with real capital.
 - [ ] **Data Feed Redundancy & Health**: Decouple data from execution. Integrate a primary, exchange-native data feed (e.g., Kraken, Coinbase) and use Alpaca as a fallback and for order execution. Implement a "data-health gate" to validate data quality in real-time and backfill gaps.
 - [ ] **Enhanced Monitoring and Alerting**: Implement a more sophisticated monitoring solution (e.g., Prometheus/Grafana) and set up alerts for critical events.
 - [ ] **Cloud Deployment & CI/CD**: Deploy the agent to a cloud environment (e.g., AWS, GCP) and establish a continuous integration and deployment pipeline.
@@ -78,3 +79,15 @@ This phase represents the long-term vision for evolving the agent into a top-tie
 - [ ] **Alternative Data Integration**: Integrate non-price-based data sources, such as news sentiment analysis or on-chain blockchain metrics, to provide the model with a richer, more predictive feature set.
 - [ ] **Explainable AI (XAI) for Trading Decisions**: Integrate tools like SHAP (SHapley Additive exPlanations) to provide clear, visual explanations for why the model made a specific trade decision, enhancing trust and debuggability.
 - [ ] **Reinforcement Learning (RL) Core**: As the ultimate evolution, research and implement a Reinforcement Learning agent that learns an optimal trading policy directly from market interaction, moving beyond simple prediction to holistic decision-making.
+- [ ] **Formal Quantitative Modeling & Alpha Research**: Transition from a pure ML-based approach to a hybrid quant model. Systematically research, test, and validate specific "alpha factors" (e.g., momentum, mean-reversion, value). Develop a factor-based model that can weigh these different signals, providing a more robust and explainable foundation for trading decisions than a black-box model alone.
+
+---
+
+### Phase 7: Continuous Reflection & Research (Ongoing)
+
+This phase is an ongoing commitment to learning, adaptation, and staying at the forefront of technology and quantitative finance.
+
+- [ ] **Post-Mortem Analysis**: After significant wins or losses, conduct detailed post-mortem analyses to understand the root causes. Was it the model, the strategy, the data, or an external event?
+- [ ] **Academic & Industry Research**: Dedicate time to reading and implementing findings from the latest academic papers and industry research in quantitative finance, machine learning, and market microstructure.
+- [ ] **Technology Watch**: Continuously evaluate new technologies, libraries, and data sources that could provide a competitive edge.
+- [ ] **Strategy Diversification**: Research and prototype alternative trading strategies (e.g., statistical arbitrage, options strategies) to diversify the agent's capabilities and reduce reliance on a single methodology.
