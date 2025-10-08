@@ -173,8 +173,12 @@ class DataLoader:
                     # Append the new bar
                     symbol_df = pd.concat([symbol_df, snapshot_df])
 
+                # --- Data Cleaning ---
+                # Remove bars with price movement but zero volume before further validation
+                symbol_df = remove_zero_volume_anomalies(symbol_df)
+
                 # --- Final Validation ---
-                if has_data_gaps(symbol_df, timeframe) or has_zero_volume_anomaly(symbol_df):
+                if has_data_gaps(symbol_df, timeframe):
                     log.warning(f"data_loader.get_market_data.validation_fail", extra={"extra": {"symbol": symbol}})
                     validated_data[symbol] = pd.DataFrame() # Invalidate on validation failure
                 else:
@@ -300,7 +304,7 @@ def has_anomalous_data(df: pd.DataFrame, anomaly_threshold: float = 5.0) -> bool
         return True
 
     # This check is relaxed to only log, not fail the health check.
-    has_zero_volume_anomaly(df)
+    # Anomalies are now removed in the get_market_data pipeline.
 
     # Check for sudden price spikes
     df['range'] = df['high'] - df['low']
@@ -316,17 +320,21 @@ def has_anomalous_data(df: pd.DataFrame, anomaly_threshold: float = 5.0) -> bool
     
     return False # Relaxed check - don't invalidate data for this
 
-def has_zero_volume_anomaly(df: pd.DataFrame) -> bool:
+def remove_zero_volume_anomalies(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Checks for bars with zero volume but significant price movement.
-    This is often an indicator of a data quality issue.
-    This check is currently relaxed to only log a warning, as snapshot data
-    can sometimes have zero volume.
+    Identifies and removes bars where high != low but volume is zero.
+    This is a strong indicator of bad data from the provider.
+    Returns a cleaned DataFrame.
     """
-    if 'volume' not in df.columns or 'open' not in df.columns or 'close' not in df.columns:
-        return False # Not enough data to check
+    if df.empty or 'high' not in df.columns or 'low' not in df.columns or 'volume' not in df.columns:
+        return df
 
-    zero_volume_moved = df[(df['volume'] == 0) & (df['open'] != df['close'])]
-    if not zero_volume_moved.empty:
-        log.warning("Anomaly detected: Zero volume found on a bar with price movement.", extra={"extra": {"count": len(zero_volume_moved)}})
-    return False # Relaxed check - don't invalidate data for this
+    # Find bars with price movement but no volume
+    anomalies = df[(df['high'] != df['low']) & (df['volume'] == 0)]
+
+    if not anomalies.empty:
+        log.warning(f"Anomaly detected and removed: {len(anomalies)} bars with zero volume on price movement.")
+        # Return the DataFrame without the anomalous rows
+        return df.drop(anomalies.index)
+
+    return df

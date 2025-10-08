@@ -65,3 +65,16 @@ This phase focuses on deploying the agent to a live environment and continuously
 - [ ] **Cloud Deployment & CI/CD**: Deploy the agent to a cloud environment (e.g., AWS, GCP) and establish a continuous integration and deployment pipeline.
 - [ ] **Advanced Data Integration**: Research and integrate non-price-based data sources (e.g., news sentiment, on-chain metrics) to improve model performance.
 - [ ] **Live Trading**: After extensive testing and validation in the paper environment, transition the agent to live trading with real capital.
+
+---
+
+### Phase 6: Autonomous Intelligence & Elite Performance (Future Vision)
+
+This phase represents the long-term vision for evolving the agent into a top-tier, self-adapting system.
+
+- [ ] **Advanced Backtesting with Risk-Adjusted Metrics**: Enhance the backtesting engine to optimize for risk-adjusted returns by incorporating metrics like the **Sortino Ratio** and **Calmar Ratio**.
+- [ ] **Dynamic Model & Strategy Switching**: Implement a master-model that dynamically selects the most appropriate underlying ML model or trading strategy (e.g., momentum, mean-reversion) based on the current detected market regime.
+- [ ] **Portfolio-Level Optimization**: Evolve the agent from single-asset trading to true portfolio management. Use Modern Portfolio Theory (MPT) to optimize capital allocation across a basket of assets to maximize the portfolio's overall risk-adjusted return.
+- [ ] **Alternative Data Integration**: Integrate non-price-based data sources, such as news sentiment analysis or on-chain blockchain metrics, to provide the model with a richer, more predictive feature set.
+- [ ] **Explainable AI (XAI) for Trading Decisions**: Integrate tools like SHAP (SHapley Additive exPlanations) to provide clear, visual explanations for why the model made a specific trade decision, enhancing trust and debuggability.
+- [ ] **Reinforcement Learning (RL) Core**: As the ultimate evolution, research and implement a Reinforcement Learning agent that learns an optimal trading policy directly from market interaction, moving beyond simple prediction to holistic decision-making.
