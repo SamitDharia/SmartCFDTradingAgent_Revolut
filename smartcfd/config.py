@@ -13,7 +13,7 @@ class AppConfig:
     on_reconnect_reconcile: bool = True
     run_container_smoke_test: bool = True
     order_client_id_prefix: str = "SCFD"
-    run_interval_seconds: int = 60
+    run_interval_seconds: int = 300
     offline_behavior: str = "halt"
     watch_list: str = "BTC/USD" # Comma-separated list of symbols
     trade_interval: str = "15m" # Interval for trading data
