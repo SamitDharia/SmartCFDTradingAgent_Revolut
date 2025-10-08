@@ -31,9 +31,12 @@
 - [ ] **Task 2:** Implement a robust CI/CD pipeline using GitHub Actions to automate testing and deployment.
 
 ### Section 17: Advanced Feature Integration
-- [ ] **Goal:** Enhance the model's predictive power with new data sources.
-- [ ] **Task 1:** Research and integrate a non-price-based data source (e.g., news sentiment, on-chain metrics).
-- [ ] **Task 2:** Add advanced backtesting metrics (Sortino, Calmar) and simulate transaction costs.
+- [ ] **Goal:** Enhance the model's predictive power and system resilience.
+- [ ] **Task 1 (Data):** Research and integrate a non-price-based data source (e.g., news sentiment, on-chain metrics).
+- [ ] **Task 2 (Backtesting):** Add advanced backtesting metrics (Sortino, Calmar) and simulate transaction costs.
+- [ ] **Task 3 (Resilience):** Implement a "circuit breaker" for data fetching. This will track consecutive data failures for each asset, log a `CRITICAL` error if a threshold is breached, and send an email alert to notify of a persistent data outage.
+- [ ] **Task 4 (Data Redundancy):** Implement a failover mechanism to switch to a secondary data provider (e.g., Binance, Tiingo) if the primary (Alpaca) fails.
+- [ ] **Task 5 (Data Backfilling):** Create a mechanism to automatically fetch and process any missing data after a temporary outage is resolved.
 
 ---
 
