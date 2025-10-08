@@ -11,6 +11,10 @@ services:
     env_file:
       - .env
     environment:
+      # Pass Alpaca credentials directly from the .env file
+      APCA_API_KEY_ID: ${APCA_API_KEY_ID}
+      APCA_API_SECRET_KEY: ${APCA_API_SECRET_KEY}
+      
       # Safe defaults if .env variables are missing
       TIMEZONE: ${TIMEZONE:-America/New_York}
       ALPACA_ENV: ${ALPACA_ENV:-paper}
