@@ -194,7 +194,7 @@ class RiskManager:
         # Fetch recent data to calculate ATR. We need enough for the ATR window + 1 for previous close.
         # TODO: This still uses a direct data loader. This could be refactored to use pre-fetched data.
         data = self.data_loader.get_market_data([symbol], interval, limit=50)
-        if data is None or data.empty or len(data) < 2:
+        if data is None or data.empty:
             log.warning("risk.volatility_check.no_data", extra={"extra": {"symbol": symbol, "reason": "Not enough data for volatility check."}})
             return False # Cannot perform check
 

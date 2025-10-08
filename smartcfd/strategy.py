@@ -148,7 +148,7 @@ class InferenceStrategy(Strategy):
                         interval=self.config.trade_interval,
                         limit=200  # A reasonable lookback for feature calculation
                     )
-                    if data_dict and symbol in data_dict:
+                    if data_dict is not None and not data_dict.empty and symbol in data_dict:
                         data = data_dict[symbol]
                         if data is not None and not data.empty:
                             historical_data[symbol] = data

@@ -55,12 +55,17 @@ For the trading bot to operate correctly, the following conditions must be met:
     *   **VPNs:** Corporate or private VPNs will likely cause `SSL certificate verification` errors and must be **turned off**.
     *   **Restrictive Networks:** Some corporate or public WiFi networks may block the necessary connections. If you encounter persistent `NameResolutionError` or other network issues, switch to a less restrictive network, such as a mobile hotspot. The `docker-compose.yml` file has been configured to use public DNS servers to improve reliability, but a restrictive network can still cause problems.
 
-To start the bot, run the following command from the project root:
+To start the bot in detached mode (runs in the background):
 ```bash
 docker-compose up --build -d
 ```
 
-To view the logs:
+To start the bot and view live logs in the terminal:
+```bash
+docker-compose up --build
+```
+
+To view the logs of a running container:
 ```bash
 docker-compose logs --tail 100 -f
 ```

@@ -53,14 +53,13 @@ class PortfolioManager:
             # 1. Fetch Account Details
             account_data = self.client.get_account()
             if account_data:
-                # The client returns an object with attributes, not a dict
                 self.account = Account(
-                    id=account_data.id,
-                    equity=float(account_data.equity),
-                    last_equity=float(account_data.last_equity),
-                    buying_power=float(account_data.buying_power),
-                    cash=float(account_data.cash),
-                    status=account_data.status,
+                    id=account_data['id'],
+                    equity=float(account_data['equity']),
+                    last_equity=float(account_data['last_equity']),
+                    buying_power=float(account_data['buying_power']),
+                    cash=float(account_data['cash']),
+                    status=account_data['status'],
                 )
                 log.info("portfolio.reconcile.account_updated", extra={"extra": self.account.model_dump()})
             else:
@@ -72,15 +71,15 @@ class PortfolioManager:
             self.positions.clear()
             for pos_obj in positions_data:
                 position = Position(
-                    symbol=pos_obj.symbol,
-                    qty=float(pos_obj.qty),
-                    side=pos_obj.side,
-                    market_value=float(pos_obj.market_value),
-                    unrealized_pl=float(pos_obj.unrealized_pl),
-                    unrealized_plpc=float(pos_obj.unrealized_plpc),
-                    avg_entry_price=float(pos_obj.avg_entry_price),
+                    symbol=pos_obj['symbol'],
+                    qty=float(pos_obj['qty']),
+                    side=pos_obj['side'],
+                    market_value=float(pos_obj['market_value']),
+                    unrealized_pl=float(pos_obj['unrealized_pl']),
+                    unrealized_plpc=float(pos_obj['unrealized_plpc']),
+                    avg_entry_price=float(pos_obj['avg_entry_price']),
                 )
-                self.positions[pos_obj.symbol] = position
+                self.positions[pos_obj['symbol']] = position
             log.info("portfolio.reconcile.positions_updated", extra={"extra": {"position_count": len(self.positions)}})
 
             # 3. Fetch Open/Pending Orders

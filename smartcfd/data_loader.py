@@ -52,7 +52,7 @@ class DataLoader:
         self.client = CryptoHistoricalDataClient()
         # HACK: Disable SSL verification for corporate proxies.
         # The session object is part of the underlying REST client.
-        self.client._session.verify = False
+        # self.client._session.verify = False
 
     def fetch_historical_range(self, symbol: str, start_date: str, end_date: str, interval: str) -> pd.DataFrame | None:
         """
