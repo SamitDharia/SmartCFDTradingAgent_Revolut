@@ -251,9 +251,10 @@ def is_data_stale(df: pd.DataFrame, max_staleness_minutes: int) -> bool:
     
     return is_stale
 
-def has_data_gaps(df: pd.DataFrame, expected_interval: TimeFrame) -> bool:
+def has_data_gaps(df: pd.DataFrame, expected_interval: TimeFrame, tolerance: float = 0.05) -> bool:
     """
     Checks for missing timestamps in the data, indicating gaps.
+    Allows for a certain tolerance (e.g., 5%) of missing data before failing.
     """
     if len(df) < 2:
         return False  # Not enough data to detect a gap.
@@ -277,8 +278,14 @@ def has_data_gaps(df: pd.DataFrame, expected_interval: TimeFrame) -> bool:
     missing_timestamps = expected_timestamps.difference(df.index)
     
     if not missing_timestamps.empty:
-        log.warning(f"Data gap detected. Missing {len(missing_timestamps)} timestamps. First missing: {missing_timestamps[0]}")
-        return True
+        # Calculate the percentage of missing data
+        missing_percentage = len(missing_timestamps) / len(expected_timestamps)
+        
+        if missing_percentage > tolerance:
+            log.warning(f"Data gap detected. Missing {len(missing_timestamps)} timestamps ({missing_percentage:.2%}), which is above the {tolerance:.2%} tolerance. First missing: {missing_timestamps[0]}")
+            return True
+        else:
+            log.info(f"Data gap detected, but within tolerance. Missing {len(missing_timestamps)} timestamps ({missing_percentage:.2%}).")
         
     return False
 
