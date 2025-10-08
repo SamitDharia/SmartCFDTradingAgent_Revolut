@@ -13,13 +13,13 @@ class AlpacaBroker(Broker):
     A concrete implementation of the Broker interface for Alpaca.
     This class uses the official alpaca-trade-api-python SDK.
     """
-    def __init__(self, paper: bool = True):
-        self.api_key = os.getenv("ALPACA_API_KEY")
-        self.secret_key = os.getenv("ALPACA_SECRET_KEY")
+    def __init__(self, api_key: str, secret_key: str, paper: bool = True):
+        self.api_key = api_key
+        self.secret_key = secret_key
         self.paper = paper
         if not self.api_key or not self.secret_key:
-            log.error("Alpaca API key and secret key must be set in environment variables.")
-            raise ValueError("Alpaca API key and secret key must be set in environment variables.")
+            log.error("Alpaca API key and secret key must be provided.")
+            raise ValueError("Alpaca API key and secret key must be provided.")
         
         try:
             self.trading_client = TradingClient(

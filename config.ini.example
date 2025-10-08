@@ -1,0 +1,10 @@
+[alpaca]
+# Your Alpaca API Key ID
+api_key = YOUR_API_KEY_HERE
+
+# Your Alpaca API Secret Key
+secret_key = YOUR_SECRET_KEY_HERE
+
+[settings]
+# Environment can be 'paper' or 'live'
+alpaca_env = paper

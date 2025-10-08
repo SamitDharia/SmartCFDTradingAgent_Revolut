@@ -8,14 +8,10 @@ services:
     dns:
       - 8.8.8.8
       - 1.1.1.1
-    env_file:
-      - .env
+    volumes:
+      - ./config.ini:/app/config.ini:ro
     environment:
-      # Pass Alpaca credentials directly from the .env file
-      APCA_API_KEY_ID: ${APCA_API_KEY_ID}
-      APCA_API_SECRET_KEY: ${APCA_API_SECRET_KEY}
-      
-      # Safe defaults if .env variables are missing
+      # Environment variables are now secondary to config.ini
       TIMEZONE: ${TIMEZONE:-America/New_York}
       ALPACA_ENV: ${ALPACA_ENV:-paper}
       API_TIMEOUT_SECONDS: ${API_TIMEOUT_SECONDS:-10}

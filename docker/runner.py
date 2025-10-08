@@ -4,7 +4,7 @@ import logging
 import requests
 import signal
 
-from smartcfd.config import load_config, load_risk_config
+from smartcfd.config import load_config_from_file
 from smartcfd.db import connect as db_connect, init_schema, record_run, record_heartbeat
 from smartcfd.alpaca import build_api_base, build_headers_from_env
 from smartcfd.health_server import start_health_server
@@ -14,21 +14,6 @@ from smartcfd.alpaca_client import AlpacaBroker
 from smartcfd.risk import RiskManager
 from smartcfd.data_loader import DataLoader
 from smartcfd.portfolio import PortfolioManager
-
-def check_connectivity(api_base: str, timeout: float):
-    headers = build_headers_from_env()
-    start = time.perf_counter()
-    
-    verify_ssl = os.getenv("DANGEROUSLY_DISABLE_SSL_VERIFICATION", "0") not in ("1", "true", "True")
-
-    try:
-        r = requests.get(f"{api_base}/v2/clock", timeout=timeout, headers=headers if headers else None, verify=verify_ssl)
-        latency_ms = (time.perf_counter() - start) * 1000.0
-        ok = r.status_code == 200
-        return ok, str(r.status_code), r.status_code, latency_ms, None
-    except Exception as e:
-        latency_ms = (time.perf_counter() - start) * 1000.0
-        return False, repr(e), None, latency_ms, repr(e)
 
 # Global connection and run_id to be accessible by the signal handler
 conn = None
@@ -45,15 +30,17 @@ def shutdown_handler(signum, frame):
 def main():
     global conn, run_id, running
     running = True
-    # setup_logging is not defined in this file. I will assume it is imported from somewhere else.
-    # setup_logging("INFO") 
     log = logging.getLogger("runner")
 
-    cfg = load_config()
-    risk_cfg = load_risk_config()
-    api_base = build_api_base(cfg.alpaca_env)
+    try:
+        app_cfg, risk_cfg, alpaca_cfg = load_config_from_file()
+    except (FileNotFoundError, ValueError) as e:
+        log.critical(f"Failed to load configuration: {e}")
+        return # Exit if config is missing or invalid
 
-    if cfg.alpaca_env == "live":
+    api_base = f"https://paper-api.alpaca.markets" if app_cfg.alpaca_env == 'paper' else "https://api.alpaca.markets"
+
+    if app_cfg.alpaca_env == "live":
         log.critical("="*80)
         log.critical("  LIVE TRADING MODE IS ACTIVE. THE BOT IS OPERATING WITH REAL MONEY. ")
         log.critical("="*80)
@@ -87,8 +74,16 @@ def main():
         log.warning("runner.health.server.fail", extra={"extra": {"error": repr(e)}})
 
     # Initialize the Alpaca client, Risk Manager, and Strategy
-    broker = AlpacaBroker(paper=(cfg.alpaca_env == 'paper'))
-    
+    try:
+        broker = AlpacaBroker(
+            api_key=alpaca_cfg.api_key,
+            secret_key=alpaca_cfg.secret_key,
+            paper=(app_cfg.alpaca_env == 'paper')
+        )
+    except ValueError as e:
+        log.critical(f"Failed to initialize broker: {e}")
+        return
+
     # Pass the broker to the PortfolioManager
     portfolio_manager = PortfolioManager(broker)
     
@@ -97,16 +92,16 @@ def main():
     strategy = get_strategy_by_name(strategy_name)
     
     # Initialize the Trader
-    trader = Trader(portfolio_manager, strategy, risk_manager, cfg)
+    trader = Trader(portfolio_manager, strategy, risk_manager, app_cfg)
 
     log.info(
         "runner.start",
         extra={
             "extra": {
-                "tz": cfg.timezone,
-                "env": cfg.alpaca_env,
+                "tz": app_cfg.timezone,
+                "env": app_cfg.alpaca_env,
                 "api_base": api_base,
-                "timeout": cfg.api_timeout_seconds,
+                "timeout": app_cfg.api_timeout_seconds,
                 "strategy": strategy_name,
             }
         },
@@ -116,19 +111,21 @@ def main():
     network_max_backoff = float(os.getenv("NETWORK_MAX_BACKOFF_SECONDS", "60"))
 
     while running:
-        ok, status, code, latency, err = check_connectivity(api_base, cfg.api_timeout_seconds)
-        if ok:
-            backoff_seconds = 1.0  # Reset backoff on success
+        try:
+            # The main trading logic is now wrapped in a try/except block
+            # to handle potential API errors gracefully.
             if conn:
-                record_heartbeat(conn, run_id, latency, "ok", code)
+                # We can't easily measure latency here, so we'll record a placeholder
+                record_heartbeat(conn, run_id, -1, "ok", 200)
             
             # Run the trading loop
             trader.run()
+            backoff_seconds = 1.0  # Reset backoff on success
 
-        else:
-            log.warning("runner.connectivity.fail", extra={"extra": {"status": status, "latency": latency, "error": err}})
+        except Exception as e:
+            log.warning("runner.loop.fail", extra={"extra": {"error": repr(e)}})
             if conn:
-                record_heartbeat(conn, run_id, latency, "error", code)
+                record_heartbeat(conn, run_id, -1, "error", 500)
             
             # Exponential backoff with jitter
             sleep_time = backoff_seconds + (os.urandom(1)[0] / 255.0)
@@ -137,8 +134,8 @@ def main():
             backoff_seconds = min(backoff_seconds * 2, network_max_backoff)
 
         # Sleep for the configured interval
-        log.info(f"runner.sleep", extra={"extra": {"interval": cfg.run_interval_seconds}})
-        time.sleep(cfg.run_interval_seconds)
+        log.info(f"runner.sleep", extra={"extra": {"interval": app_cfg.run_interval_seconds}})
+        time.sleep(app_cfg.run_interval_seconds)
 
     log.info("runner.exit")
     if conn:

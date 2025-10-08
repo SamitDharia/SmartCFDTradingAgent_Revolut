@@ -8,6 +8,7 @@ venv/
 
 # Local config
 *.env
+config.ini
 
 # Logs and data
 logs/
