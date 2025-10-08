@@ -98,29 +98,41 @@ For applications that should be configured primarily by a local `.env` file, alw
 
 ### Unit Testing & Mocking Complexity
 
-**Date:** 2025-10-07
+**Date:** 2025-10-08
 
 **Problem:**
-While implementing the "Circuit Breaker" feature, a suite of unit tests began failing with a variety of errors, including `AttributeError`, `AssertionError`, and `requests.exceptions.HTTPError`. The debugging process was prolonged and difficult.
+A series of integration tests were failing with obscure errors that were difficult to trace back to the root cause. The failures manifested in several ways:
+1.  `TypeError: '<' not supported between instances of 'str' and 'int'`
+2.  `AssertionError: Expected 'submit_order' to have been called once. Called 0 times.`
+3.  `KeyError: 'qty'` in test assertions.
+4.  Regressions where fixing one test broke another.
 
-**Root Cause:**
-There were several underlying issues:
-1.  **Inconsistent Mocking Strategy:** The tests for `RiskManager` were mixing `requests-mock` with direct `MagicMock` patching, leading to unpredictable behavior and `AttributeError`s.
-2.  **State Management Bugs:** The `RiskManager`'s `check_for_halt` method had flawed logic for setting and, more importantly, resetting its `is_halted` state. This caused tests for the halt-reset functionality to fail.
-3.  **Mocking Library Interactions:** The `test_retry_logic_on_5xx_error` test failed because `requests-mock` intercepts HTTP calls before the `requests` library's `Retry` adapter can process them. This is a fundamental interaction detail of the mocking library that was not initially accounted for.
+**Root Cause Analysis:**
+The debugging process revealed a cascade of issues stemming from the complexity of the `Trader`, `RiskManager`, and `Broker` interactions, and how they were mocked in `tests/test_integration.py`.
+
+1.  **Data Type Mismatch in Mocks:** The initial `TypeError` was caused by providing string values (e.g., `"0.2"`) for numeric fields (like `qty` and `market_value`) in the mock `Position` objects. The application logic expected floats, leading to comparison errors.
+2.  **Incorrect Method Mocking:** The `AssertionError` (0 calls) was due to a mismatch between the method being called in the application (`broker.post_order`) and the method being asserted in the test (`broker.submit_order.assert_called_once()`). This was a simple but critical oversight.
+3.  **Positional vs. Keyword Arguments:** The `KeyError` occurred because the test was trying to assert the contents of `call_args.kwargs`, but the `submit_order` mock was being called with a single positional argument: a Pydantic `OrderRequest` object. The correct approach was to inspect `call_args.args[0]`.
+4.  **Flawed Application Logic:** The most subtle issue was in the `Trader.execute_order` logic itself. The initial implementation did not allow for adding to an existing position. Attempts to fix this introduced regressions because the test cases were not designed to handle this new behavior, leading to unexpected mock call counts.
 
 **Solution:**
-A systematic, multi-step approach was required:
-1.  **Standardized Mocking:** The `test_risk.py` file was refactored to use a consistent mocking strategy, relying on a `MagicMock(spec=AlpacaClient)` fixture. This ensured that all mocked methods adhered to the real client's interface, eliminating `AttributeError`s.
-2.  **Corrected State Logic:** The `check_for_halt` method in `smartcfd/risk.py` was rewritten to have a clear, single path for checking all halt conditions and an explicit block to reset the `is_halted` state if no conditions were met.
-3.  **Adapted Test for Mock Behavior:** The `test_retry_logic_on_5xx_error` was rewritten. Instead of trying to assert a successful final outcome (which is impossible with the mock), the test was changed to assert that the initial call fails with the expected `HTTPError`. This correctly tests the behavior within the constraints of the mocking environment.
+The solution was a multi-step process:
+1.  **Corrected Mock Data:** All mock `Position` objects in `tests/test_integration.py` were updated to use floating-point numbers for numeric fields.
+2.  **Standardized Method Name:** The call in `smartcfd/trader.py` was changed from `self.broker.post_order(...)` to `self.broker.submit_order(...)` to match the rest of the codebase and the test assertions.
+3.  **Updated Assertions:** The test assertions were refactored to correctly inspect the positional `OrderRequest` object, like so:
+    ```python
+    call_args, _ = self.trader.broker.submit_order.call_args
+    order_request = call_args[0]
+    self.assertEqual(order_request.symbol, 'ETH/USD')
+    ```
+4.  **Refined Application and Test Logic:** The `Trader.execute_order` method was updated to correctly handle adding to existing positions. The corresponding tests (`test_buy_signal_when_one_position_exists` and `test_order_limited_by_asset_exposure`) were then updated to assert this new, correct behavior, ensuring the test suite accurately reflected the desired application logic.
 
 **Lesson:**
-Complex features with multiple states and external dependencies require a rigorous and disciplined testing approach.
-- **Isolate and Standardize Mocks:** When testing a component, mock its immediate dependencies cleanly and consistently. Avoid mixing different mocking techniques (like patching and response-mocking) on the same dependency.
-- **Test State Transitions Explicitly:** For stateful classes like `RiskManager`, write separate tests for each state transition: entering a state (e.g., `is_halted = True`), remaining in a state, and exiting a state (`is_halted = False`).
-- **Understand Your Tools:** Be aware of the limitations and interactions of your testing libraries. `requests-mock` is powerful, but it fundamentally changes how HTTP requests are handled, which can interfere with other libraries like `urllib3.Retry`. Adapt tests to account for this.
-
+Complex integration tests with multiple mocks are brittle. When they fail, it's crucial to debug systematically:
+-   **Verify Data Types:** Ensure mock data perfectly matches the types expected by the application.
+-   **Check Method Names:** Double-check that the mocked method name matches the called method name.
+-   **Inspect Call Arguments:** When assertions fail, print the entire `call_args` object to see exactly how the mock was called (positional vs. keyword).
+-   **Align Tests with Logic:** When application logic changes, the tests that cover that logic must be updated to reflect the new behavior. A failing test might indicate that the *test* is wrong, not the application code.
 ---
 
 ### Hyperparameter Tuning and Model Selection

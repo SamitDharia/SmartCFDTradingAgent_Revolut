@@ -1,28 +1,36 @@
+# Using a slim Python image for a smaller footprint
 FROM python:3.11-slim
 
+# Set environment variables for Python
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PYTHONPATH=/app
 
+# Set the working directory
 WORKDIR /app
 
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates bash && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy the repo and install Python deps (fallback if requirements.txt missing)
+# --- Optimized Dependency Installation ---
+# Copy only the dependency files to leverage Docker cache
+COPY requirements.txt pyproject.toml /app/
+
+# Install Python dependencies
+RUN python -m pip install --upgrade pip && \
+    pip install -r requirements.txt
+
+# --- Application Code ---
+# Copy the rest of the application code
 COPY . /app
 
-RUN python -m pip install --upgrade pip && \
-    if [ -f requirements.txt ]; then \
-      pip install -r requirements.txt; \
-    else \
-      pip install requests pytest; \
-    fi
-
-# Entrypoint + healthcheck
+# Make scripts executable
 RUN chmod +x /app/docker/entrypoint.sh
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD python /app/docker/healthcheck.py
+RUN chmod +x /app/scripts/send_digest.sh
+RUN chmod +x /app/scripts/send_snapshot.sh
 
-CMD ["bash", "/app/docker/entrypoint.sh"]
+# Set the entrypoint for the container
+ENTRYPOINT ["/app/docker/entrypoint.sh"]
