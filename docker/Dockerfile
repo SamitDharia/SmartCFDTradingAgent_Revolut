@@ -30,8 +30,6 @@ COPY . /app
 
 # Make scripts executable
 RUN chmod +x /app/docker/entrypoint.sh
-RUN chmod +x /app/scripts/send_digest.sh
-RUN chmod +x /app/scripts/send_snapshot.sh
 
 # Set the entrypoint for the container
 ENTRYPOINT ["/app/docker/entrypoint.sh"]

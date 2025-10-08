@@ -6,7 +6,7 @@ import pandas as pd
 import joblib
 
 from .portfolio import PortfolioManager
-from .data_loader import DataLoader, has_data_gaps, has_zero_volume_anomaly
+from .data_loader import DataLoader, has_data_gaps
 from .indicators import (
     atr, rsi, macd, bollinger_bands, adx,
     stochastic_oscillator, volume_profile, price_rate_of_change
