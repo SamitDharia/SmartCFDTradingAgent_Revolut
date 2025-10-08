@@ -24,4 +24,3 @@ crypto_loop.log
 *.sqlite
 *.db
 .env
-.env
