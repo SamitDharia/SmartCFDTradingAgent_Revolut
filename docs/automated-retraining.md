@@ -46,4 +46,5 @@ This command will execute the script and append its output (both stdout and stde
 7.  **Start in (optional):** Enter the project's root directory: `C:\Projects\SmartCFDTradingAgent_Revolut`. This ensures the script can correctly locate project files.
 8.  **Finish:** Complete the wizard. You may want to open the task's properties to configure it to "Run whether user is logged on or not".
 
-This completes the implementation of the automated retraining workflow. What would you like to do next?
+This completes the implementation of the automated retraining workflow, a key component of the V1.0 system.
+````

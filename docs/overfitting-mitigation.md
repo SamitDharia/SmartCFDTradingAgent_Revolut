@@ -34,4 +34,5 @@ Standard k-fold cross-validation shuffles and splits the data randomly. In finan
 
 `TimeSeriesSplit` works by creating folds that respect the temporal order of the data. For example, in the first fold, it trains on the first 10% of the data and validates on the next 10%. In the second fold, it trains on the first 20% and validates on the third 10%, and so on.
 
-This "walk-forward" validation method ensures that the model is always trained on past data and tested on future data, just as it would be in a live trading environment. This leads to a more realistic and robust evaluation of the model's performance.
+This "walk-forward" validation method ensures that the model is always trained on past data and tested on future data, just as it would be in a live trading environment. This leads to a more realistic and robust evaluation of the model's performance, and is a cornerstone of the V1.0 model training pipeline.
+```

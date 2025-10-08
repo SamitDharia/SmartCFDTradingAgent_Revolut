@@ -43,48 +43,38 @@ This phase automated key processes and built a robust validation framework.
 
 ---
 
-### Phase 4: Advanced Trading & Production Hardening (Completed)
+### Phase 4: Advanced Trading & Production Hardening (V1.0 - Completed)
 
-This phase introduced sophisticated trading logic and hardened the system for stability.
+This phase introduced sophisticated trading logic and hardened the system for stability, culminating in the V1.0 release.
 
 - [x] **Market Regime Detection**: Implemented a `RegimeDetector` to classify market conditions, allowing the strategy to adapt.
 - [x] **Multi-Symbol Trading**: Enabled the agent to trade multiple symbols concurrently, with risk managed on a per-trade basis.
 - [x] **Advanced Risk Management**: Implemented dynamic, ATR-based stop-loss and take-profit orders, with position sizes calculated based on a fixed risk percentage.
 - [x] **Real-time Data Handling**: Switched to using the `get_crypto_snapshot` endpoint for live data to ensure accuracy and prevent trading on partial bars.
-- [x] **Code Hardening & Stability**: Performed extensive data validation, error handling, and stability fixes based on integration test findings and live paper trading.
+- [x] **Code Hardening & Stability**: Performed extensive data validation, error handling, and stability fixes based on integration test findings and live paper trading. This included a deep debugging session to resolve a cascade of interacting issues, resulting in a truly stable system.
 - [x] **Startup Grace Period**: Added a 60-second grace period to the health check to prevent failures during application initialization in Docker.
 
 ---
 
-### Phase 5: Pre-Deployment Validation & Live Operations (Version 1.0 Focus)
+### Phase 5: Live Operations & Continuous Improvement (Post V1.0)
 
-This phase focuses on final validation, deploying the agent to a live environment, and continuously improving its capabilities.
+This phase focuses on deploying the V1.0 agent, monitoring its performance, and continuously improving its capabilities.
 
 - [ ] **Comprehensive Peer Review & Code Audit**: Conduct a thorough peer review of the entire codebase, focusing on logic, security, and adherence to best practices. Engage a third-party expert to audit the strategy and risk management components before deploying with real capital.
 - [ ] **Data Feed Redundancy & Health**: Decouple data from execution. Integrate a primary, exchange-native data feed (e.g., Kraken, Coinbase) and use Alpaca as a fallback and for order execution. Implement a "data-health gate" to validate data quality in real-time and backfill gaps.
-- [ ] **Enhanced Monitoring and Alerting**: Implement a more sophisticated monitoring solution (e.g., Prometheus/Grafana) and set up alerts for critical events.
-- [ ] **Cloud Deployment & CI/CD**: Deploy the agent to a cloud environment (e.g., AWS, GCP) and establish a continuous integration and deployment pipeline.
-- [ ] **Live Trading**: After extensive testing and validation in the paper environment, transition the agent to live trading with real capital.
+- [ ] **Enhanced Monitoring and Alerting**: Implement a more sophisticated monitoring solution (e.g., Prometheus/Grafana) and set up alerts for critical events like failed trades, significant losses, or data feed interruptions.
+- [ ] **Cloud Deployment & CI/CD**: Deploy the agent to a cloud environment (e.g., AWS, GCP) and establish a continuous integration and deployment pipeline for automated testing and deployment of new versions.
+- [ ] **Live Trading**: After extensive testing and validation in the paper environment, transition the agent to live trading with real capital, starting with a small, controlled allocation.
 
 ---
 
-### Version 2.0: Advanced Capabilities (Future Vision)
+### Version 2.0: Autonomous Intelligence (Future Vision)
 
 This version will build upon the stable foundation of Version 1.0, introducing more sophisticated and autonomous features.
 
-#### Phase 6: Autonomous Intelligence & Elite Performance
-
-- [ ] **Advanced Backtesting with Risk-Adjusted Metrics**: Enhance the backtesting engine to optimize for risk-adjusted returns by incorporating metrics like the **Sortino Ratio** and **Calmar Ratio**.
 - [ ] **Dynamic Model & Strategy Switching**: Implement a master-model that dynamically selects the most appropriate underlying ML model or trading strategy (e.g., momentum, mean-reversion) based on the current detected market regime.
 - [ ] **Portfolio-Level Optimization**: Evolve the agent from single-asset trading to true portfolio management. Use Modern Portfolio Theory (MPT) to optimize capital allocation across a basket of assets to maximize the portfolio's overall risk-adjusted return.
 - [ ] **Alternative Data Integration**: Integrate non-price-based data sources, such as news sentiment analysis or on-chain blockchain metrics, to provide the model with a richer, more predictive feature set.
 - [ ] **Explainable AI (XAI) for Trading Decisions**: Integrate tools like SHAP (SHapley Additive exPlanations) to provide clear, visual explanations for why the model made a specific trade decision, enhancing trust and debuggability.
 - [ ] **Reinforcement Learning (RL) Core**: As the ultimate evolution, research and implement a Reinforcement Learning agent that learns an optimal trading policy directly from market interaction, moving beyond simple prediction to holistic decision-making.
 - [ ] **Formal Quantitative Modeling & Alpha Research**: Transition from a pure ML-based approach to a hybrid quant model. Systematically research, test, and validate specific "alpha factors" (e.g., momentum, mean-reversion, value). Develop a factor-based model that can weigh these different signals, providing a more robust and explainable foundation for trading decisions than a black-box model alone.
-
-#### Phase 7: Continuous Reflection & Research
-
-- [ ] **Post-Mortem Analysis**: After significant wins or losses, conduct detailed post-mortem analyses to understand the root causes. Was it the model, the strategy, the data, or an external event?
-- [ ] **Academic & Industry Research**: Dedicate time to reading and implementing findings from the latest academic papers and industry research in quantitative finance, machine learning, and market microstructure.
-- [ ] **Technology Watch**: Continuously evaluate new technologies, libraries, and data sources that could provide a competitive edge.
-- [ ] **Strategy Diversification**: Research and prototype alternative trading strategies (e.g., statistical arbitrage, options strategies) to diversify the agent's capabilities and reduce reliance on a single methodology.

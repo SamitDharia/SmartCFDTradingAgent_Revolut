@@ -45,9 +45,12 @@ This project is an autonomous trading agent that uses machine learning to analyz
 *   **Multi-Symbol Trading:** The agent is capable of trading multiple symbols concurrently.
 *   **Production Stability:** Implemented a startup grace period for health checks and switched to snapshot data fetching to ensure the system is stable and trades on the most accurate live data.
 
-### Phase 5: Future Enhancements & Live Deployment (Next Steps)
-*   **Current Status:** The agent is stable and has completed all core development and hardening phases in a paper trading environment.
-*   **Next Steps:** The project is now ready for the final phase, which includes deploying to the cloud, enhancing monitoring, and transitioning to live trading.
+### Version 1.0: Stable & Autonomous (Current)
+*   **Current Status:** The agent is feature-complete, stable, and fully autonomous. All core systems have been validated in a live paper-trading environment.
+*   **Key Outcome:** The project has successfully achieved its primary goal of creating a reliable, hands-off trading agent that can operate continuously.
+
+### Version 2.0: Advanced Capabilities (Future Vision)
+*   **Next Steps:** Building on the stable V1.0 foundation, future work will focus on implementing more sophisticated features, such as portfolio-level optimization, dynamic strategy switching, and integrating alternative data sources. See the `ROADMAP.md` for a full breakdown.
 
 ## Your Role: Project Lead & Strategist
 As the driving force behind the project, your role has been to:

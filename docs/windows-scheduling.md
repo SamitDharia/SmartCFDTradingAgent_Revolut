@@ -1,28 +1,48 @@
-# Scheduling the Trading Agent on Windows with Task Scheduler
+# Scheduling Tasks on Windows with Task Scheduler
 
-This guide explains how to automate the execution of the SmartCFDTradingAgent on a Windows system using the built-in Task Scheduler. This guide covers two approaches: running with Docker Compose and running directly with Python.
+This guide explains how to automate periodic tasks for the SmartCFDTradingAgent on a Windows system using the built-in Task Scheduler.
 
 ---
 
-## Approach 1: Using Docker Compose (Recommended)
+## Running the Main Trading Agent
 
-This method is robust as it uses Docker to manage the environment and dependencies.
+The main trading agent in V1.0 is designed as a **continuous, long-running service**. It is **not** meant to be triggered by Task Scheduler for each trade.
+
+To run the agent, simply start it once from a terminal using Docker Compose:
+
+```powershell
+# Navigate to the project directory
+cd C:\Projects\SmartCFDTradingAgent_Revolut
+
+# Build the image if you haven't already
+docker compose build
+
+# Start the agent in detached mode
+docker compose up -d
+```
+
+The agent will run in the background, and its internal loop (defined in `docker/runner.py`) will handle the trading frequency based on the `run_interval_seconds` setting in `config.ini`.
+
+## Scheduling Automated Model Retraining
+
+While the main agent runs continuously, Task Scheduler is the perfect tool for scheduling periodic maintenance tasks like retraining the model. The `docker-compose.yml` file includes a dedicated `retrain` service for this purpose.
 
 ### Steps
+
 1.  **Open Task Scheduler**: Search for "Task Scheduler" in the Start Menu and open it.
 
 2.  **Create a New Task**: In the right-hand pane, click **Create Task...** (do not use "Create Basic Task" as it offers fewer options).
 
 3.  **General Tab**:
-    -   **Name**: Give your task a descriptive name, e.g., "Run SmartCFD Trader".
+    -   **Name**: Give your task a descriptive name, e.g., "SmartCFD Weekly Model Retraining".
     -   **Security options**: Select "Run whether user is logged on or not" to ensure the task runs even if you are not signed in.
 
 4.  **Triggers Tab**:
     -   Click **New...**.
-    -   Configure the schedule. To run the task every 15 minutes:
-        -   Select **Daily**.
-        -   Under **Advanced settings**, check **Repeat task every** and select **15 minutes** from the dropdown.
-        -   Set the duration to **Indefinitely**.
+    -   Configure the schedule. For example, to run weekly on Sunday at 2:00 AM:
+        -   Select **Weekly**.
+        -   Select **Sunday**.
+        -   Set the start time to **2:00 AM**.
         -   Ensure **Enabled** is checked.
         -   Click **OK**.
 
@@ -30,43 +50,15 @@ This method is robust as it uses Docker to manage the environment and dependenci
     -   Click **New...**.
     -   **Action**: Select **Start a program**.
     -   **Program/script**: Enter `docker-compose`.
-    -   **Add arguments (optional)**: Enter `run --rm trader`. This command starts a one-off instance of the `trader` service and removes the container after it exits.
+    -   **Add arguments (optional)**: Enter `run --rm retrain`. This command starts a one-off instance of the `retrain` service and removes the container after it exits.
     -   **Start in (optional)**: Enter the **absolute path** to your project's root directory (e.g., `C:\Projects\SmartCFDTradingAgent_Revolut`). This is crucial for `docker-compose` to find the `docker-compose.yml` file.
     -   Click **OK**.
 
 6.  **Settings Tab**:
-    -   Review the settings. You might want to check "Stop the task if it runs longer than:" and set a reasonable duration (e.g., 10 minutes) to prevent runaway processes.
+    -   Review the settings. You might want to check "Stop the task if it runs longer than:" and set a reasonable duration (e.g., 1 hour) to prevent runaway processes.
 
 7.  **Save the Task**:
     -   Click **OK**. You will be prompted to enter the password for the user account the task will run as.
 
----
-
-## Approach 2: Using a Python Virtual Environment
-
-This approach runs the script directly on the host.
-
-### Steps
-1.  **Create a Batch Script**:
-    Create a file named `run_trader.bat` in your `scripts` folder with the following content:
-    ```batch
-    @echo off
-    
-    :: Navigate to the project's root directory
-    cd /d "C:\Projects\SmartCFDTradingAgent_Revolut"
-    
-    :: Activate the Python virtual environment
-    call "C:\path\to\your\venv\Scripts\activate.bat"
-    
-    :: Run the trader module
-    python -m smartcfd.trader
-    ```
-    Replace the paths with the correct ones for your system.
-
-2.  **Configure Task Scheduler**:
-    -   Follow the same steps as in Approach 1, but for the **Actions** tab:
-        -   **Program/script**: Enter the full path to your batch script, e.g., `C:\Projects\SmartCFDTradingAgent_Revolut\scripts\run_trader.bat`.
-        -   Leave the "Add arguments" and "Start in" fields blank, as they are handled inside the batch file.
-
 ### Logging and Debugging
-For both approaches, the Python application's logging configuration (in `smartcfd/logging_setup.py`) will determine where logs are written. When running as a scheduled task, it's essential that the application logs to a file, as you won't be able to see console output directly. Ensure your logging setup is configured to write to a file in a location like the `logs/` directory.
+The output of the retraining script will be visible in the Docker container's logs. You can view the logs for the specific one-off container that Task Scheduler ran, or you can configure the script to log to a file within the `logs` directory for easier access. The current `retrain` service in `docker-compose.yml` mounts the `reports` and `models` directories, so any artifacts generated by the script will be saved directly to your host machine.

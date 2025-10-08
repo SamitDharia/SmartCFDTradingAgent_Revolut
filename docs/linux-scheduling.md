@@ -1,18 +1,34 @@
-# Scheduling the Trading Agent on Linux with Cron
+# Scheduling Tasks on Linux with Cron
 
-This guide explains how to automate the execution of the SmartCFDTradingAgent on a Linux system using `cron`. `cron` is a time-based job scheduler in Unix-like computer operating systems. This guide covers two approaches: running with Docker Compose and running directly with Python.
+This guide explains how to automate periodic tasks for the SmartCFDTradingAgent on a Linux system using `cron`.
 
 ---
 
-## Approach 1: Using Docker Compose (Recommended)
+## Running the Main Trading Agent
 
-This is the recommended approach as it encapsulates the environment and dependencies within a Docker container, making it more reliable and portable.
+The main trading agent in V1.0 is designed as a **continuous, long-running service**. It is **not** meant to be triggered by a scheduler like `cron` for each trade.
 
-### Prerequisites
-- Docker and Docker Compose are installed.
-- The project is cloned on your Linux machine.
+To run the agent, simply start it once using Docker Compose:
+
+```bash
+# Navigate to the project directory
+cd /path/to/your/SmartCFDTradingAgent_Revolut
+
+# Build the image if you haven't already
+docker compose build
+
+# Start the agent in detached mode
+docker compose up -d
+```
+
+The agent will run in the background, and its internal loop (defined in `docker/runner.py`) will handle the trading frequency based on the `run_interval_seconds` setting in `config.ini`.
+
+## Scheduling Automated Model Retraining
+
+While the main agent runs continuously, `cron` is the perfect tool for scheduling periodic maintenance tasks like retraining the model. The `docker-compose.yml` file includes a dedicated `retrain` service for this purpose.
 
 ### Steps
+
 1.  **Edit your crontab**:
     Open the crontab editor with the command:
     ```bash
@@ -20,78 +36,29 @@ This is the recommended approach as it encapsulates the environment and dependen
     ```
 
 2.  **Add the cron job entry**:
-    To run the trading agent every 15 minutes, add the following line. This command navigates to your project directory and runs the `trader` service defined in `docker-compose.yml`.
+    To run the automated retraining script (e.g., every Sunday at 2:00 AM), add the following line. This command navigates to your project directory and runs the `retrain` service.
 
     ```cron
-    */15 * * * * cd /path/to/your/SmartCFDTradingAgent_Revolut && docker-compose run --rm trader >> /var/log/smartcfd/cron.log 2>&1
+    0 2 * * 0 cd /path/to/your/SmartCFDTradingAgent_Revolut && docker-compose run --rm retrain >> /path/to/your/SmartCFDTradingAgent_Revolut/logs/retraining.log 2>&1
     ```
 
     **Explanation**:
-    - `*/15 * * * *`: Runs the command every 15 minutes.
-    - `cd /path/to/your/SmartCFDTradingAgent_Revolut`: **Absolute path** to your project's root directory.
-    - `docker-compose run --rm trader`: Executes the `trader` service. `docker-compose run` starts a one-off instance of the service. The `--rm` flag automatically removes the container after it exits, which is ideal for scheduled tasks.
-    - `>> /var/log/smartcfd/cron.log 2>&1`: Redirects all output (both standard and error) to a log file. It's good practice to create a dedicated log directory.
+    -   `0 2 * * 0`: Runs the command at 2:00 AM every Sunday.
+    -   `cd /path/to/your/SmartCFDTradingAgent_Revolut`: **Absolute path** to your project's root directory.
+    -   `docker-compose run --rm retrain`: Executes the `retrain` service defined in `docker-compose.yml`. The `--rm` flag automatically removes the container after it exits, which is ideal for scheduled tasks.
+    -   `>> .../logs/retraining.log 2>&1`: Redirects all output (both standard and error) to a log file within your project's `logs` directory for later review.
 
 3.  **Save and Exit**:
-    - If using `nano`, press `Ctrl+X`, then `Y`, then `Enter`.
-    - If using `vim`, press `Esc`, then type `:wq`, then `Enter`.
+    -   If using `nano`, press `Ctrl+X`, then `Y`, then `Enter`.
+    -   If using `vim`, press `Esc`, then type `:wq`, then `Enter`.
 
 4.  **Verify**:
     List your active cron jobs to ensure it's saved:
     ```bash
     crontab -l
     ```
-    After 15 minutes, check the log file:
+    After the scheduled time, you can check the log file for the output of the retraining script:
     ```bash
-    tail -f /var/log/smartcfd/cron.log
+    tail -f /path/to/your/SmartCFDTradingAgent_Revolut/logs/retraining.log
     ```
 
----
-
-## Approach 2: Using a Python Virtual Environment
-
-This approach runs the script directly on the host machine. It requires careful management of the Python environment and dependencies.
-
-### Prerequisites
-- A dedicated Python virtual environment is set up.
-- All dependencies from `requirements.txt` are installed in the virtual environment.
-- Environment variables (e.g., `API_KEY`, `API_SECRET`) are configured.
-
-### Steps
-1.  **Create a Runner Script**:
-    Create a shell script to activate the environment and run the trader. Create `scripts/run_trader.sh`:
-    ```bash
-    #!/bin/bash
-
-    # Navigate to the project's root directory
-    cd /path/to/your/SmartCFDTradingAgent_Revolut
-
-    # Activate your Python virtual environment
-    source /path/to/your/venv/bin/activate
-
-    # Run the trader module
-    python -m smartcfd.trader
-    ```
-    Make the script executable:
-    ```bash
-    chmod +x scripts/run_trader.sh
-    ```
-
-2.  **Set up the Cron Job**:
-    Open the crontab editor (`crontab -e`) and add the following entry to run the script every 15 minutes:
-    ```cron
-    */15 * * * * /path/to/your/SmartCFDTradingAgent_Revolut/scripts/run_trader.sh >> /var/log/smartcfd/cron.log 2>&1
-    ```
-
-### Scheduling Other Scripts
-The same logic applies to other scripts like automated retraining or daily digests.
-
-**Example: Run automated model retraining at 2 AM every Sunday:**
-```cron
-# Using Docker Compose
-0 2 * * 0 cd /path/to/your/SmartCFDTradingAgent_Revolut && docker-compose run --rm retrain >> /var/log/smartcfd/retrain_cron.log 2>&1
-
-# Using Python direct execution (assuming a run_retrain.sh script)
-0 2 * * 0 /path/to/your/SmartCFDTradingAgent_Revolut/scripts/run_retrain.sh >> /var/log/smartcfd/retrain_cron.log 2>&1
-```
-To support this, you would need to add a `retrain` service to your `docker-compose.yml` file that runs `scripts/retrain_model.py`.

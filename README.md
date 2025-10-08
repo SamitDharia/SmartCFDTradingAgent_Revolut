@@ -18,13 +18,13 @@ This project is an automated trading agent designed to analyze market data, gene
 
 ## Project Status
 
-The project is currently in **Phase 3: Production Readiness**. All core features, including the ML model, risk management, and automated operations, are complete. The current focus is on security hardening and preparing for live, real-money deployment with Alpaca.
+**Version 1.0 (Stable):** The project is feature-complete and stable. All core systems, including the ML model, risk management, and automated operations, are fully functional and have been validated in a live paper-trading environment. The agent is now ready for continuous operation and monitoring.
 
 ## Getting Started
 
 ### Prerequisites
 - Python 3.11+
-- Docker and Docker Compose (recommended for ease of use)
+- Docker and Docker Compose
 
 ### Installation & Setup
 
@@ -34,51 +34,48 @@ The project is currently in **Phase 3: Production Readiness**. All core features
     cd SmartCFDTradingAgent_Revolut
     ```
 
-2.  **Environment Variables:**
-    Copy the example environment file and fill in your credentials. This file is git-ignored.
+2.  **Configure Environment:**
+    Create a `.env` file from the example and add your Alpaca API keys and any other required credentials.
     ```bash
-    cp .env.example .env
+    cp config.ini.example config.ini
     ```
-    You will need to set your `APCA_API_KEY_ID` and `APCA_API_SECRET_KEY` for Alpaca, as well as any notification service credentials (e.g., for email). See `.env.example` for a full list of required variables.
+    *Note: The project now uses `config.ini` for credentials.*
 
-3.  **Build and Run with Docker (Recommended):**
-    Using Docker is the easiest way to run the agent, as it handles all dependencies.
+3.  **Build and Run with Docker:**
+    Using Docker is the recommended way to run the agent, as it handles all dependencies and ensures a consistent environment.
     ```bash
-    docker-compose build
-    docker-compose run --rm trader
+    docker-compose up --build -d
     ```
-    This command runs the main trading loop once.
+    This command builds the Docker image and starts the agent in detached mode (running in the background).
 
 ## Usage
 
-The agent can be configured and run in several ways:
+The agent is designed for autonomous operation. Once started, it will run continuously according to the schedule defined in its configuration.
 
-- **Run the Trader:**
-  The primary entry point is `smartcfd/trader.py`, which is configured as the `trader` service in `docker-compose.yml`.
-
-- **Train the Model:**
-  To train the model manually, run the `train_model.py` script:
+- **View Live Logs:**
+  To monitor the agent's activity in real-time, use the following command:
   ```bash
-  docker-compose run --rm python scripts/train_model.py --symbol "BTC/USD" --interval "1h"
+  docker-compose logs --tail 100 -f
   ```
 
-- **Automated Retraining:**
-  The `retrain_model.py` script handles backing up the old model and retraining a new one on a rolling data window.
+- **Stop the Agent:**
+  To stop the agent and shut down the container, run:
   ```bash
-  docker-compose run --rm python scripts/retrain_model.py
+  docker-compose down
   ```
 
-- **Daily Summary:**
-  Generate and send the daily performance digest.
+- **Manual Operations (Training, Backtesting):**
+  While the agent is designed to be autonomous, you can still run manual scripts for maintenance or analysis. See the `scripts/` directory for available tools.
   ```bash
-  docker-compose run --rm python scripts/daily_summary.py
+  # Example: Manually retrain the model
+  docker-compose run --rm app python scripts/retrain_model.py
   ```
 
 ## Automation & Scheduling
 
-The agent is designed for automated, unattended operation. Detailed instructions for scheduling the trading and retraining scripts are available in the `docs` folder:
-- **`docs/linux-scheduling.md`**: Guide for using `cron` on Linux.
-- **`docs/windows-scheduling.md`**: Guide for using `Task Scheduler` on Windows.
+The agent runs on an internal timer (`run_interval_seconds` in the config) and does not require external scheduling tools like `cron` or Windows Task Scheduler when run via Docker. For more advanced scheduling scenarios, see the documentation:
+- **`docs/linux-scheduling.md`**
+- **`docs/windows-scheduling.md`**
 
 ## Project Structure
 

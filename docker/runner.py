@@ -98,11 +98,9 @@ def main():
         "runner.start",
         extra={
             "extra": {
-                "tz": app_cfg.timezone,
-                "env": app_cfg.alpaca_env,
-                "api_base": api_base,
-                "timeout": app_cfg.api_timeout_seconds,
+                "run_interval_seconds": app_cfg.run_interval_seconds,
                 "strategy": strategy_name,
+                "watch_list": app_cfg.watch_list,
             }
         },
     )
@@ -112,35 +110,37 @@ def main():
 
     while running:
         try:
-            # The main trading logic is now wrapped in a try/except block
-            # to handle potential API errors gracefully.
-            if conn:
-                # We can't easily measure latency here, so we'll record a placeholder
-                record_heartbeat(conn, run_id, -1, "ok", 200)
-            
-            # Run the trading loop
+            # Record a heartbeat to show the runner is alive
+            if conn and run_id:
+                record_heartbeat(conn, run_id, "runner")
+
             trader.run()
-            backoff_seconds = 1.0  # Reset backoff on success
 
         except Exception as e:
-            log.warning("runner.loop.fail", extra={"extra": {"error": repr(e)}})
-            if conn:
-                record_heartbeat(conn, run_id, -1, "error", 500)
-            
-            # Exponential backoff with jitter
-            sleep_time = backoff_seconds + (os.urandom(1)[0] / 255.0)
-            log.info(f"runner.backoff", extra={"extra": {"sleep_time": sleep_time}})
-            time.sleep(sleep_time)
-            backoff_seconds = min(backoff_seconds * 2, network_max_backoff)
+            log.error("runner.loop.fail", exc_info=True)
+        
+        # Use a variable for sleep time to allow for future dynamic adjustments
+        sleep_duration = app_cfg.run_interval_seconds
+        
+        # to allow the shutdown signal to be caught more quickly.
+        for _ in range(int(sleep_duration)):
+            if not running:
+                break
+            time.sleep(1)
 
-        # Sleep for the configured interval
-        log.info(f"runner.sleep", extra={"extra": {"interval": app_cfg.run_interval_seconds}})
-        time.sleep(app_cfg.run_interval_seconds)
-
-    log.info("runner.exit")
+    # --- Shutdown sequence ---
+    log.info("runner.shutdown.start")
+    if conn and run_id:
+        record_run(conn, run_id, "end", "shutdown signal received")
     if conn:
-        record_run(conn, run_id, status="stop", note="runner")
         conn.close()
+    log.info("runner.shutdown.complete")
+
 
 if __name__ == "__main__":
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
     main()

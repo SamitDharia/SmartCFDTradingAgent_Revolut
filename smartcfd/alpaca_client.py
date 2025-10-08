@@ -34,7 +34,6 @@ class AlpacaBroker(Broker):
 
     def get_account_info(self) -> Any:
         """Retrieves account information from the broker."""
-        log.debug("Fetching Alpaca account info.")
         try:
             account = self.trading_client.get_account()
             log.info(f"Successfully fetched account info for account {account.account_number}.")
@@ -45,7 +44,6 @@ class AlpacaBroker(Broker):
 
     def list_positions(self) -> List[Any]:
         """Retrieves a list of current positions from the broker."""
-        log.debug("Fetching Alpaca positions.")
         try:
             positions = self.trading_client.get_all_positions()
             log.info(f"Successfully fetched {len(positions)} open positions.")
@@ -56,7 +54,6 @@ class AlpacaBroker(Broker):
 
     def get_orders(self, status: str = 'open') -> List[Any]:
         """Retrieves a list of orders from the broker."""
-        log.debug(f"Fetching Alpaca orders with status: {status}")
         try:
             if status == 'open':
                 order_status = QueryOrderStatus.OPEN
@@ -73,7 +70,6 @@ class AlpacaBroker(Broker):
 
     def submit_order(self, symbol: str, qty: float, side: str, order_type: str, time_in_force: str) -> Any:
         """Submits an order to the broker."""
-        log.info(f"Submitting order: {side} {qty} {symbol} ({order_type}, {time_in_force})")
         try:
             market_order_data = MarketOrderRequest(
                 symbol=symbol,
@@ -90,7 +86,6 @@ class AlpacaBroker(Broker):
 
     def close_position(self, symbol: str) -> Any:
         """Closes an open position for a given symbol."""
-        log.info(f"Closing position for {symbol}.")
         try:
             # The SDK's close_position can return a list of orders or a single order
             # depending on the version and context. We'll handle both.

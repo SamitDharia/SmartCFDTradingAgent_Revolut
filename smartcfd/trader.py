@@ -32,16 +32,11 @@ class Trader:
         """
         watch_list = self.app_config.watch_list.split(',')
         interval = self.app_config.trade_interval
-        log.info(
-            "trader.run.start",
-            extra={"extra": {"watch_list": watch_list, "interval": interval}},
-        )
         try:
             # 1. Reconcile portfolio state with the broker
             self.portfolio_manager.reconcile()
 
             # 2. First Pass: Evaluate strategy to get historical data for regime detection and risk checks
-            log.info("trader.run.evaluating_strategy_data_pass")
             actions, historical_data = self.strategy.evaluate(
                 self.portfolio_manager, 
                 watch_list,
@@ -55,19 +50,16 @@ class Trader:
 
             # 3. Check for global halt conditions (e.g., max drawdown, high volatility)
             halted = self.risk_manager.check_for_halt(historical_data, interval)
-            log.info("trader.run.risk_check", extra={"extra": {"halted": halted, "reason": self.risk_manager.halt_reason}})
             if halted:
                 log.critical("trader.run.halted", extra={"extra": {"reason": self.risk_manager.halt_reason}})
                 return
 
             # 4. Detect market regime for each symbol
             market_regimes = {}
-            log.info("trader.run.detecting_regimes", extra={"extra": {"symbols": list(historical_data.keys())}})
             for symbol, data in historical_data.items():
                 if not data.empty:
                     regime = self.regime_detector.detect_regime(data)
                     market_regimes[symbol] = regime
-                    log.info("trader.run.regime_detected", extra={"extra": {"symbol": symbol, "regime": regime.value}})
                 else:
                     log.warning("trader.run.no_data_for_regime_detection", extra={"extra": {"symbol": symbol}})
 
@@ -77,7 +69,6 @@ class Trader:
                 return
 
             # 5. Second Pass: Re-evaluate strategy with regime context to get final actions
-            log.info("trader.run.evaluating_strategy_with_regime", extra={"extra": {"regimes": {s: r.value for s, r in market_regimes.items()}}})
             actions, _ = self.strategy.evaluate( # We already have the data
                 self.portfolio_manager, 
                 watch_list, 
@@ -87,7 +78,6 @@ class Trader:
 
             # 6. Execute actions
             self.execute_actions(actions, historical_data)
-            log.info("trader.run.end")
         except Exception:
             log.error("trader.run.fail", exc_info=True)
 
@@ -99,12 +89,7 @@ class Trader:
             log.info("trader.execute_actions.no_actions")
             return
 
-        log.info(
-            "trader.execute_actions.processing_actions",
-            extra={"extra": {"action_count": len(actions)}},
-        )
         for action in actions:
-            log.info("trader.execute_actions.processing", extra={"extra": {"action": action}})
             action_type = action.get("action")
             symbol = action.get("symbol")
 
@@ -136,13 +121,11 @@ class Trader:
             if signal == "buy":
                 if current_position and current_position.side == "short":
                     # Close the short position before opening a long one
-                    log.info("trader.execute_order.close_short_open_long", extra={"extra": {"symbol": symbol}})
                     self.broker.close_position(symbol)
                     current_position = None # Position is now closed
 
                 # Proceed if no position exists or if we are adding to a long position
                 if not current_position or current_position.side == "long":
-                    log.info("trader.execute_order.open_or_add_long", extra={"extra": {"symbol": symbol}})
                     qty, current_price = self.risk_manager.calculate_order_qty(symbol, "buy", historical_data)
                     if qty > 0:
                         order_request = self.risk_manager.generate_bracket_order(
@@ -154,13 +137,11 @@ class Trader:
             elif signal == "sell":
                 if current_position and current_position.side == "long":
                     # Close the long position before opening a short one
-                    log.info("trader.execute_order.close_long_open_short", extra={"extra": {"symbol": symbol}})
                     self.broker.close_position(symbol)
                     current_position = None # Position is now closed
 
                 # Proceed if no position exists or if we are adding to a short position
                 if not current_position or current_position.side == "short":
-                    log.info("trader.execute_order.open_or_add_short", extra={"extra": {"symbol": symbol}})
                     qty, current_price = self.risk_manager.calculate_order_qty(symbol, "sell", historical_data)
                     if qty > 0:
                         order_request = self.risk_manager.generate_bracket_order(

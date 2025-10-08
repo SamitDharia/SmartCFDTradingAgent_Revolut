@@ -1,34 +1,39 @@
 
-## Data Integrity Checks
+## Data Integrity & Validation
 
-To enhance the robustness of the trading agent, a series of data integrity checks have been implemented in `smartcfd/data_loader.py`. These checks run every time the `InferenceStrategy` evaluates market data, ensuring that the model only makes predictions based on data that is timely, complete, and sensible.
+To ensure the trading agent operates on reliable and accurate information, a multi-layered data integrity and validation process is implemented in `smartcfd/data_loader.py`. These checks are performed every time market data is fetched, preventing the model from making predictions based on faulty data.
 
-If any of these checks fail, the strategy will halt the trade evaluation for that cycle and log a "hold" decision with a specific reason, preventing orders based on faulty data.
+### Data Loading Process (`get_market_data`)
+
+The data loading process was significantly enhanced to improve stability and accuracy:
+
+1.  **Historical + Snapshot Fetching**: Instead of relying solely on historical bar data, which can provide incomplete bars for the current time interval, the system now fetches a larger set of historical bars and combines it with the latest **snapshot data** from the `get_crypto_snapshot` endpoint.
+2.  **Data Combination**: The snapshot's bar data (e.g., `minute_bar`) is used to update or replace the most recent historical bar. This ensures the latest data is always complete and accurate up to the last full minute.
+3.  **Anomaly Removal**: The combined data is then passed through a cleaning function (`remove_zero_volume_anomalies`) to handle specific data quality issues.
+4.  **Validation Checks**: Finally, the cleaned data is subjected to a series of validation checks before being returned to the strategy.
 
 ### Implemented Checks
 
-1.  **`is_data_stale(df, max_staleness_minutes)`**
+1.  **Zero Volume Anomaly (`remove_zero_volume_anomalies`)**
+    *   **Purpose:** To handle bars that show price movement (`high` != `low`) but have zero `volume`. This is a logical impossibility and a common indicator of bad data from an exchange.
+    *   **Logic:** The function identifies these anomalous bars.
+    *   **Action:** Initially, this function removed the bad data. However, during debugging, it was found that removing this data could lead to insufficient data for downstream processes (like the `RegimeDetector`). The function was modified to **log a warning** about the anomaly but **keep the data** to ensure system stability.
+
+2.  **Data Gap Check (`has_data_gaps`)**
+    *   **Purpose:** To detect missing bars in the time-series data.
+    *   **Logic:** It reconstructs the expected timeline of timestamps based on the data's start/end times and the known frequency (e.g., every 15 minutes). It then checks if any expected timestamps are missing.
+    *   **Tolerance:** To prevent failures from minor, temporary data provider issues, a `tolerance` parameter was introduced. The check now only fails if the percentage of missing data exceeds this tolerance (e.g., 10%).
+
+3.  **Staleness Check (`is_data_stale`)**
     *   **Purpose:** To ensure the market data is recent.
     *   **Logic:** It compares the timestamp of the latest data point against the current UTC time. If the difference exceeds a configurable threshold (`max_data_staleness_minutes`), the data is considered stale.
-    *   **Reason Code:** `data_stale`
 
-2.  **`has_data_gaps(df, expected_interval)`**
-    *   **Purpose:** To detect missing bars in the time-series data.
-    *   **Logic:** It reconstructs the expected timeline of timestamps based on the start and end times of the data and the known frequency (e.g., every 15 minutes). It then checks if any expected timestamps are missing from the actual data.
-    *   **Reason Code:** `data_gaps_detected`
-
-3.  **`has_anomalous_data(df, anomaly_threshold)`**
+4.  **Anomalous Value Check (`has_anomalous_data`)**
     *   **Purpose:** To check for obviously incorrect or suspicious data values.
     *   **Logic:** It scans the data for several types of anomalies:
-        *   **Empty Data:** Fails if the DataFrame is empty.
-        *   **Zero or Negative Prices:** Fails if any value in the `open`, `high`, `low`, or `close` columns is zero or less.
-        *   **Zero Volume with Price Movement:** Fails if a bar has a `volume` of 0 but the `high` and `low` prices are different, which is a logical impossibility.
-        *   **Price Spikes:** Fails if the range (`high` - `low`) of the most recent bar is drastically larger (e.g., 5x) than the average range of the preceding bars. This acts as a simple "flash crash" or data error detector.
-    *   **Reason Code:** `anomalous_data_detected`
+        *   Empty DataFrames.
+        *   Zero or negative prices in OHLC columns.
+        *   Sudden price spikes where the most recent bar's range is drastically larger than the recent average.
 
-### Configuration
-
-The behavior of these checks can be configured via `configs/*.yml` files or environment variables:
--   **Staleness:** The `max_data_staleness_minutes` parameter controls the time window for the staleness check.
--   **Anomaly Threshold:** The `anomaly_threshold` parameter controls the sensitivity of the price spike detection (default is 5.0).
+If any of these validation checks fail, the data for that symbol is invalidated for the current trading cycle, preventing the model from acting on it.
 

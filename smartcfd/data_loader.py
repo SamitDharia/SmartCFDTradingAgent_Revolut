@@ -58,7 +58,6 @@ class DataLoader:
         """
         Fetches historical crypto data for a single symbol between two dates.
         """
-        log.info(f"Fetching historical data for {symbol} from {start_date} to {end_date}")
         try:
             timeframe = parse_interval(interval)
             request = CryptoBarsRequest(
@@ -81,7 +80,6 @@ class DataLoader:
                 else:
                     pass # Assume single-symbol response
 
-            log.info(f"Successfully fetched {len(df)} bars for {symbol}")
             return df
         except Exception as e:
             log.error(f"Failed to fetch historical data for {symbol}: {e}", exc_info=True)
@@ -181,7 +179,6 @@ def fetch_data(symbol: str, timeframe: TimeFrame, start_date: str, end_date: str
     """
     Fetches historical crypto data for a single symbol between two dates.
     """
-    log.info(f"Fetching data for {symbol} from {start_date} to {end_date}")
     client = CryptoHistoricalDataClient()
     # HACK: Disable SSL verification for corporate proxies.
     client._session.verify = False
@@ -208,7 +205,6 @@ def fetch_data(symbol: str, timeframe: TimeFrame, start_date: str, end_date: str
                 # If there's no symbol index, we assume it's a single-symbol response
                 pass
 
-        log.info(f"Successfully fetched {len(df)} bars for {symbol}")
         return df
     except Exception as e:
         log.error(f"Failed to fetch data for {symbol}: {e}", exc_info=True)

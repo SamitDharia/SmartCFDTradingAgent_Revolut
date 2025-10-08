@@ -41,8 +41,6 @@ class RegimeDetector:
         :param historical_data: A DataFrame with 'High', 'Low', and 'Close' columns.
         :return: The detected MarketRegime.
         """
-        log.info("regime_detector.detect_regime.start")
-        
         if historical_data is None or len(historical_data) < self.long_window:
             log.warning(
                 "regime_detector.detect_regime.insufficient_data",
@@ -63,17 +61,6 @@ class RegimeDetector:
             threshold = long_atr * self.threshold_multiplier
             current_regime = MarketRegime.HIGH_VOLATILITY if short_atr > threshold else MarketRegime.LOW_VOLATILITY
 
-            log.info(
-                "regime_detector.detect_regime.result",
-                extra={
-                    "extra": {
-                        "regime": current_regime.value,
-                        "short_atr": short_atr,
-                        "long_atr": long_atr,
-                        "threshold": threshold,
-                    }
-                },
-            )
             return current_regime
 
         except Exception:

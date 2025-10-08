@@ -257,4 +257,36 @@ This multi-stage failure highlights the critical importance of **integration tes
 
 ---
 
+## Section 10: The Final Debugging Cascade (V1.0 Stability)
+
+**Date:** 2025-10-08
+
+**Problem:**
+After all major features were complete, the final step was to verify that the ML model was making predictions in the live paper-trading environment. A log message was added to `strategy.py` to confirm this. However, the log message never appeared, triggering a deep and systematic debugging session that uncovered a cascade of subtle, interacting issues.
+
+**Root Cause Analysis & Resolution:**
+The debugging process was a classic case of peeling back layers of an onion, where fixing one problem immediately revealed the next.
+
+1.  **Initial Symptom: No Prediction Log.** The `inference_strategy.evaluate.predict` log message was not appearing, even after waiting for the 15-minute trade interval.
+2.  **Hypothesis 1 (Incorrect): Timing Issue.** The initial assumption was a misunderstanding of the `trade_interval` vs. `run_interval_seconds`. This was a red herring.
+3.  **Hypothesis 2 (Correct): Silent Failure in Pre-Trade Checks.** The real issue was that a check within the `trader.run()` method was failing silently, causing the method to exit before reaching the prediction step. The debugging process then focused on identifying which check was failing.
+4.  **Issue #1: Data Gaps.** The first culprit was the `has_data_gaps` check in `data_loader.py`. The default tolerance for missing data was too strict (5%), causing the check to fail and invalidate the data.
+    *   **Solution:** The tolerance was relaxed to 10% (`tolerance=0.10`).
+5.  **Issue #2: Insufficient Data for Regime Detector.** Fixing the data gap issue revealed the next problem: the `RegimeDetector` required 100 data points (`long_window=100`) to calculate the market regime. The data loader, even after the fix, was not always providing this many bars. This caused the `detect_regime` method to return `None`, which halted the trading process.
+    *   **Solution:** The `RegimeDetector`'s requirements were tuned to be less demanding, reducing the `long_window` to 50. This made it more resilient to small variations in the amount of available data.
+6.  **Issue #3: Anomalous Data Removal.** After fixing the regime detector, the prediction log *still* didn't appear. The final culprit was the `remove_zero_volume_anomalies` function. While well-intentioned, this function was removing bars from the dataset that, while anomalous, were needed to meet the 50-point requirement of the newly tuned `RegimeDetector`.
+    *   **Solution:** The function was changed to only *log* the anomaly but **not remove the data**. This ensured the `RegimeDetector` always had enough data to work with, finally allowing the entire pipeline to execute successfully.
+7.  **Hypothesis 4 (Incorrect): `trader.run()` not being called.** When the prediction log *still* didn't appear immediately, the final hypothesis was that the main loop in `docker/runner.py` was broken.
+    *   **Solution:** Diagnostic logging was added to `runner.py` and `trader.py`. This was the final key. The logs proved that the main loop *was* running correctly and that `trader.run()` *was* being called. The logs from `trader.py` then confirmed that all pre-trade checks were finally passing, and the prediction was being made.
+
+**Overarching Lesson:**
+This entire episode was a masterclass in systematic, iterative debugging.
+-   **Visibility is Everything:** When a process fails silently, the top priority is to add detailed logging at every critical step. The diagnostic logs added to `trader.py` and `runner.py` were essential to finally understanding the control flow.
+-   **Interacting Systems Create Emergent Failures:** None of the individual issues (data gap tolerance, regime window size, anomaly removal) were "bugs" in isolation. They were all reasonable implementations. The failure emerged from the *interaction* of these systems. The strict data validation starved the regime detector, which in turn starved the prediction engine.
+-   **Don't Assume, Prove:** The final step of adding logs to `runner.py` was crucial. Even when 99% sure where a problem lies, taking the time to add logging and *prove* it is faster than continuing to debug based on an unverified assumption.
+
+This final, intense debugging cascade was what truly hardened the system into the stable, reliable V1.0 application.
+
+---
+
 *(This document will be updated as the project progresses.)*

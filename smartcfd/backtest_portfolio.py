@@ -41,7 +41,6 @@ class BacktestPortfolio:
                 return False
             self.cash -= cost
             self.positions[symbol] = self.positions.get(symbol, 0) + qty
-            log.info(f"Executed BUY of {qty} {symbol} @ {price:.2f}. Cash: {self.cash:.2f}")
         elif side == 'sell':
             current_qty = self.positions.get(symbol, 0)
             if qty > current_qty:
@@ -51,7 +50,6 @@ class BacktestPortfolio:
             self.positions[symbol] -= qty
             if self.positions[symbol] == 0:
                 del self.positions[symbol]
-            log.info(f"Executed SELL of {qty} {symbol} @ {price:.2f}. Cash: {self.cash:.2f}")
         else:
             log.error(f"Unknown order side: {side}")
             return False

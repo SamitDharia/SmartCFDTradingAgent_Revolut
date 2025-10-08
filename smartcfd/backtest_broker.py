@@ -50,7 +50,6 @@ class MockBroker(Broker):
             created_at=datetime.utcnow()
         )
         self.orders.append(order)
-        log.info(f"Simulating order submission: {order}")
 
         self.trade_count += 1
         self.trade_history.append({
@@ -122,6 +121,5 @@ class MockBroker(Broker):
         order = self.get_order(order_id)
         if order and order.status == 'open':
             order.status = 'canceled'
-            log.info(f"Simulating order cancellation for order ID: {order_id}")
             return True
         return False

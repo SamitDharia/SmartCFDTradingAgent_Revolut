@@ -126,7 +126,6 @@ class InferenceStrategy(Strategy):
             log.error(f"inference_strategy.load_model.not_found path='{model_path}'")
             return None
         try:
-            log.info(f"inference_strategy.load_model.start path='{model_path}'")
             model = joblib.load(model_path)
             log.info("inference_strategy.load_model.success")
             return model
@@ -145,7 +144,6 @@ class InferenceStrategy(Strategy):
         
         # If market_regimes is None, it's a data-gathering pass.
         if market_regimes is None:
-            log.info("inference_strategy.evaluate.data_gathering_pass")
             # If historical_data is not provided, fetch it.
             if historical_data is None:
                 historical_data = self.data_loader.get_market_data(
@@ -163,7 +161,6 @@ class InferenceStrategy(Strategy):
 
         # If historical_data was passed, use it; otherwise, fetch it.
         if historical_data is None:
-            log.info("inference_strategy.evaluate.fetching_data")
             historical_data = self.data_loader.get_market_data(
                 symbols=watch_list,
                 interval=self.config.trade_interval,
