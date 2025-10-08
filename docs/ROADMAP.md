@@ -56,7 +56,7 @@ This phase introduced sophisticated trading logic and hardened the system for st
 
 ---
 
-### Phase 5: Pre-Deployment Validation & Live Operations (Next Steps)
+### Phase 5: Pre-Deployment Validation & Live Operations (Version 1.0 Focus)
 
 This phase focuses on final validation, deploying the agent to a live environment, and continuously improving its capabilities.
 
@@ -64,14 +64,15 @@ This phase focuses on final validation, deploying the agent to a live environmen
 - [ ] **Data Feed Redundancy & Health**: Decouple data from execution. Integrate a primary, exchange-native data feed (e.g., Kraken, Coinbase) and use Alpaca as a fallback and for order execution. Implement a "data-health gate" to validate data quality in real-time and backfill gaps.
 - [ ] **Enhanced Monitoring and Alerting**: Implement a more sophisticated monitoring solution (e.g., Prometheus/Grafana) and set up alerts for critical events.
 - [ ] **Cloud Deployment & CI/CD**: Deploy the agent to a cloud environment (e.g., AWS, GCP) and establish a continuous integration and deployment pipeline.
-- [ ] **Advanced Data Integration**: Research and integrate non-price-based data sources (e.g., news sentiment, on-chain metrics) to improve model performance.
 - [ ] **Live Trading**: After extensive testing and validation in the paper environment, transition the agent to live trading with real capital.
 
 ---
 
-### Phase 6: Autonomous Intelligence & Elite Performance (Future Vision)
+### Version 2.0: Advanced Capabilities (Future Vision)
 
-This phase represents the long-term vision for evolving the agent into a top-tier, self-adapting system.
+This version will build upon the stable foundation of Version 1.0, introducing more sophisticated and autonomous features.
+
+#### Phase 6: Autonomous Intelligence & Elite Performance
 
 - [ ] **Advanced Backtesting with Risk-Adjusted Metrics**: Enhance the backtesting engine to optimize for risk-adjusted returns by incorporating metrics like the **Sortino Ratio** and **Calmar Ratio**.
 - [ ] **Dynamic Model & Strategy Switching**: Implement a master-model that dynamically selects the most appropriate underlying ML model or trading strategy (e.g., momentum, mean-reversion) based on the current detected market regime.
@@ -81,11 +82,7 @@ This phase represents the long-term vision for evolving the agent into a top-tie
 - [ ] **Reinforcement Learning (RL) Core**: As the ultimate evolution, research and implement a Reinforcement Learning agent that learns an optimal trading policy directly from market interaction, moving beyond simple prediction to holistic decision-making.
 - [ ] **Formal Quantitative Modeling & Alpha Research**: Transition from a pure ML-based approach to a hybrid quant model. Systematically research, test, and validate specific "alpha factors" (e.g., momentum, mean-reversion, value). Develop a factor-based model that can weigh these different signals, providing a more robust and explainable foundation for trading decisions than a black-box model alone.
 
----
-
-### Phase 7: Continuous Reflection & Research (Ongoing)
-
-This phase is an ongoing commitment to learning, adaptation, and staying at the forefront of technology and quantitative finance.
+#### Phase 7: Continuous Reflection & Research
 
 - [ ] **Post-Mortem Analysis**: After significant wins or losses, conduct detailed post-mortem analyses to understand the root causes. Was it the model, the strategy, the data, or an external event?
 - [ ] **Academic & Industry Research**: Dedicate time to reading and implementing findings from the latest academic papers and industry research in quantitative finance, machine learning, and market microstructure.

@@ -54,20 +54,30 @@ class Trader:
                 return
 
             # 3. Check for global halt conditions (e.g., max drawdown, high volatility)
-            if self.risk_manager.check_for_halt(historical_data, interval):
+            halted = self.risk_manager.check_for_halt(historical_data, interval)
+            log.info("trader.run.risk_check", extra={"extra": {"halted": halted, "reason": self.risk_manager.halt_reason}})
+            if halted:
                 log.critical("trader.run.halted", extra={"extra": {"reason": self.risk_manager.halt_reason}})
                 return
 
             # 4. Detect market regime for each symbol
             market_regimes = {}
+            log.info("trader.run.detecting_regimes", extra={"extra": {"symbols": list(historical_data.keys())}})
             for symbol, data in historical_data.items():
                 if not data.empty:
                     regime = self.regime_detector.detect_regime(data)
                     market_regimes[symbol] = regime
                     log.info("trader.run.regime_detected", extra={"extra": {"symbol": symbol, "regime": regime.value}})
+                else:
+                    log.warning("trader.run.no_data_for_regime_detection", extra={"extra": {"symbol": symbol}})
+
+            # If no regimes were detected, we cannot proceed with the strategy.
+            if not market_regimes:
+                log.warning("trader.run.no_regimes_detected")
+                return
 
             # 5. Second Pass: Re-evaluate strategy with regime context to get final actions
-            log.info("trader.run.evaluating_strategy_with_regime")
+            log.info("trader.run.evaluating_strategy_with_regime", extra={"extra": {"regimes": {s: r.value for s, r in market_regimes.items()}}})
             actions, _ = self.strategy.evaluate( # We already have the data
                 self.portfolio_manager, 
                 watch_list, 
