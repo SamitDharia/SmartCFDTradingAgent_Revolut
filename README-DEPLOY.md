@@ -1,1 +1,0 @@
-This document has been moved to the `docs` directory. Please refer to `docs/README-DEPLOY.md`.

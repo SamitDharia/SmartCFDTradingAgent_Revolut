@@ -40,13 +40,13 @@ This project is an autonomous trading agent that uses machine learning to analyz
     -   **Data Integrity Monitoring:** Robust checks for data gaps, stale data, and anomalies (zero volume, price spikes) to prevent trading on bad data.
     -   **Deployment & Scheduling:** Clear documentation for scheduling tasks on both Windows and Linux.
 
-### Phase 3: Production Readiness & Expansion
-*   **Centralized State Management:** Architected a `PortfolioManager` to act as a single source of truth for all account data, eliminating redundant API calls and ensuring data consistency across all components.
-*   **Comprehensive Testing & Validation:** Repaired and enhanced the entire test suite after major refactoring. Completed a rigorous, iterative debugging process to stabilize the Docker container, resolving a cascade of startup errors related to configuration, dependencies, and state management.
-*   **Multi-Asset & Regime Detection:** Expanded the core logic to handle multiple assets concurrently and to detect changes in market volatility, laying the groundwork for more dynamic strategies.
+### Phase 3: Core Engine & Foundations
+*   **Comprehensive Pipelines:** Built and validated end-to-end pipelines for automated model retraining, feature engineering, and hyperparameter tuning.
+*   **Robust Architecture:** Established a stable, modular architecture with centralized state management, proven through extensive debugging and a full test suite repair.
+*   **Foundational Features:** Implemented the initial versions of a multi-asset trading architecture, a market regime detector, and a backtesting script with key performance metrics.
 
-## Current Phase: Strategic Improvement & Validation
-The project is now focused on building a robust backtesting engine to rapidly validate new ideas and on enhancing the model's predictive power through advanced feature engineering.
+## Current Phase: Advanced Intelligence & Risk Management
+The project has successfully implemented a sophisticated, multi-layered strategy that incorporates not only predictive modeling but also adapts to real-time market conditions. The agent now uses a `RegimeDetector` to identify market volatility and a correlation matrix to avoid concentrated risk, making it a truly intelligent system. All trades are protected by dynamic, ATR-based stop-losses.
 
 ## Your Role: Project Lead & Strategist
 As the driving force behind the project, your role has been to:

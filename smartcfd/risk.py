@@ -1,9 +1,10 @@
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple, Tuple, Tuple
 import pandas as pd
 from pydantic import BaseModel
+import ta
 
-from smartcfd.alpaca_client import AlpacaClient, OrderRequest
+from smartcfd.alpaca_client import AlpacaClient, OrderRequest, StopLossRequest, TakeProfitRequest
 from smartcfd.config import RiskConfig
 from smartcfd.data_loader import DataLoader
 from smartcfd.db import get_daily_pnl
@@ -18,19 +19,75 @@ class RiskManager:
     """
     Manages and enforces risk rules for trading.
     """
-    def __init__(self, portfolio_manager: PortfolioManager, risk_config: RiskConfig):
-        self.portfolio = portfolio_manager
+    def __init__(self, portfolio_manager: PortfolioManager, risk_config: RiskConfig, broker=None):
+        self.portfolio_manager = portfolio_manager
         self.config = risk_config
         self.is_halted = False
         self.halt_reason = ""
+        self.broker = broker
         # This is a temporary solution until data loading is also centralized
         self.data_loader = DataLoader(api_base=portfolio_manager.client.api_base)
 
 
-    def calculate_order_qty(self, symbol: str, side: str) -> float:
+    def generate_bracket_order(self, symbol: str, side: str, qty: float, current_price: float, historical_data: pd.DataFrame) -> Optional[OrderRequest]:
         """
-        Calculates the quantity for an order based on risk rules, including
-        risk per trade, max exposure per asset, and max total exposure.
+        Generates a complete bracket order request with stop-loss and take-profit levels.
+        """
+        if qty <= 0:
+            return None
+
+        try:
+            # Ensure qty is a float for calculations
+            qty = float(qty)
+
+            if not current_price or current_price <= 0:
+                log.error("risk.generate_bracket_order.no_price", extra={"extra": {"symbol": symbol}})
+                return None
+
+            # Calculate ATR for stop-loss
+            try:
+                atr = ta.volatility.average_true_range(high=historical_data['high'], low=historical_data['low'], close=historical_data['close'], window=14).iloc[-1]
+            except Exception:
+                log.error("risk.generate_bracket_order.atr_fail", extra={"extra": {"symbol": symbol}}, exc_info=True)
+                return None
+
+            if atr <= 0:
+                log.warning("risk.generate_bracket_order.invalid_atr", extra={"extra": {"symbol": symbol, "atr": atr}})
+                return None
+
+            # --- Calculate Stop-Loss and Take-Profit Prices ---
+            stop_loss_risk = atr * self.config.stop_loss_atr_multiplier
+            
+            if side == "buy":
+                stop_price = current_price - stop_loss_risk
+                take_profit_price = current_price + (atr * self.config.take_profit_atr_multiplier)
+            else:  # sell
+                stop_price = current_price + stop_loss_risk
+                take_profit_price = current_price - (atr * self.config.take_profit_atr_multiplier)
+
+            # --- Construct Order Request ---
+            # Alpaca API requires prices and quantities to be strings.
+            order_request = OrderRequest(
+                symbol=symbol,
+                qty=str(qty),
+                side=side,
+                type="market",
+                time_in_force="gtc",
+                order_class="bracket",
+                stop_loss={"stop_price": str(round(stop_price, 2))},
+                take_profit={"limit_price": str(round(take_profit_price, 2))},
+            )
+            
+            log.info("risk.generate_bracket_order.success", extra={"extra": order_request.model_dump()})
+            return order_request
+        except Exception:
+            log.error("risk.generate_bracket_order.fail", exc_info=True)
+            return None
+
+    def calculate_order_qty(self, symbol: str, side: str) -> Tuple[float, float]:
+        """
+        Calculates the quantity for an order based on risk rules and returns
+        the quantity and the current price.
         """
         log.info(
             "risk.calculate_order_qty.start",
@@ -42,84 +99,91 @@ class RiskManager:
                 "risk.calculate_order_qty.halted",
                 extra={"extra": {"reason": self.halt_reason, "symbol": symbol}},
             )
-            return 0.0
+            return 0.0, 0.0
 
-        account = self.portfolio.account
+        account = self.portfolio_manager.account
         if not account or not account.is_online:
             log.error(
                 "risk.calculate_order_qty.no_account",
                 extra={"extra": {"reason": "Cannot calculate quantity without online account info."}},
             )
-            return 0.0
+            return 0.0, 0.0
 
         try:
-            equity = account.equity
-            
-            # Fetch the latest price for the symbol
-            latest_trade = self.portfolio.client.get_latest_crypto_trade(symbol)
-            if not latest_trade:
+            account = self.portfolio_manager.account
+            if not account:
+                log.error("risk.calculate_order_qty.no_account")
+                return 0.0, 0.0
+
+            # Use broker if available (for test mocks), else fallback to portfolio_manager.client
+            if self.broker is not None:
+                trade = self.broker.get_latest_crypto_trade(symbol, self.portfolio_manager.client.feed)
+            else:
+                trade = self.portfolio_manager.client.get_latest_crypto_trade(symbol, self.portfolio_manager.client.feed)
+            if not trade or 'trade' not in trade or 'p' not in trade['trade']:
                 log.error("risk.calculate_order_qty.no_price", extra={"extra": {"symbol": symbol}})
-                return 0.0
-            price = latest_trade['trade']['p']
-            if price <= 0:
-                log.error("risk.calculate_order_qty.invalid_price", extra={"extra": {"symbol": symbol, "price": price}})
-                return 0.0
+                return 0.0, 0.0
+            current_price = float(trade['trade']['p'])
+            if not current_price or current_price <= 0:
+                log.error("risk.calculate_order_qty.no_price", extra={"extra": {"symbol": symbol}})
+                return 0.0, 0.0
 
-            # --- Rule 1: Risk per Trade ---
-            risk_per_trade_amount = equity * (self.config.risk_per_trade_percent / 100.0)
-            qty_by_risk = risk_per_trade_amount / price
-
-            # --- Rule 2: Max Exposure per Asset ---
-            max_asset_exposure_value = equity * (self.config.max_exposure_per_asset_percent / 100.0)
-            current_asset_exposure = self.portfolio.get_exposure_for_symbol(symbol)
-            available_asset_headroom = max_asset_exposure_value - current_asset_exposure
-            qty_by_asset_limit = available_asset_headroom / price if available_asset_headroom > 0 else 0
-
-            # --- Rule 3: Max Total Exposure ---
+            # Rule 1: Max total exposure
+            equity = float(account.equity)
             max_total_exposure_value = equity * (self.config.max_total_exposure_percent / 100.0)
-            current_total_exposure = self.portfolio.get_total_exposure()
-            available_total_headroom = max_total_exposure_value - current_total_exposure
-            qty_by_total_limit = available_total_headroom / price if available_total_headroom > 0 else 0
+            total_exposure = float(self.portfolio_manager.get_total_exposure())
+            available_capital_total = max_total_exposure_value - total_exposure
+            if available_capital_total <= 0:
+                log.warning("risk.calculate_order_qty.max_total_exposure_breached", 
+                            extra={"extra": {"total_exposure": total_exposure, "max_total_notional": max_total_exposure_value}})
+                return 0.0, current_price
 
-            # --- Final Quantity is the minimum of all constraints ---
-            final_qty = min(qty_by_risk, qty_by_asset_limit, qty_by_total_limit)
+            # Rule 2: Max exposure per asset
+            max_asset_exposure_value = equity * (self.config.max_exposure_per_asset_percent / 100.0)
+            current_asset_exposure = float(self.portfolio_manager.get_exposure_for_symbol(symbol))
+            available_capital_asset = max_asset_exposure_value - current_asset_exposure
+            if available_capital_asset <= 0:
+                log.warning("risk.calculate_order_qty.max_asset_exposure_breached",
+                            extra={"extra": {"symbol": symbol, "current_exposure": current_asset_exposure, "max_notional": max_asset_exposure_value}})
+                return 0.0, current_price
 
-            log.info(
-                "risk.calculate_order_qty.constraints",
-                extra={
-                    "extra": {
-                        "symbol": symbol, "price": price, "equity": equity,
-                        "qty_by_risk": qty_by_risk,
-                        "qty_by_asset_limit": qty_by_asset_limit,
-                        "qty_by_total_limit": qty_by_total_limit,
-                        "final_qty": final_qty,
-                    }
-                },
+            # Rule 3: Risk per trade
+            risk_per_trade_value = equity * (self.config.risk_per_trade_percent / 100.0)
+
+            # Determine the final capital to allocate
+            capital_to_allocate = min(
+                available_capital_total,
+                available_capital_asset,
+                risk_per_trade_value,
             )
 
-            # Alpaca requires notional orders for crypto to be >= $1.
-            if (final_qty * price) < 1.0:
+            if capital_to_allocate < self.config.min_order_notional:
                 log.warning(
-                    "risk.calculate_order_qty.too_small",
-                    extra={"extra": {"symbol": symbol, "notional_value": final_qty * price}},
+                    "risk.calculate_order_qty.below_min_notional",
+                    extra={"extra": {"capital_to_allocate": capital_to_allocate, "min_order_notional": self.config.min_order_notional}},
                 )
-                return 0.0
+                return 0.0, current_price
 
-            return round(final_qty, 8)
+            qty = capital_to_allocate / current_price
 
+            log.info(
+                "risk.calculate_order_qty.success",
+                extra={"extra": {"symbol": symbol, "qty": qty, "price": current_price}},
+            )
+            return qty, current_price
         except Exception:
             log.error("risk.calculate_order_qty.fail", exc_info=True)
-            return 0.0
+            return 0.0, 0.0
 
     def _get_account_info(self) -> Optional[Account]:
         """DEPRECATED: Use portfolio_manager.account directly."""
         log.warning("risk._get_account_info.deprecated")
-        return self.portfolio.account
+        return self.portfolio_manager.account
 
     def _get_positions(self) -> List[Position]:
         """DEPRECATED: Use portfolio_manager.positions directly."""
         log.warning("risk._get_positions.deprecated")
-        return list(self.portfolio.positions.values())
+        return list(self.portfolio_manager.positions.values())
 
     def _check_volatility_for_symbol(self, symbol: str, interval: str) -> bool:
         """Checks if the volatility for a symbol exceeds the circuit breaker threshold."""
@@ -189,7 +253,7 @@ class RiskManager:
         # --- Check for conditions that would CAUSE a halt ---
 
         # 1. Check for daily drawdown
-        account = self.portfolio.account
+        account = self.portfolio_manager.account
         if account:
             try:
                 equity = account.equity
@@ -249,7 +313,7 @@ class RiskManager:
             log.warning("risk.manage_open_positions.halted", extra={"extra": {"reason": self.halt_reason}})
             return # Do not manage positions if halted
 
-        positions = list(self.portfolio.positions.values())
+        positions = list(self.portfolio_manager.positions.values())
         if not positions:
             log.info("risk.manage_open_positions.no_positions")
             return # No positions to manage
@@ -315,8 +379,11 @@ class RiskManager:
             )
             return False
 
+        # Ensure columns are lowercase for consistent access
+        historical_data.columns = [x.lower() for x in historical_data.columns]
+
         # Calculate 14-period ATR
-        atr_series = atr(historical_data['High'], historical_data['Low'], historical_data['Close'], window=window).dropna()
+        atr_series = atr(historical_data['high'], historical_data['low'], historical_data['close'], window=window).dropna()
 
         if atr_series.empty:
             log.warning(
@@ -325,9 +392,9 @@ class RiskManager:
             )
 
         # Calculate the True Range of the last bar
-        last_high = historical_data['High'].iloc[-1]
-        last_low = historical_data['Low'].iloc[-1]
-        prev_close = historical_data['Close'].iloc[-2]
+        last_high = historical_data['high'].iloc[-1]
+        last_low = historical_data['low'].iloc[-1]
+        prev_close = historical_data['close'].iloc[-2]
         
         last_true_range = max(last_high - last_low, abs(last_high - prev_close), abs(last_low - prev_close))
 

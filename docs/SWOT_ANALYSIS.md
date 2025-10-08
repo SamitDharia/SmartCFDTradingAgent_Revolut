@@ -6,18 +6,20 @@ This document provides a strategic analysis of the SmartCFD Trading Agent projec
 
 ## Strengths (Internal, Positive)
 
-1.  **Robust, Modular Architecture:** The architecture, centered around a `PortfolioManager` for state, a `Trader` for orchestration, and distinct `Strategy` and `RiskManager` components, is highly modular and maintainable. This separation of concerns was proven during the recent debugging cycles, where issues were cleanly isolated to specific components.
-2.  **Comprehensive Test Suite:** The project has a strong testing culture, with unit tests for individual components and integration tests that validate the end-to-end trading loop. This test suite was instrumental in identifying and fixing regressions after major refactoring.
-3.  **Systematic Model Improvement:** The model training pipeline is a significant strength, including systematic hyperparameter tuning (`RandomizedSearchCV`) and the ability to experiment with different algorithms (e.g., XGBoost), providing a data-driven approach to improving predictive accuracy.
-4.  **Advanced Risk Management & Data Integrity:** The `RiskManager` is a core strength, incorporating multiple layers of safety, including per-trade risk sizing and a volatility-based circuit breaker. The data pipeline's built-in checks for anomalies, gaps, and stale data prevent trading on low-quality information.
-5.  **Detailed, Structured Logging:** The implementation of structured JSON logging across all major components provides excellent observability, which was crucial for diagnosing the series of startup errors in the Docker container.
+1.  **Robust, Modular Architecture:** The architecture, centered around a `PortfolioManager` and distinct `Strategy`/`RiskManager` components, is highly modular and maintainable. This separation of concerns was proven during the recent debugging cycles.
+2.  **Comprehensive Foundational Pipelines:** The project has completed end-to-end pipelines for key operations:
+    *   **Automated Retraining:** A full pipeline exists in `scripts/retrain_model.py`.
+    *   **Feature Engineering:** A wide range of indicators are available in `smartcfd/indicators.py`.
+    *   **Model Tuning:** A systematic process for hyperparameter tuning is in place.
+3.  **Comprehensive Test Suite:** The project has a strong testing culture, with unit and integration tests that were instrumental in identifying and fixing regressions after major refactoring.
+4.  **Advanced Data Integrity & Logging:** The data pipeline's built-in checks for anomalies, gaps, and stale data prevent trading on low-quality information. The structured logging provides excellent observability for debugging.
 
 ## Weaknesses (Internal, Negative)
 
-1.  **Backtesting Engine is Rudimentary:** The project currently lacks a fast and robust backtesting engine. New strategies cannot be rapidly and accurately validated against historical data, making the strategy development lifecycle slow and reliant on forward-testing in a paper environment.
-2.  **Feature Set is Standard:** While the model pipeline is strong, the features used for prediction are standard technical indicators. The model's performance (currently ~55% accuracy) is likely capped by the predictive power of these features.
-3.  **Strategy Logic is Simple:** The current strategy is based on a single-step classification model. It does not account for more complex scenarios, such as holding positions, scaling in/out, or adapting to different market regimes.
-4.  **Documentation on Strategy is Light:** While the code is well-structured, there is limited documentation explaining *why* the current strategy was chosen, its underlying assumptions, and its performance characteristics.
+1.  **Lack of Integration Between Components:** Key components, while functional in isolation, are not yet integrated. For example, the `InferenceStrategy` does not use the output from the `RegimeDetector` to alter its behavior.
+2.  **Missing Critical Trade Management Features:** The agent lacks essential trade-level risk management. It cannot place stop-loss or take-profit orders, which is a major weakness for any live trading strategy.
+3.  **Backtesting Engine Needs Advancement:** The current backtester is foundational. It lacks the ability to simulate transaction costs (slippage, commissions) and is missing key performance metrics (Sortino, Calmar), making it unsuitable for rigorously validating new strategies.
+4.  **Strategy Logic is Simplistic:** The current strategy is a simple "buy" or "hold" based on a single prediction. It cannot short sell, and it does not employ portfolio-level logic when managing multiple assets.
 
 ## Opportunities (External, Positive)
 

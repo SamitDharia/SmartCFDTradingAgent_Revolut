@@ -24,6 +24,32 @@ def rsi(series: pd.Series, window: int = 14) -> pd.Series:
     return ta.momentum.rsi(close=series, window=window)
 
 
+def macd(series: pd.Series, window_slow: int = 26, window_fast: int = 12, window_sign: int = 9) -> pd.DataFrame:
+    """
+    Calculate Moving Average Convergence Divergence (MACD).
+    Returns a DataFrame with MACD, signal, and histogram.
+    """
+    macd_indicator = ta.trend.MACD(close=series, window_slow=window_slow, window_fast=window_fast, window_sign=window_sign)
+    df = pd.DataFrame()
+    df['MACD_12_26_9'] = macd_indicator.macd()
+    df['MACDs_12_26_9'] = macd_indicator.macd_signal()
+    df['MACDh_12_26_9'] = macd_indicator.macd_diff()
+    return df
+
+
+def bollinger_bands(series: pd.Series, window: int = 20, window_dev: int = 2) -> pd.DataFrame:
+    """
+    Calculate Bollinger Bands.
+    Returns a DataFrame with the middle, high, and low bands.
+    """
+    bband_indicator = ta.volatility.BollingerBands(close=series, window=window, window_dev=window_dev)
+    df = pd.DataFrame()
+    df['BBM_20_2.0'] = bband_indicator.bollinger_mavg()
+    df['BBH_20_2.0'] = bband_indicator.bollinger_hband()
+    df['BBL_20_2.0'] = bband_indicator.bollinger_lband()
+    return df
+
+
 def adx(high: pd.Series, low: pd.Series, close: pd.Series, window: int = 14) -> pd.Series:
     """Calculate Average Directional Movement Index (ADX)."""
     return ta.trend.adx(high=high, low=low, close=close, window=window)

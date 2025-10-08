@@ -1,229 +1,204 @@
-from abc import ABC, abstractmethod
 import logging
-from typing import List, Dict, Any, Tuple
+from abc import ABC, abstractmethod
+from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
-import joblib
 import pandas as pd
-from datetime import datetime, timedelta
+import joblib
 
-from smartcfd.alpaca_client import AlpacaClient
-from smartcfd.data_loader import DataLoader, is_data_stale, has_data_gaps, has_anomalous_data, _parse_interval
-from alpaca.data.timeframe import TimeFrame
-from .indicators import create_features as calculate_indicators
-from .config import load_config
 from .portfolio import PortfolioManager
+from .data_loader import DataLoader, has_data_gaps, has_zero_volume_anomaly
+from .indicators import atr, rsi, macd, bollinger_bands, adx
+from .regime_detector import MarketRegime
+from .config import AppConfig, load_config
+from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 
-log = logging.getLogger("strategy")
+log = logging.getLogger(__name__)
+
+
+def create_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Create features for the model from historical data.
+    """
+    if df.empty:
+        return pd.DataFrame()
+
+    # Ensure columns are lowercase for consistency
+    df.columns = [x.lower() for x in df.columns]
+
+    # Basic features
+    features = pd.DataFrame(index=df.index)
+    features['returns'] = df['close'].pct_change()
+
+    # Technical Indicators
+    features['rsi'] = rsi(df['close'])
+    macd_df = macd(df['close'])
+    features['macd'] = macd_df['MACD_12_26_9']
+    features['macdsignal'] = macd_df['MACDs_12_26_9']
+    
+    bollinger = bollinger_bands(df['close'])
+    features['bollinger_mavg'] = bollinger['BBM_20_2.0']
+    features['bollinger_hband'] = bollinger['BBH_20_2.0']
+    features['bollinger_lband'] = bollinger['BBL_20_2.0']
+
+    adx_df = adx(df['high'], df['low'], df['close'])
+    features['adx'] = adx_df['ADX_14']
+
+    # Lagged features
+    for lag in [1, 2, 3, 5, 10]:
+        features[f'returns_lag_{lag}'] = features['returns'].shift(lag)
+        features[f'rsi_lag_{lag}'] = features['rsi'].shift(lag)
+
+    return features.dropna()
+
 
 class Strategy(ABC):
     """
     Abstract base class for a trading strategy.
+    Defines the interface for evaluating market data and generating trading signals.
     """
+
     @abstractmethod
-    def evaluate(self, portfolio_manager: PortfolioManager, watch_list: List[str]) -> Tuple[List[Dict[str, Any]], Dict[str, pd.DataFrame]]:
+    def evaluate(
+        self,
+        portfolio: PortfolioManager,
+        watch_list: List[str],
+        market_regimes: Optional[Dict[str, MarketRegime]] = None
+    ) -> Tuple[List[Dict[str, Any]], Dict[str, pd.DataFrame]]:
         """
-        Evaluate the strategy and return a list of proposed actions and the data used.
-        
-        :param portfolio_manager: An instance of PortfolioManager to access portfolio state.
-        :param watch_list: A list of symbols to evaluate.
-        :return: A tuple containing:
-                 - A list of dictionaries, each representing a proposed action.
-                 - A dictionary mapping symbols to the DataFrame of historical data used.
+        Evaluates the strategy for a list of symbols.
+
+        Args:
+            portfolio: The current portfolio state.
+            watch_list: The list of symbols to evaluate.
+            market_regimes: Optional dictionary of market regimes for each symbol.
+                            If None, the strategy should operate in a data-gathering mode.
+
+        Returns:
+            A tuple containing:
+            - A list of action dictionaries (e.g., {'symbol': 'BTC/USD', 'action': 'buy'}).
+            - A dictionary of historical data for each symbol.
         """
         pass
 
+
 class DryRunStrategy(Strategy):
     """
-    A simple strategy that logs the account information and proposes no actions.
-    This is useful for verifying that the strategy evaluation pipeline is working.
+    A simple strategy for dry-running the system.
+    It only logs the data it would have processed.
     """
-    def evaluate(self, portfolio_manager: PortfolioManager, watch_list: List[str]) -> Tuple[List[Dict[str, Any]], Dict[str, pd.DataFrame]]:
-        log.info("strategy.dry_run.evaluate")
-        try:
-            log.info("strategy.dry_run.watching", extra={"extra": {"symbols": watch_list}})
-            
-            actions = [
-                {"action": "log", "symbol": symbol, "decision": "hold", "reason": "dry_run"}
-                for symbol in watch_list
-            ]
-            # Return empty data dictionary as no data was fetched
-            return actions, {}
-        except Exception as e:
-            log.error("strategy.dry_run.fail", extra={"extra": {"error": repr(e)}})
-            return [], {}
+    def __init__(self):
+        self.data_loader = DataLoader()
+
+    def evaluate(
+        self,
+        portfolio: PortfolioManager,
+        watch_list: List[str],
+        market_regimes: Optional[Dict[str, MarketRegime]] = None
+    ) -> Tuple[List[Dict[str, Any]], Dict[str, pd.DataFrame]]:
+        log.info("dry_run_strategy.evaluate", extra={"extra": {"watch_list": watch_list, "market_regimes": market_regimes}})
+        historical_data = {symbol: self.data_loader.get_market_data([symbol]) for symbol in watch_list}
+        # Dry run doesn't produce actions
+        return [], historical_data
+
 
 class InferenceStrategy(Strategy):
     """
     A strategy that uses a trained model to make trading decisions.
     """
-    def __init__(self, model_path: str = "models/model.joblib"):
-        self.model_path = Path(model_path)
-        self.model = self.load_model()
-        # Load data integrity check settings from config
-        app_config = load_config()
-        self.max_data_staleness_minutes = app_config.max_data_staleness_minutes
-        self.trade_interval_str = app_config.trade_interval
+    def __init__(self, model_path: str = "models/model.joblib", data_loader: DataLoader = None, config: AppConfig = None):
+        self.model_path = model_path
+        self.model = self.load_model(model_path)
+        self.data_loader = data_loader or DataLoader()
+        self.config = config or load_config()
 
-    def load_model(self) -> object | None:
-        """Loads the model from the specified path."""
-        if self.model_path and self.model_path.exists():
-            try:
-                model = joblib.load(self.model_path)
-                log.info(f"strategy.inference.model_loaded", extra={"extra": {"model_path": str(self.model_path)}})
-                return model
-            except Exception as e:
-                log.error(f"strategy.inference.model_load_fail", extra={"extra": {"error": repr(e)}})
-                return None
-        else:
-            log.warning(f"strategy.inference.no_model_found", extra={"extra": {"path": str(self.model_path)}})
+    def load_model(self, model_path: str):
+        if not Path(model_path).exists():
+            log.error(f"inference_strategy.load_model.not_found path='{model_path}'")
+            return None
+        try:
+            log.info(f"inference_strategy.load_model.start path='{model_path}'")
+            model = joblib.load(model_path)
+            log.info("inference_strategy.load_model.success")
+            return model
+        except Exception:
+            log.error("inference_strategy.load_model.fail", exc_info=True)
             return None
 
-    def evaluate_backtest(self, feature_row: pd.DataFrame) -> Dict[str, Any]:
-        """
-        Evaluates the strategy for a given row of pre-calculated features.
-        """
-        if not self.model:
-            log.warning("strategy.inference.evaluate.no_model")
-            return {"decision": "hold", "reason": "no_model"}
-
-        try:
-            # Features are pre-calculated, just align and predict
-            model_features = self.model.get_booster().feature_names
-            latest_features_aligned = feature_row[model_features]
-            
-            prediction = self.model.predict(latest_features_aligned)[0]
-
-            # 3. Translate prediction to action
-            if prediction == 1:
-                return {"decision": "buy"}
-            elif prediction == 2:
-                return {"decision": "sell"}
-            else:
-                return {"decision": "hold"}
-
-        except Exception:
-            log.error("strategy.inference.evaluate.backtest.fail", exc_info=True)
-            return {"decision": "hold", "reason": "evaluation_exception"}
-
-    def evaluate(self, portfolio_manager: PortfolioManager, watch_list: List[str]) -> Tuple[List[Dict[str, Any]], Dict[str, pd.DataFrame]]:
-        if not self.model:
-            log.warning("strategy.inference.evaluate.no_model", extra={"extra": {"reason": "Model not loaded."}})
-            actions = [{"action": "log", "symbol": symbol, "decision": "hold", "reason": "no_model"} for symbol in watch_list]
-            return actions, {}
+    def evaluate(
+        self,
+        portfolio: PortfolioManager,
+        watch_list: List[str],
+        market_regimes: Optional[Dict[str, MarketRegime]] = None,
+        historical_data: Optional[Dict[str, pd.DataFrame]] = None
+    ) -> Tuple[List[Dict[str, Any]], Dict[str, pd.DataFrame]]:
+        actions = []
         
-        all_actions = []
-        all_historical_data = {}
-        
-        for symbol in watch_list:
-            log.info("strategy.inference.evaluate.start", extra={"extra": {"symbol": symbol}})
-            
-            try:
-                # 1. Fetch live market data for the symbol.
-                data_loader = DataLoader(api_base=portfolio_manager.client.api_base)
-                # Fetch more data for gap check
-                data = data_loader.get_market_data([symbol], self.trade_interval_str, limit=200)
-                
-                # Store data in a dictionary to return
-                all_historical_data[symbol] = data
+        # Initialize historical_data if not provided
+        if historical_data is None:
+            historical_data = {}
 
-                if data is None or data.empty:
-                    log.warning("strategy.inference.evaluate.no_data", extra={"extra": {"symbol": symbol}})
-                    action = {"action": "log", "symbol": symbol, "decision": "hold", "reason": "no_data"}
-                    all_actions.append(action)
-                    continue
-
-                # 2. Perform data integrity checks
-                if is_data_stale(data, self.max_data_staleness_minutes):
-                    log.warning(
-                        "strategy.inference.evaluate.data_stale",
-                        extra={"extra": {"symbol": symbol, "max_staleness_minutes": self.max_data_staleness_minutes}},
-                    )
-                    action = {"action": "log", "symbol": symbol, "decision": "hold", "reason": "data_stale"}
-                    all_actions.append(action)
-                    continue
-                
-                trade_interval_tf = _parse_interval(self.trade_interval_str)
-                if has_data_gaps(data, trade_interval_tf):
-                    log.warning(
-                        "strategy.inference.evaluate.data_gaps",
-                        extra={"extra": {"symbol": symbol, "interval": self.trade_interval_str}},
-                    )
-                    action = {"action": "log", "symbol": symbol, "decision": "hold", "reason": "data_gaps_detected"}
-                    all_actions.append(action)
-                    continue
-
-                if has_anomalous_data(data):
-                    log.warning(
-                        "strategy.inference.evaluate.anomalous_data",
-                        extra={"extra": {"symbol": symbol}},
-                    )
-                    action = {"action": "log", "symbol": symbol, "decision": "hold", "reason": "anomalous_data_detected"}
-                    all_actions.append(action)
-                    continue
-
-                # 3. Calculate features from the data.
-                log.info("strategy.inference.evaluate.calculating_features", extra={"extra": {"symbol": symbol}})
-                features = calculate_indicators(data)
-                if features.empty:
-                    log.warning("strategy.inference.evaluate.no_features", extra={"extra": {"symbol": symbol}})
-                    action = {"action": "log", "symbol": symbol, "decision": "hold", "reason": "feature_calculation_failed"}
-                    all_actions.append(action)
-                    continue
-
-                # 4. Make a prediction using the model.
-                latest_features = features.iloc[-1:]
-                
-                # Ensure the feature names match what the model was trained on
-                model_features = self.model.get_booster().feature_names
-                latest_features_aligned = latest_features[model_features]
-
-                prediction = self.model.predict(latest_features_aligned)[0]
+        # If market regimes are NOT provided, this is the first pass for data loading.
+        if not market_regimes:
+            # First pass: load data for all symbols
+            for symbol in watch_list:
                 try:
-                    prediction_proba = self.model.predict_proba(latest_features_aligned)[0]
-                    prediction_proba_serializable = [float(p) for p in prediction_proba]
-                except AttributeError:
-                    prediction_proba_serializable = None
-                
-                # 5. Translate the prediction into an action, checking for existing positions.
-                
-                # Check if a position already exists for this symbol
-                if symbol in portfolio_manager.positions:
-                    log.info(
-                        "strategy.inference.evaluate.position_exists",
-                        extra={"extra": {"symbol": symbol, "reason": "Holding due to existing position."}}
+                    # Fetch data with interval and a limit suitable for feature creation
+                    data_dict = self.data_loader.get_market_data(
+                        symbols=[symbol],
+                        interval=self.config.trade_interval,
+                        limit=200  # A reasonable lookback for feature calculation
                     )
-                    action_item = {"action": "log", "symbol": symbol, "decision": "hold", "reason": "position_exists"}
-                elif prediction == 1:
-                    decision = "buy"
-                    action_item = {"action": "buy", "symbol": symbol, "decision": decision}
-                elif prediction == 2:
-                    decision = "sell"
-                    action_item = {"action": "sell", "symbol": symbol, "decision": decision}
-                else:
-                    decision = "hold" # Simplified: only act on buy signals
-                    action_item = {"action": "log", "symbol": symbol, "decision": "hold", "reason": "model_hold"}
-                
-                # Log the decision and key data
-                log_extra = {
-                    "symbol": symbol,
-                    "prediction": int(prediction),
-                    "decision": action_item.get("decision", "hold"),
-                    "prediction_proba": prediction_proba_serializable,
-                    "features": latest_features_aligned.to_dict(orient='records')[0]
-                }
-                log.info("strategy.inference.evaluate.prediction", extra={"extra": log_extra})
-                all_actions.append(action_item)
+                    if data_dict and symbol in data_dict:
+                        data = data_dict[symbol]
+                        if data is not None and not data.empty:
+                            historical_data[symbol] = data
+                    else:
+                        log.warning("inference_strategy.evaluate.no_data_in_dict", extra={"extra": {"symbol": symbol}})
+                except Exception:
+                    log.error("inference_strategy.evaluate.data_load_error", extra={"extra": {"symbol": symbol}}, exc_info=True)
             
-            except Exception:
-                log.error(
-                    "strategy.inference.evaluate.fail",
-                    extra={"extra": {"symbol": symbol}},
-                    exc_info=True
-                )
-                action = {"action": "log", "symbol": symbol, "decision": "hold", "reason": "evaluation_exception"}
-                all_actions.append(action)
+            # This was a data-gathering pass. Return the data.
+            return [], historical_data
 
-        return all_actions, all_historical_data
+        # If we are here, it's the second pass (market_regimes is not None).
+        # The historical_data from the first pass is used to generate actions.
+        for symbol in watch_list:
+            if symbol not in historical_data or historical_data[symbol].empty:
+                log.warning("inference_strategy.evaluate.no_data", extra={"extra": {"symbol": symbol}})
+                continue
+
+            # --- Prediction ---
+            try:
+                current_regime = market_regimes.get(symbol)
+                if not current_regime:
+                    log.warning("inference_strategy.evaluate.no_regime", extra={"extra": {"symbol": symbol}})
+                    continue
+
+                features = create_features(historical_data[symbol])
+                
+                # Ensure we have data to predict on
+                if features.empty:
+                    log.warning("inference_strategy.evaluate.no_features", extra={"extra": {"symbol": symbol}})
+                    continue
+
+                prediction = self.model.predict(features.tail(1))
+                action = self.map_prediction_to_action(prediction[0], symbol, current_regime)
+                actions.append(action)
+
+            except Exception:
+                log.error("inference_strategy.evaluate.action_error", extra={"extra": {"symbol": symbol}}, exc_info=True)
+
+        return actions, historical_data
+
+    def map_prediction_to_action(self, prediction: int, symbol: str, regime: str) -> Dict[str, str]:
+        """Maps a model's integer prediction to a trading action."""
+        if prediction == 1:
+            decision = "buy"
+        elif prediction == 2:
+            decision = "sell"
+        else:
+            decision = "hold"
+        return {"action": decision, "symbol": symbol, "decision": decision}
 
 
 def get_strategy_by_name(name: str) -> Strategy:

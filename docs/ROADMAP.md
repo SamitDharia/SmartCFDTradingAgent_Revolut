@@ -16,15 +16,15 @@
 *This phase is about adding sophistication to the completed foundations.*
 
 ### Section 13: Implement Advanced Order & Risk Management
-- [ ] **Goal:** Implement critical risk management features at the trade level.
-- [ ] **Task 1:** Implement dynamic stop-loss orders (e.g., based on ATR).
-- [ ] **Task 2:** Implement take-profit orders.
-- [ ] **Task 3:** Implement short selling capability.
+- [x] **Goal:** Implement critical risk management features at the trade level.
+- [x] **Task 1:** Implement dynamic stop-loss orders (e.g., based on ATR).
+- [x] **Task 2:** Implement take-profit orders.
+- [x] **Task 3:** Implement short selling capability.
 
 ### Section 14: Develop Advanced Strategies
-- [ ] **Goal:** Create strategies that are more intelligent than the current single-step model.
-- [ ] **Task 1:** Create a strategy that uses the `RegimeDetector`'s output to change its behavior.
-- [ ] **Task 2:** Develop a true portfolio-level strategy that considers cross-asset correlations.
+- [x] **Goal:** Create strategies that are more intelligent than the current single-step model.
+- [x] **Task 1:** Create a strategy that uses the `RegimeDetector`'s output to change its behavior.
+- [x] **Task 2:** Develop a true portfolio-level strategy that considers cross-asset correlations.
 
 ### Section 15: Enhance Backtesting & Feature Set
 - [ ] **Goal:** Improve our validation framework and the predictive power of our model.

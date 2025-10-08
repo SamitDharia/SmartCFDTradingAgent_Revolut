@@ -29,6 +29,16 @@ class OrderRequest(BaseModel):
     take_profit: Optional[dict] = None
     stop_loss: Optional[dict] = None
 
+class TakeProfitRequest(BaseModel):
+    """Defines a take profit order."""
+    limit_price: str
+
+class StopLossRequest(BaseModel):
+    """Defines a stop loss order."""
+    stop_price: str
+    limit_price: Optional[str] = None
+
+
 class OrderResponse(BaseModel):
     """
     A model for the response received after submitting an order.
@@ -185,6 +195,27 @@ class AlpacaClient:
         except requests.RequestException:
             log.error("alpaca.get_positions.fail", exc_info=True)
             return []
+
+    def close_position(self, symbol: str, qty: Optional[str] = None):
+        """
+        Closes an entire position for a given symbol.
+        If qty is specified, it will close that quantity. Otherwise, it closes the entire position.
+        """
+        url = f"{self.api_base}/v2/positions/{symbol}"
+        params = {}
+        if qty:
+            params['qty'] = qty
+            
+        log.info("alpaca.close_position.start", extra={"extra": {"symbol": symbol, "qty": qty}})
+        try:
+            response = self.session.delete(url, params=params)
+            response.raise_for_status()
+            order_response = OrderResponse.model_validate(response.json())
+            log.info("alpaca.close_position.success", extra={"extra": {"order_response": order_response.model_dump()}})
+            return order_response
+        except requests.RequestException:
+            log.error("alpaca.close_position.fail", extra={"extra": {"symbol": symbol}}, exc_info=True)
+            raise
 
     def get_orders(self, status: str = "open"):
         """

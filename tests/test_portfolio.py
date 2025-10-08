@@ -8,7 +8,7 @@ from smartcfd.alpaca_client import AlpacaClient
 class TestPortfolioManager(unittest.TestCase):
     def setUp(self):
         """Set up a mock Alpaca client and a PortfolioManager instance."""
-        self.mock_client = MagicMock()
+        self.mock_client = MagicMock(spec=AlpacaClient)
         self.portfolio_manager = PortfolioManager(self.mock_client)
 
     def test_initial_state(self):
@@ -28,10 +28,8 @@ class TestPortfolioManager(unittest.TestCase):
             "cash": "50000.0",
             "status": "ACTIVE"
         }
-        # The client returns an object with attributes, not a dict
-        mock_account = MagicMock()
-        for k, v in mock_account_data.items():
-            setattr(mock_account, k, v)
+        # The client returns an object that Pydantic can validate
+        mock_account = MagicMock(**mock_account_data)
 
         mock_position_data = [
             {
@@ -40,7 +38,8 @@ class TestPortfolioManager(unittest.TestCase):
                 "market_value": "60000",
                 "unrealized_pl": "1500",
                 "unrealized_plpc": "0.025",
-                "avg_entry_price": "39000"
+                "avg_entry_price": "39000",
+                "side": "long"
             },
             {
                 "symbol": "ETH/USD",
@@ -48,15 +47,11 @@ class TestPortfolioManager(unittest.TestCase):
                 "market_value": "30000",
                 "unrealized_pl": "-500",
                 "unrealized_plpc": "-0.016",
-                "avg_entry_price": "3050"
+                "avg_entry_price": "3050",
+                "side": "long"
             }
         ]
-        mock_positions = []
-        for p_data in mock_position_data:
-            pos = MagicMock()
-            for k, v in p_data.items():
-                setattr(pos, k, v)
-            mock_positions.append(pos)
+        mock_positions = [MagicMock(**p_data) for p_data in mock_position_data]
 
         self.mock_client.get_account.return_value = mock_account
         self.mock_client.get_positions.return_value = mock_positions
@@ -88,21 +83,22 @@ class TestPortfolioManager(unittest.TestCase):
         self.portfolio_manager.account = Account(id="old_id", equity=1.0, last_equity=1.0, buying_power=1.0, cash=1.0, status="ACTIVE")
         
         # Mock client failure
-        self.mock_client.get_account.return_value = None
+        self.mock_client.get_account.side_effect = Exception("API Error")
         self.mock_client.get_positions.return_value = [] # Assume this still runs
 
         # Run reconcile
         self.portfolio_manager.reconcile()
 
-        # The account should be wiped in this case as per implementation
-        self.assertIsNone(self.portfolio_manager.account)
+        # The account should NOT be wiped, but marked as offline
+        self.assertIsNotNone(self.portfolio_manager.account)
+        self.assertFalse(self.portfolio_manager.account.is_online)
         # Positions should be cleared as the call returned an empty list
         self.assertEqual(self.portfolio_manager.positions, {})
 
     def test_reconcile_get_positions_fails(self):
         """Test that the state remains unchanged if getting positions fails."""
         # Setup initial state
-        initial_position = Position(symbol="SPY", qty=10, market_value=5000, unrealized_pl=100, unrealized_plpc=0.02, avg_entry_price=490)
+        initial_position = Position(symbol="SPY", qty=10, market_value=5000, unrealized_pl=100, unrealized_plpc=0.02, avg_entry_price=490, side="long")
         self.portfolio_manager.positions = {"SPY": initial_position}
         
         # Mock client calls
@@ -115,15 +111,17 @@ class TestPortfolioManager(unittest.TestCase):
         mock_account.status="ACTIVE"
 
         self.mock_client.get_account.return_value = mock_account
-        self.mock_client.get_positions.return_value = [] # Simulate failure by returning empty list
+        self.mock_client.get_positions.side_effect = Exception("API Error")
 
         # Run reconcile
         self.portfolio_manager.reconcile()
 
         # Account should be updated
+        self.assertIsNotNone(self.portfolio_manager.account)
         self.assertEqual(self.portfolio_manager.account.id, "test_id")
-        # Positions should be cleared because the client returned an empty list
-        self.assertEqual(self.portfolio_manager.positions, {})
+        # Positions should NOT be cleared on failure, they should remain as they were
+        self.assertEqual(len(self.portfolio_manager.positions), 1)
+        self.assertIn("SPY", self.portfolio_manager.positions)
 
 if __name__ == '__main__':
     unittest.main()

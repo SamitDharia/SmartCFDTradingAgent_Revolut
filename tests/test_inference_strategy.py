@@ -38,15 +38,15 @@ def test_inference_strategy_model_loading(mock_joblib_load, tmp_path):
 
     strategy = InferenceStrategy(model_path=str(model_path))
     
-    mock_joblib_load.assert_called_once_with(model_path)
+    mock_joblib_load.assert_called_once_with(str(model_path))
     assert strategy.model is not None
 
 @patch("smartcfd.strategy.joblib.load")
-@patch("smartcfd.strategy.calculate_indicators")
+@patch("smartcfd.strategy.create_features")
 @patch("smartcfd.strategy.DataLoader")
 @patch("smartcfd.strategy.Path.exists")
 def test_inference_strategy_evaluate(
-    mock_path_exists, mock_data_loader, mock_calculate_indicators, mock_joblib_load
+    mock_path_exists, mock_data_loader, mock_create_features, mock_joblib_load
 ):
     """Tests the evaluation logic of the InferenceStrategy by injecting a mock model."""
     # 1. Setup
@@ -62,7 +62,7 @@ def test_inference_strategy_evaluate(
     mock_joblib_load.return_value = mock_model # Intercept the model loading
 
     # --- Mock data loading and feature calculation ---
-    timestamps = pd.to_datetime(pd.date_range(end=pd.Timestamp.now(tz='UTC'), periods=200, freq='15min'))
+    timestamps = pd.to_datetime(pd.date_range(end=pd.Timestamp.now(tz='UTC'), periods=200, freq='1min'))
     mock_df = pd.DataFrame({
         'Open': [100 + i*0.01 for i in range(200)],
         'High': [101 + i*0.01 for i in range(200)],
@@ -70,23 +70,26 @@ def test_inference_strategy_evaluate(
         'Close': [100.5 + i*0.01 for i in range(200)],
         'Volume': [1000 for _ in range(200)]
     }, index=timestamps)
-    mock_data_loader.return_value.get_market_data.return_value = mock_df
+    mock_data_loader.return_value.get_market_data.return_value = {"BTC/USD": mock_df}
 
     # The features returned by the mock must match the model's expected features
     mock_features = pd.DataFrame([{'feature1': 1, 'feature2': 2}])
-    mock_calculate_indicators.return_value = mock_features
+    mock_create_features.return_value = mock_features
 
     # Instantiate the strategy - this will now call joblib.load due to the mocked Path.exists
     strategy = InferenceStrategy(model_path="dummy/path.joblib")
 
     # 2. Action
-    actions, _ = strategy.evaluate(portfolio_manager=MagicMock(), watch_list=["BTC/USD"])
+    # First pass to gather data
+    _, historical_data = strategy.evaluate(MagicMock(), watch_list=["BTC/USD"])
+    # Second pass to get actions
+    actions, _ = strategy.evaluate(MagicMock(), watch_list=["BTC/USD"], market_regimes={"BTC/USD": "low_volatility"}, historical_data=historical_data)
 
     # 3. Assertions
     mock_joblib_load.assert_called_once_with(strategy.model_path)
     mock_path_exists.assert_called_once()
-    mock_data_loader.return_value.get_market_data.assert_called_once()
-    mock_calculate_indicators.assert_called_once()
+    mock_data_loader.return_value.get_market_data.assert_called_once_with(symbols=['BTC/USD'], interval='15m', limit=200)
+    mock_create_features.assert_called_once()
     mock_model.predict.assert_called_once()
 
     # Verify the action proposed by the strategy

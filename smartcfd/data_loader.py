@@ -233,7 +233,7 @@ def has_anomalous_data(df: pd.DataFrame, anomaly_threshold: float = 5.0) -> bool
     Performs basic anomaly detection on the data.
     - Checks for empty or insufficient data.
     - Checks for zero prices.
-    - Checks for bars with zero volume but price movement.
+    - Checks for bars where high != low but volume is zero
     - Checks for sudden price spikes (e.g., > 5x the recent average range).
     """
     if df.empty:
@@ -249,19 +249,8 @@ def has_anomalous_data(df: pd.DataFrame, anomaly_threshold: float = 5.0) -> bool
         log.warning("Anomaly detected: Zero or negative price found in OHLC data.")
         return True
 
-    # Check for zero volume with price movement (high != low)
-    if 'volume' in df.columns:
-        zero_volume_bars = df[df['volume'] == 0]
-        if not zero_volume_bars.empty:
-            if (zero_volume_bars['high'] != zero_volume_bars['low']).any():
-                log.warning("Anomaly detected: Zero volume found on a bar with price movement.")
-                return True
-    else:
-        log.warning("Anomaly check skipped: 'volume' column not found.")
-
-    # For spike detection, we need a reasonable amount of data
-    if len(df) < 20:
-        return False # Not an anomaly, but not enough data for this specific check
+    if has_zero_volume_anomaly(df):
+        return True
 
     # Check for sudden price spikes
     df['range'] = df['high'] - df['low']
@@ -275,4 +264,14 @@ def has_anomalous_data(df: pd.DataFrame, anomaly_threshold: float = 5.0) -> bool
         log.warning(f"Anomaly detected: Sudden price spike. Latest range ({latest_range:.2f}) is more than {anomaly_threshold}x the average range ({average_range:.2f}).")
         return True
 
+    return False
+
+def has_zero_volume_anomaly(df: pd.DataFrame) -> bool:
+    """
+    Checks for bars where high != low but volume is zero.
+    """
+    if 'high' in df.columns and 'low' in df.columns and 'volume' in df.columns:
+        if ((df['high'] != df['low']) & (df['volume'] == 0)).any():
+            log.warning("Anomaly detected: Zero volume found on a bar with price movement.")
+            return True
     return False

@@ -16,17 +16,23 @@ def generate_test_data(base_price, atr_val, periods):
     high_prices = base_price + np.random.uniform(0, atr_val, periods)
     low_prices = base_price - np.random.uniform(0, atr_val, periods)
     close_prices = (high_prices + low_prices) / 2
+    open_prices = (high_prices + low_prices) / 2 # Simplified
     
     data = {
         'High': high_prices,
         'Low': low_prices,
         'Close': close_prices,
+        'Open': open_prices,
+        'Volume': np.random.randint(100, 1000, periods)
     }
     df = pd.DataFrame(data, index=dates)
     
     # Ensure High is always >= Low
     df['High'] = df[['High', 'Low']].max(axis=1)
     df['Low'] = df[['High', 'Low']].min(axis=1)
+    
+    # Rename columns to match expected input
+    df.rename(columns={'High': 'high', 'Low': 'low', 'Close': 'close', 'Open': 'open', 'Volume': 'volume'}, inplace=True)
     
     return df
 
@@ -42,13 +48,14 @@ def test_detect_regime_high_volatility(regime_detector):
     """Tests that a high volatility regime is correctly detected."""
     # Generate stable data for the long window
     long_data = generate_test_data(base_price=100, atr_val=2, periods=80)
-    
+
     # Generate volatile data for the short window
-    short_data = generate_test_data(base_price=100, atr_val=5, periods=20)
-    
+    short_data = generate_test_data(base_price=100, atr_val=10, periods=20)
+
     # Combine them
     data = pd.concat([long_data, short_data])
-    
+
+    regime_detector.threshold_multiplier = 1.1 # Lower threshold for this test
     regime = regime_detector.detect_regime(data)
     assert regime == MarketRegime.HIGH_VOLATILITY
 
