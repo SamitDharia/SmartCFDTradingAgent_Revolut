@@ -1,18 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any
-from pydantic import BaseModel
-
-class Order(BaseModel):
-    """A standardized model for an order."""
-    id: str
-    symbol: str
-    qty: float
-    side: str
-    status: str
-    filled_qty: float | None = None
-    filled_avg_price: float | None = None
-    created_at: Any
-
+from typing import List, Any
+from .types import Order
 
 class Broker(ABC):
     """
@@ -21,51 +9,29 @@ class Broker(ABC):
     """
 
     @abstractmethod
-    def submit_order(self, symbol: str, qty: float, side: str, order_type: str, time_in_force: str) -> Dict[str, Any]:
+    def submit_order(self, symbol: str, qty: float, side: str, order_type: str, time_in_force: str) -> Any:
         """
         Submits an order to the broker.
         """
         pass
 
     @abstractmethod
-    def get_account_info(self) -> Dict[str, Any]:
+    def get_account_info(self) -> Any:
         """
         Retrieves account information from the broker.
         """
         pass
 
     @abstractmethod
-    def list_positions(self) -> List[Dict[str, Any]]:
+    def list_positions(self) -> List[Any]:
         """
         Retrieves a list of current positions from the broker.
         """
         pass
 
-
-from .alpaca_client import AlpacaClient
-
-class AlpacaBroker(Broker):
-    """
-    A concrete implementation of the Broker interface for Alpaca.
-    """
-
-    def __init__(self, client: AlpacaClient):
-        self.client = client
-
-    def submit_order(self, symbol: str, qty: float, side: str, order_type: str, time_in_force: str) -> Dict[str, Any]:
+    @abstractmethod
+    def close_position(self, symbol: str) -> Any:
         """
-        Submits an order to the Alpaca API.
+        Closes an open position for a given symbol.
         """
-        return self.client.submit_order(symbol, qty, side, order_type, time_in_force)
-
-    def get_account_info(self) -> Dict[str, Any]:
-        """
-        Retrieves account information from the Alpaca API.
-        """
-        return self.client.get_account()
-
-    def list_positions(self) -> List[Dict[str, Any]]:
-        """
-        Retrieves a list of current positions from the Alpaca API.
-        """
-        return self.client.get_positions()
+        pass

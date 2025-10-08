@@ -30,18 +30,19 @@ def create_features(df: pd.DataFrame) -> pd.DataFrame:
     features['returns'] = df['close'].pct_change()
 
     # Technical Indicators
-    features['rsi'] = rsi(df['close'])
+    features['rsi'] = rsi(df['close']).values
     macd_df = macd(df['close'])
-    features['macd'] = macd_df['MACD_12_26_9']
-    features['macdsignal'] = macd_df['MACDs_12_26_9']
+    features['macd'] = macd_df['MACD_12_26_9'].values
+    features['macdsignal'] = macd_df['MACDs_12_26_9'].values
     
     bollinger = bollinger_bands(df['close'])
-    features['bollinger_mavg'] = bollinger['BBM_20_2.0']
-    features['bollinger_hband'] = bollinger['BBH_20_2.0']
-    features['bollinger_lband'] = bollinger['BBL_20_2.0']
+    features['bollinger_mavg'] = bollinger['BBM_20_2.0'].values
+    features['bollinger_hband'] = bollinger['BBH_20_2.0'].values
+    features['bollinger_lband'] = bollinger['BBL_20_2.0'].values
 
     adx_df = adx(df['high'], df['low'], df['close'])
-    features['adx'] = adx_df['ADX_14']
+    # The adx function returns a series, not a dataframe
+    features['adx'] = adx_df.values
 
     # Lagged features
     for lag in [1, 2, 3, 5, 10]:
@@ -133,35 +134,43 @@ class InferenceStrategy(Strategy):
     ) -> Tuple[List[Dict[str, Any]], Dict[str, pd.DataFrame]]:
         actions = []
         
-        # Initialize historical_data if not provided
+        # If historical_data is not provided, we are in data-gathering mode.
         if historical_data is None:
             historical_data = {}
+            try:
+                # Fetch data for all symbols in the watchlist at once
+                data = self.data_loader.get_market_data(
+                    symbols=watch_list,
+                    interval=self.config.trade_interval,
+                    limit=200  # A reasonable lookback for feature calculation
+                )
+                
+                # If data is a DataFrame (multi-symbol), split it
+                if isinstance(data, pd.DataFrame) and isinstance(data.index, pd.MultiIndex):
+                    for symbol in watch_list:
+                        if symbol in data.index.get_level_values('symbol'):
+                            historical_data[symbol] = data.loc[symbol]
+                        else:
+                            historical_data[symbol] = pd.DataFrame()
+                # If data is a dict (from a mock or other source), use it directly
+                elif isinstance(data, dict):
+                    historical_data = data
+                else:
+                    log.warning("inference_strategy.evaluate.no_data_returned_for_watchlist")
+                    for symbol in watch_list:
+                        historical_data[symbol] = pd.DataFrame()
 
-        # If market regimes are NOT provided, this is the first pass for data loading.
-        if not market_regimes:
-            # First pass: load data for all symbols
-            for symbol in watch_list:
-                try:
-                    # Fetch data with interval and a limit suitable for feature creation
-                    data_dict = self.data_loader.get_market_data(
-                        symbols=[symbol],
-                        interval=self.config.trade_interval,
-                        limit=200  # A reasonable lookback for feature calculation
-                    )
-                    if data_dict is not None and not data_dict.empty and symbol in data_dict:
-                        data = data_dict[symbol]
-                        if data is not None and not data.empty:
-                            historical_data[symbol] = data
-                    else:
-                        log.warning("inference_strategy.evaluate.no_data_in_dict", extra={"extra": {"symbol": symbol}})
-                except Exception:
-                    log.error("inference_strategy.evaluate.data_load_error", extra={"extra": {"symbol": symbol}}, exc_info=True)
-            
-            # This was a data-gathering pass. Return the data.
-            return [], historical_data
+            except Exception:
+                log.error("inference_strategy.evaluate.data_load_fail", exc_info=True)
+                # On critical data failure, return empty dict to signal this to the caller
+                return [], {}
 
         # If we are here, it's the second pass (market_regimes is not None).
         # The historical_data from the first pass is used to generate actions.
+        if not historical_data:
+            log.warning("inference_strategy.evaluate.no_data_in_dict")
+            return [], {}
+
         for symbol in watch_list:
             if symbol not in historical_data or historical_data[symbol].empty:
                 log.warning("inference_strategy.evaluate.no_data", extra={"extra": {"symbol": symbol}})
@@ -183,7 +192,8 @@ class InferenceStrategy(Strategy):
 
                 prediction = self.model.predict(features.tail(1))
                 action = self.map_prediction_to_action(prediction[0], symbol, current_regime)
-                actions.append(action)
+                if action['action'] != 'hold':
+                    actions.append(action)
 
             except Exception:
                 log.error("inference_strategy.evaluate.action_error", extra={"extra": {"symbol": symbol}}, exc_info=True)

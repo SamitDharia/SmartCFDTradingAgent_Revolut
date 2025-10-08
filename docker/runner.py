@@ -10,8 +10,7 @@ from smartcfd.alpaca import build_api_base, build_headers_from_env
 from smartcfd.health_server import start_health_server
 from smartcfd.trader import Trader
 from smartcfd.strategy import get_strategy_by_name
-from smartcfd.broker import AlpacaBroker
-from smartcfd.alpaca_client import get_alpaca_client
+from smartcfd.alpaca_client import AlpacaBroker
 from smartcfd.risk import RiskManager
 from smartcfd.data_loader import DataLoader
 from smartcfd.portfolio import PortfolioManager
@@ -88,9 +87,11 @@ def main():
         log.warning("runner.health.server.fail", extra={"extra": {"error": repr(e)}})
 
     # Initialize the Alpaca client, Risk Manager, and Strategy
-    alpaca_client = get_alpaca_client(api_base)
-    broker = AlpacaBroker(alpaca_client)
-    portfolio_manager = PortfolioManager(alpaca_client)
+    broker = AlpacaBroker(paper=(cfg.alpaca_env == 'paper'))
+    
+    # Pass the broker to the PortfolioManager
+    portfolio_manager = PortfolioManager(broker)
+    
     risk_manager = RiskManager(portfolio_manager, risk_cfg)
     strategy_name = os.getenv("STRATEGY", "inference")
     strategy = get_strategy_by_name(strategy_name)

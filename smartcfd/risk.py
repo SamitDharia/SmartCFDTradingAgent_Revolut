@@ -4,7 +4,7 @@ import pandas as pd
 from pydantic import BaseModel
 import ta
 
-from smartcfd.alpaca_client import AlpacaClient, OrderRequest, StopLossRequest, TakeProfitRequest
+from smartcfd.types import OrderRequest, StopLossRequest, TakeProfitRequest
 from smartcfd.config import RiskConfig
 from smartcfd.data_loader import DataLoader
 from smartcfd.db import get_daily_pnl
@@ -25,8 +25,6 @@ class RiskManager:
         self.is_halted = False
         self.halt_reason = ""
         self.broker = broker
-        # This is a temporary solution until data loading is also centralized
-        self.data_loader = DataLoader(api_base=portfolio_manager.client.api_base)
 
 
     def generate_bracket_order(self, symbol: str, side: str, qty: float, current_price: float, historical_data: pd.DataFrame) -> Optional[OrderRequest]:
@@ -84,7 +82,7 @@ class RiskManager:
             log.error("risk.generate_bracket_order.fail", exc_info=True)
             return None
 
-    def calculate_order_qty(self, symbol: str, side: str) -> Tuple[float, float]:
+    def calculate_order_qty(self, symbol: str, side: str, historical_data: Optional[pd.DataFrame]) -> Tuple[float, float]:
         """
         Calculates the quantity for an order based on risk rules and returns
         the quantity and the current price.
@@ -115,15 +113,12 @@ class RiskManager:
                 log.error("risk.calculate_order_qty.no_account")
                 return 0.0, 0.0
 
-            # Use broker if available (for test mocks), else fallback to portfolio_manager.client
-            if self.broker is not None:
-                trade = self.broker.get_latest_crypto_trade(symbol, self.portfolio_manager.client.feed)
-            else:
-                trade = self.portfolio_manager.client.get_latest_crypto_trade(symbol, self.portfolio_manager.client.feed)
-            if not trade or 'trade' not in trade or 'p' not in trade['trade']:
-                log.error("risk.calculate_order_qty.no_price", extra={"extra": {"symbol": symbol}})
+            # Get current price from the historical data that was passed in
+            if historical_data is None or historical_data.empty:
+                log.error("risk.calculate_order_qty.no_data", extra={"extra": {"symbol": symbol}})
                 return 0.0, 0.0
-            current_price = float(trade['trade']['p'])
+            current_price = historical_data['close'].iloc[-1]
+
             if not current_price or current_price <= 0:
                 log.error("risk.calculate_order_qty.no_price", extra={"extra": {"symbol": symbol}})
                 return 0.0, 0.0
@@ -185,17 +180,15 @@ class RiskManager:
         log.warning("risk._get_positions.deprecated")
         return list(self.portfolio_manager.positions.values())
 
-    def _check_volatility_for_symbol(self, symbol: str, interval: str) -> bool:
+    def _check_volatility_for_symbol(self, symbol: str, data: pd.DataFrame, interval: str) -> bool:
         """Checks if the volatility for a symbol exceeds the circuit breaker threshold."""
         multiplier = self.config.circuit_breaker_atr_multiplier
         if not multiplier or multiplier <= 0:
             return False # Circuit breaker is disabled
 
-        # Fetch recent data to calculate ATR. We need enough for the ATR window + 1 for previous close.
-        # TODO: This still uses a direct data loader. This could be refactored to use pre-fetched data.
-        data = self.data_loader.get_market_data([symbol], interval, limit=50)
+        # The data is now passed in, so we don't need to fetch it.
         if data is None or data.empty:
-            log.warning("risk.volatility_check.no_data", extra={"extra": {"symbol": symbol, "reason": "Not enough data for volatility check."}})
+            log.warning("risk.volatility_check.no_data", extra={"extra": {"symbol": symbol, "reason": "No data provided for volatility check."}})
             return False # Cannot perform check
 
         # Ensure data is sorted by time
@@ -244,7 +237,7 @@ class RiskManager:
 
         return False
 
-    def check_for_halt(self, watch_list: List[str], interval: str) -> bool:
+    def check_for_halt(self, historical_data: Dict[str, pd.DataFrame], interval: str) -> bool:
         """
         Checks all halt conditions. If any are met, sets the halt flag and returns True.
         If no conditions are met, it ensures the halt is lifted and returns False.
@@ -289,8 +282,8 @@ class RiskManager:
             return True
 
         # 2. Check for volatility circuit breaker for each symbol in the watch list
-        for symbol in watch_list:
-            if self._check_volatility_for_symbol(symbol, interval):
+        for symbol, data in historical_data.items():
+            if self._check_volatility_for_symbol(symbol, data, interval):
                 self.is_halted = True # The reason is set inside the check
                 return True # Halt immediately
 

@@ -12,7 +12,7 @@ services:
       - .env
     environment:
       # Safe defaults if .env variables are missing
-      TIMEZONE: ${TIMEZONE:-Europe/Dublin}
+      TIMEZONE: ${TIMEZONE:-America/New_York}
       ALPACA_ENV: ${ALPACA_ENV:-paper}
       API_TIMEOUT_SECONDS: ${API_TIMEOUT_SECONDS:-10}
       NETWORK_MAX_BACKOFF_SECONDS: ${NETWORK_MAX_BACKOFF_SECONDS:-60}

@@ -21,28 +21,46 @@
 
 ---
 
-## 🚀 Phase 5: Production & Deployment (Current)
+## 🚀 Phase 5: Stability & Hardening (Current)
 
-*This phase is about moving the agent from a development environment to a live, autonomous system.*
+*This phase is focused on achieving rock-solid stability and resilience before full cloud deployment.*
 
-### Section 16: Cloud Deployment & Automation
+### Section 16: Systematic Testing & Validation
+- [ ] **Goal:** Prove the application's logic is sound in a controlled environment before deploying to Docker.
+- [ ] **Task 1 (Local-First Testing):** Create a comprehensive integration test (`tests/test_full_system_run.py`) that simulates the entire trading loop locally. This test will mock all external API calls to validate the system's behavior under various conditions (e.g., good data, empty data, API errors).
+- [ ] **Task 2 (Code Hardening):** Based on the integration test results, add robust data validation and error handling throughout the application. Ensure the system fails gracefully and logs clear, actionable errors.
+- [ ] **Task 3 (Intelligent Health Checks):** Improve the `/healthz` endpoint to perform a full check on all critical components (e.g., broker connection, data source availability) before reporting a `200 OK` status.
+
+### Section 17: Advanced Feature Integration & Cloud Prep
+- [ ] **Goal:** Enhance the model's predictive power and prepare for autonomous operation.
+- [ ] **Task 1 (Data):** Research and integrate a non-price-based data source (e.g., news sentiment, on-chain metrics).
+- [ ] **Task 2 (Backtesting):** Add advanced backtesting metrics (Sortino, Calmar) and simulate transaction costs.
+- [ ] **Task 3 (Data Redundancy):** Implement a failover mechanism to switch to a secondary data provider (e.g., Binance, Tiingo) if the primary (Alpaca) fails.
+- [ ] **Task 4 (Data Backfilling):** Create a mechanism to automatically fetch and process any missing data after a temporary outage is resolved.
+
+---
+
+## ☁️ Phase 6: Cloud Deployment & Automation
+
+### Section 18: Production Migration
 - [ ] **Goal:** Migrate the application to a cloud VM for 24/7 autonomous operation.
 - [ ] **Task 1:** Set up a production-ready environment on a cloud provider (e.g., AWS EC2, DigitalOcean).
 - [ ] **Task 2:** Implement a robust CI/CD pipeline using GitHub Actions to automate testing and deployment.
 
-### Section 17: Advanced Feature Integration
-- [ ] **Goal:** Enhance the model's predictive power and system resilience.
-- [ ] **Task 1 (Data):** Research and integrate a non-price-based data source (e.g., news sentiment, on-chain metrics).
-- [ ] **Task 2 (Backtesting):** Add advanced backtesting metrics (Sortino, Calmar) and simulate transaction costs.
-- [ ] **Task 3 (Resilience):** Implement a "circuit breaker" for data fetching. This will track consecutive data failures for each asset, log a `CRITICAL` error if a threshold is breached, and send an email alert to notify of a persistent data outage.
-- [ ] **Task 4 (Data Redundancy):** Implement a failover mechanism to switch to a secondary data provider (e.g., Binance, Tiingo) if the primary (Alpaca) fails.
-- [ ] **Task 5 (Data Backfilling):** Create a mechanism to automatically fetch and process any missing data after a temporary outage is resolved.
-
 ---
 
-## 📚 Phase 6: Documentation & Review (Ongoing)
+## 📚 Phase 7: Documentation & Review (Ongoing)
 
-### Section 18: Continuous Improvement
+### Section 19: Continuous Improvement
 - [ ] **Performance Review:** Continuously evaluate the trading bot's performance against backtest results and benchmarks.
 - [ ] **Roadmap Revision:** Revise the project roadmap based on new findings and priorities.
 - [x] **Documentation:** Keep all project documents (`PROJECT_SUMMARY.md`, `LESSONS_LEARNED.md`, etc.) up-to-date with the latest developments.
+
+---
+
+## 🔧 Phase 8: Live Data Handling & Final Polish
+
+- **[ ] Implement Snapshot Data Fetching**: Modify the `DataLoader` to use the `get_crypto_snapshot` endpoint instead of relying solely on historical bar requests. This will prevent issues with partial, incomplete live bars and provide more accurate, up-to-the-minute data for decision-making.
+- **[ ] Final Code Review & Cleanup**: Perform a full review of the new code, add comments, and ensure all configurations are production-ready.
+- **[ ] Long-Duration Test in Docker**: Run the agent in Docker for an extended period (e.g., 12-24 hours) to monitor for any memory leaks, performance degradation, or other long-term stability issues.
+- **[ ] Final Deployment Documentation**: Update `README-DEPLOY.md` with the final, verified steps for deploying and managing the production agent.

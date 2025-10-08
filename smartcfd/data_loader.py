@@ -2,10 +2,13 @@ import os
 import pandas as pd
 import requests
 from alpaca.data.historical import CryptoHistoricalDataClient
-from alpaca.data.requests import CryptoBarsRequest
+from alpaca.data.requests import CryptoBarsRequest, CryptoSnapshotRequest, CryptoSnapshotRequest, CryptoSnapshotRequest, CryptoSnapshotRequest
 from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 import logging
 from datetime import datetime, timedelta, timezone
+from typing import Dict
+from typing import Dict
+from typing import Dict
 
 log = logging.getLogger(__name__)
 
@@ -50,9 +53,6 @@ class DataLoader:
         # api_base is not directly used by CryptoHistoricalDataClient,
         # but it's good practice for consistency.
         self.client = CryptoHistoricalDataClient()
-        # HACK: Disable SSL verification for corporate proxies.
-        # The session object is part of the underlying REST client.
-        self.client._session.verify = False
 
     def fetch_historical_range(self, symbol: str, start_date: str, end_date: str, interval: str) -> pd.DataFrame | None:
         """
@@ -87,18 +87,18 @@ class DataLoader:
             log.error(f"Failed to fetch historical data for {symbol}: {e}", exc_info=True)
             return pd.DataFrame()
 
-    def get_market_data(self, symbols: list[str], interval: str, limit: int) -> pd.DataFrame | None:
+    def get_market_data(self, symbols: list[str], interval: str, limit: int) -> Dict[str, pd.DataFrame]:
         """
-        Fetches historical crypto data for a list of symbols.
+        Fetches and validates historical crypto data for a list of symbols.
+        This method combines historical bars with the latest snapshot to ensure data is fresh
+        and complete, avoiding partial bars for the current interval.
         """
         if not symbols:
-            return None
-            
+            return {}
+
         try:
             timeframe = _parse_interval(interval)
-            # Calculate start time based on limit. This is an approximation.
-            # For a more precise calculation, one would need to consider market hours,
-            # but for crypto 24/7, this is a reasonable estimate.
+            # Calculate start time for historical data fetch
             if timeframe.unit == TimeFrameUnit.Minute:
                 delta = timedelta(minutes=timeframe.amount * limit)
             elif timeframe.unit == TimeFrameUnit.Hour:
@@ -106,35 +106,78 @@ class DataLoader:
             elif timeframe.unit == TimeFrameUnit.Day:
                 delta = timedelta(days=timeframe.amount * limit)
             else:
-                delta = timedelta(days=limit) # Fallback
+                # Fallback for less common timeframes
+                delta = timedelta(days=limit) 
+            
+            start_dt = datetime.utcnow() - (delta * 1.2) # Fetch slightly more to be safe
 
-            # Fetch a bit more data to ensure we have enough bars
-            start_dt = datetime.utcnow() - (delta * 1.2)
-
-            request = CryptoBarsRequest(
+            # 1. Fetch historical bars
+            bars_request = CryptoBarsRequest(
                 symbol_or_symbols=symbols,
                 timeframe=timeframe,
                 start=start_dt
             )
-            bars = self.client.get_crypto_bars(request)
-            df = bars.df.reset_index()
-            df = df.rename(columns={'timestamp': 'time'})
+            bars_df = self.client.get_crypto_bars(bars_request).df
+
+            # 2. Fetch latest snapshot data
+            snapshot_request = CryptoSnapshotRequest(symbol_or_symbols=symbols)
+            snapshots = self.client.get_crypto_snapshot(snapshot_request)
+
+            # --- Data Combination and Validation ---
+            validated_data = {}
+            for symbol in symbols:
+                # Extract historical data for the specific symbol
+                if isinstance(bars_df.index, pd.MultiIndex) and symbol in bars_df.index.get_level_values('symbol'):
+                    symbol_df = bars_df.loc[symbol].copy()
+                elif not isinstance(bars_df.index, pd.MultiIndex) and len(symbols) == 1:
+                    symbol_df = bars_df.copy()
+                else:
+                    log.warning(f"data_loader.get_market_data.no_hist_data", extra={"extra": {"symbol": symbol}})
+                    symbol_df = pd.DataFrame() # Start with an empty frame
+
+                # Get the corresponding snapshot
+                snapshot = snapshots.get(symbol)
+                if not snapshot or not snapshot.latest_bar:
+                    log.warning(f"data_loader.get_market_data.no_snapshot", extra={"extra": {"symbol": symbol}})
+                    validated_data[symbol] = pd.DataFrame() # Invalidate if no snapshot
+                    continue
+
+                # Create a DataFrame from the snapshot's bar
+                snapshot_bar_dict = snapshot.latest_bar.dict()
+                snapshot_df = pd.DataFrame([snapshot_bar_dict])
+                snapshot_df['timestamp'] = pd.to_datetime(snapshot_df['timestamp'])
+                snapshot_df = snapshot_df.set_index('timestamp')
+
+                # Combine historical with snapshot to get the most accurate recent bar
+                if not symbol_df.empty:
+                    # If the last historical bar has the same timestamp as the snapshot, it's a partial bar.
+                    # We replace it with the more up-to-date snapshot bar.
+                    if symbol_df.index[-1] == snapshot_df.index[0]:
+                        symbol_df = symbol_df.iloc[:-1]
+                    
+                    # Append the snapshot bar
+                    symbol_df = pd.concat([symbol_df, snapshot_df])
+                else:
+                    # If no historical data, start with the snapshot
+                    symbol_df = snapshot_df
+
+                # --- Data Integrity Validation ---
+                is_stale_flag = is_data_stale(symbol_df, max_staleness_minutes=timeframe.amount * 5)
+                gaps_found = has_data_gaps(symbol_df, expected_interval=timeframe)
+                is_anomalous = has_anomalous_data(symbol_df)
+
+                if is_stale_flag or gaps_found or is_anomalous:
+                    log.warning(f"data_loader.get_market_data.validation_failed", extra={"extra": {"symbol": symbol, "stale": is_stale_flag, "gaps": gaps_found, "anomalous": is_anomalous}})
+                    validated_data[symbol] = pd.DataFrame()
+                else:
+                    # Ensure we only return the last 'limit' bars
+                    validated_data[symbol] = symbol_df.tail(limit)
             
-            # Alpaca returns data for each symbol. We need to process it.
-            # For now, let's assume we only get one symbol at a time for simplicity,
-            # as the current usage pattern suggests.
-            if isinstance(df.index, pd.MultiIndex):
-                 if symbols[0] in df.index.get_level_values('symbol'):
-                    df = df.loc[symbols[0]]
-                 else:
-                    return None
-            
-            df = df.set_index('time')
-            return df
+            return validated_data
 
         except Exception as e:
             log.error("data_loader.get_market_data.fail", extra={"extra": {"symbols": symbols, "error": repr(e)}})
-            return None
+            return {symbol: pd.DataFrame() for symbol in symbols}
 
 
 def fetch_data(symbol: str, timeframe: TimeFrame, start_date: str, end_date: str) -> pd.DataFrame:

@@ -40,18 +40,24 @@ class Trader:
             # 1. Reconcile portfolio state with the broker
             self.portfolio_manager.reconcile()
 
-            # 2. Check for global halt conditions (e.g., max drawdown)
-            if self.risk_manager.check_for_halt(watch_list, interval):
-                log.critical("trader.run.halted", extra={"extra": {"reason": self.risk_manager.halt_reason}})
-                return
-
-            # 3. First Pass: Evaluate strategy to get historical data for regime detection
+            # 2. First Pass: Evaluate strategy to get historical data for regime detection and risk checks
             log.info("trader.run.evaluating_strategy_data_pass")
-            _, historical_data = self.strategy.evaluate(
+            actions, historical_data = self.strategy.evaluate(
                 self.portfolio_manager, 
                 watch_list,
                 market_regimes=None # Pass None to signal data gathering pass
             )
+
+            # If the initial data load failed completely, historical_data might be empty.
+            # In this case, we should not proceed.
+            if not historical_data:
+                log.warning("trader.run.no_data_from_strategy")
+                return
+
+            # 3. Check for global halt conditions (e.g., max drawdown, high volatility)
+            if self.risk_manager.check_for_halt(historical_data, interval):
+                log.critical("trader.run.halted", extra={"extra": {"reason": self.risk_manager.halt_reason}})
+                return
 
             # 4. Detect market regime for each symbol
             market_regimes = {}
@@ -63,7 +69,7 @@ class Trader:
 
             # 5. Second Pass: Re-evaluate strategy with regime context to get final actions
             log.info("trader.run.evaluating_strategy_with_regime")
-            actions, historical_data = self.strategy.evaluate(
+            actions, _ = self.strategy.evaluate( # We already have the data
                 self.portfolio_manager, 
                 watch_list, 
                 market_regimes,
@@ -128,7 +134,7 @@ class Trader:
                 # Proceed if no position exists or if we are adding to a long position
                 if not current_position or current_position.side == "long":
                     log.info("trader.execute_order.open_or_add_long", extra={"extra": {"symbol": symbol}})
-                    qty, current_price = self.risk_manager.calculate_order_qty(symbol, "buy")
+                    qty, current_price = self.risk_manager.calculate_order_qty(symbol, "buy", historical_data)
                     if qty > 0:
                         order_request = self.risk_manager.generate_bracket_order(
                             symbol=symbol, qty=qty, side="buy", current_price=current_price, historical_data=historical_data
@@ -146,7 +152,7 @@ class Trader:
                 # Proceed if no position exists or if we are adding to a short position
                 if not current_position or current_position.side == "short":
                     log.info("trader.execute_order.open_or_add_short", extra={"extra": {"symbol": symbol}})
-                    qty, current_price = self.risk_manager.calculate_order_qty(symbol, "sell")
+                    qty, current_price = self.risk_manager.calculate_order_qty(symbol, "sell", historical_data)
                     if qty > 0:
                         order_request = self.risk_manager.generate_bracket_order(
                             symbol=symbol, qty=qty, side="sell", current_price=current_price, historical_data=historical_data

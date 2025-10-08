@@ -1,9 +1,11 @@
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
+import pandas as pd
+
+from smartcfd.broker import Broker
+from smartcfd.types import Order
 from pydantic import BaseModel, Field
-
-from smartcfd.alpaca_client import AlpacaClient, OrderResponse
 
 log = logging.getLogger(__name__)
 
@@ -34,14 +36,17 @@ class Position(BaseModel):
 
 class PortfolioManager:
     """
-    Manages the state of the trading account, including account details,
-    open positions, and pending orders.
+    Manages the portfolio's state, including positions and cash.
+    It reconciles its state with the broker's state.
     """
-    def __init__(self, client: AlpacaClient):
+
+    def __init__(self, client: Broker):
         self.client = client
-        self.account: Optional[Account] = None
         self.positions: Dict[str, Position] = {}
-        self.orders: List[OrderResponse] = []
+        self.account_info: Optional[Any] = None
+        self.last_reconciliation: Optional[pd.Timestamp] = None
+        self.reconciliation_interval = pd.Timedelta(minutes=5)
+        self.orders: List[Order] = []
 
     def reconcile(self):
         """
@@ -53,14 +58,11 @@ class PortfolioManager:
             # 1. Fetch Account Details
             account_data = self.client.get_account()
             if account_data:
-                self.account = Account(
-                    id=account_data['id'],
-                    equity=float(account_data['equity']),
-                    last_equity=float(account_data['last_equity']),
-                    buying_power=float(account_data['buying_power']),
-                    cash=float(account_data['cash']),
-                    status=account_data['status'],
-                )
+                # The client might return a dict or an object, handle both
+                if isinstance(account_data, dict):
+                    self.account = Account(**account_data)
+                else:
+                    self.account = account_data
                 log.info("portfolio.reconcile.account_updated", extra={"extra": self.account.model_dump()})
             else:
                 self.account = None
@@ -69,17 +71,14 @@ class PortfolioManager:
             # 2. Fetch Open Positions
             positions_data = self.client.get_positions()
             self.positions.clear()
-            for pos_obj in positions_data:
-                position = Position(
-                    symbol=pos_obj['symbol'],
-                    qty=float(pos_obj['qty']),
-                    side=pos_obj['side'],
-                    market_value=float(pos_obj['market_value']),
-                    unrealized_pl=float(pos_obj['unrealized_pl']),
-                    unrealized_plpc=float(pos_obj['unrealized_plpc']),
-                    avg_entry_price=float(pos_obj['avg_entry_price']),
-                )
-                self.positions[pos_obj['symbol']] = position
+            if positions_data:
+                for pos_obj in positions_data:
+                    # The client might return a dict or an object, handle both
+                    if isinstance(pos_obj, dict):
+                        position = Position(**pos_obj)
+                    else:
+                        position = pos_obj
+                    self.positions[position.symbol] = position
             log.info("portfolio.reconcile.positions_updated", extra={"extra": {"position_count": len(self.positions)}})
 
             # 3. Fetch Open/Pending Orders
@@ -93,6 +92,14 @@ class PortfolioManager:
             # In case of failure, mark the portfolio as potentially offline/stale
             if self.account:
                 self.account.is_online = False
+
+    def needs_reconciliation(self) -> bool:
+        """Determines if the portfolio needs reconciliation with the broker."""
+        if self.account_info is None:
+            return True
+        if pd.Timestamp.now() - self.last_reconciliation > self.reconciliation_interval:
+            return True
+        return False
 
     def get_position(self, symbol: str) -> Optional[Position]:
         """Returns the position for a given symbol, if it exists."""

@@ -21,7 +21,8 @@ COPY requirements.txt pyproject.toml /app/
 
 # Install Python dependencies
 RUN python -m pip install --upgrade pip && \
-    pip install -r requirements.txt
+    pip install -r requirements.txt && \
+    pip install certifi
 
 # --- Application Code ---
 # Copy the rest of the application code
