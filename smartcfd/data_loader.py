@@ -155,12 +155,21 @@ class DataLoader:
                 snapshot_df['timestamp'] = pd.to_datetime(snapshot_df['timestamp'])
                 snapshot_df = snapshot_df.set_index('timestamp')
 
+                # --- Column Alignment ---
+                # Ensure snapshot_df has the same columns in the same order as symbol_df
+                if not symbol_df.empty:
+                    # Exclude the 'symbol' column from the snapshot if it exists
+                    snapshot_columns = [col for col in symbol_df.columns if col in snapshot_df.columns]
+                    snapshot_df = snapshot_df[snapshot_columns]
+                    # Align column order to prevent assignment errors
+                    snapshot_df = snapshot_df[symbol_df.columns]
+
                 # Combine historical and snapshot data
                 # The snapshot bar can either be an update to the last historical bar or a new one
-                if not symbol_df.empty and snapshot_df.index[0] == symbol_df.index[-1]:
+                if not symbol_df.empty and not snapshot_df.empty and snapshot_df.index[0] == symbol_df.index[-1]:
                     # Update the last bar with the snapshot's data
                     symbol_df.iloc[-1] = snapshot_df.iloc[0]
-                else:
+                elif not snapshot_df.empty:
                     # Append the new bar
                     symbol_df = pd.concat([symbol_df, snapshot_df])
 
