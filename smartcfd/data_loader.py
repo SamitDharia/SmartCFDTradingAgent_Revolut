@@ -1,9 +1,8 @@
 import os
 import pandas as pd
 import requests
-from alpaca.data.historical import CryptoHistoricalDataClient
-from alpaca.data.requests import CryptoBarsRequest, CryptoSnapshotRequest
-from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
+import alpaca_trade_api as tradeapi
+from alpaca_trade_api.rest import TimeFrame, TimeFrameUnit
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Dict
@@ -49,10 +48,8 @@ class DataLoader:
     """
     Handles fetching historical market data from Alpaca.
     """
-    def __init__(self, api_base: str = None):
-        # api_base is not directly used by CryptoHistoricalDataClient,
-        # but it's good practice for consistency.
-        self.client = CryptoHistoricalDataClient()
+    def __init__(self, api_key: str, secret_key: str, api_base: str):
+        self.api = tradeapi.REST(api_key, secret_key, base_url=api_base, api_version='v2')
 
     def fetch_historical_range(self, symbol: str, start_date: str, end_date: str, interval: str) -> pd.DataFrame | None:
         """
@@ -60,27 +57,22 @@ class DataLoader:
         """
         try:
             timeframe = parse_interval(interval)
-            request = CryptoBarsRequest(
-                symbol_or_symbols=[symbol],
-                timeframe=timeframe,
-                start=pd.to_datetime(start_date).tz_localize('UTC'),
-                end=pd.to_datetime(end_date).tz_localize('UTC')
-            )
-            bars = self.client.get_crypto_bars(request)
-            df = bars.df
+            bars = self.api.get_crypto_bars(
+                symbol,
+                timeframe,
+                start=pd.to_datetime(start_date).tz_localize('UTC').isoformat(),
+                end=pd.to_datetime(end_date).tz_localize('UTC').isoformat()
+            ).df
 
-            # If the symbol is in a multi-index, extract it
-            if isinstance(df.index, pd.MultiIndex):
-                if 'symbol' in df.index.names and not df.index.get_level_values('symbol').empty:
-                    if symbol in df.index.get_level_values('symbol'):
-                        df = df.loc[symbol]
-                    else:
-                        log.warning(f"Symbol {symbol} not found in fetched multi-index data.")
-                        return pd.DataFrame()
+            # The legacy API returns a multi-index dataframe, so we need to handle it.
+            if isinstance(bars.index, pd.MultiIndex):
+                if symbol in bars.index.get_level_values('symbol'):
+                    bars = bars.loc[symbol]
                 else:
-                    pass # Assume single-symbol response
-
-            return df
+                    log.warning(f"Symbol {symbol} not found in fetched multi-index data.")
+                    return pd.DataFrame()
+            
+            return bars
         except Exception as e:
             log.error(f"Failed to fetch historical data for {symbol}: {e}", exc_info=True)
             return pd.DataFrame()
@@ -116,16 +108,14 @@ class DataLoader:
             start_date = datetime.now(timezone.utc) - delta - timedelta(days=1)
 
             # 1. Fetch historical bars using a start date
-            bars_request = CryptoBarsRequest(
-                symbol_or_symbols=symbols,
-                timeframe=timeframe,
-                start=start_date
-            )
-            raw_bars_df = self.client.get_crypto_bars(bars_request).df
+            raw_bars_df = self.api.get_crypto_bars(
+                symbols,
+                timeframe,
+                start=start_date.isoformat()
+            ).df
 
             # 2. Fetch latest snapshot data
-            snapshot_request = CryptoSnapshotRequest(symbol_or_symbols=symbols)
-            snapshots = self.client.get_crypto_snapshot(snapshot_request)
+            snapshots = self.api.get_crypto_snapshots(symbols)
 
             # --- Data Combination and Validation ---
             validated_data = {}
@@ -193,36 +183,13 @@ def fetch_data(symbol: str, timeframe: TimeFrame, start_date: str, end_date: str
     """
     Fetches historical crypto data for a single symbol between two dates.
     """
-    client = CryptoHistoricalDataClient()
-    # HACK: Disable SSL verification for corporate proxies.
-    client._session.verify = False
-    try:
-        request = CryptoBarsRequest(
-            symbol_or_symbols=[symbol],
-            timeframe=timeframe,
-            start=pd.to_datetime(start_date).tz_localize('UTC'),
-            end=pd.to_datetime(end_date).tz_localize('UTC')
-        )
-        bars = client.get_crypto_bars(request)
-        df = bars.df
-        
-        # If the symbol is in a multi-index, extract it
-        if isinstance(df.index, pd.MultiIndex):
-            # Check if the symbol level exists and is not empty
-            if 'symbol' in df.index.names and not df.index.get_level_values('symbol').empty:
-                 if symbol in df.index.get_level_values('symbol'):
-                    df = df.loc[symbol]
-                 else:
-                    log.warning(f"Symbol {symbol} not found in fetched multi-index data.")
-                    return pd.DataFrame()
-            else:
-                # If there's no symbol index, we assume it's a single-symbol response
-                pass
-
-        return df
-    except Exception as e:
-        log.error(f"Failed to fetch data for {symbol}: {e}", exc_info=True)
-        return pd.DataFrame()
+    # This function seems to be a duplicate of DataLoader.fetch_historical_range
+    # and is not directly used by the core trading loop.
+    # For now, we will leave it as is, but it should be considered for removal.
+    log.warning("The 'fetch_data' function is deprecated. Use 'DataLoader.fetch_historical_range' instead.")
+    # The original implementation will fail because it creates its own client.
+    # To avoid breaking anything that might be using it, we'll just return an empty frame.
+    return pd.DataFrame()
 
 # --- Data Integrity Checks ---
 

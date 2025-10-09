@@ -14,7 +14,7 @@ from datetime import datetime
 
 from smartcfd.data_loader import DataLoader
 from smartcfd.config import load_config, load_risk_config
-from smartcfd.alpaca import build_api_base
+from smartcfd.alpaca_helpers import build_api_base
 from smartcfd.strategy import InferenceStrategy
 from smartcfd.risk import RiskManager, BacktestRiskManager
 from smartcfd.backtest_broker import MockBroker
@@ -33,7 +33,11 @@ def run_backtest(symbol: str, start_date: str, end_date: str, initial_capital: f
 
     cfg = load_config()
     api_base = build_api_base(cfg.alpaca_env)
-    data_loader = DataLoader(api_base)
+    data_loader = DataLoader(
+        api_key=cfg.alpaca_cfg.api_key,
+        secret_key=cfg.alpaca_cfg.secret_key,
+        api_base=api_base
+    )
 
     # 1. Load Data
     log.info("Loading historical data...")

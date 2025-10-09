@@ -4,6 +4,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
 import pandas as pd
 import joblib
+import os
 
 from .portfolio import PortfolioManager
 from .data_loader import DataLoader, has_data_gaps
@@ -127,14 +128,16 @@ class InferenceStrategy(Strategy):
     """
     A strategy that uses a trained model to make trading decisions.
     """
-    def __init__(self, model_path: str = "models/model.joblib", data_loader: DataLoader = None, config: AppConfig = None, trade_confidence_threshold: float = 0.75):
-        self.model_path = model_path
-        self.model = self.load_model(model_path)
-        self.data_loader = data_loader or DataLoader()
+    def __init__(self, config, trade_confidence_threshold: float = 0.75):
         self.config = config
+        self.model = self.load_model()
+        self.feature_names = self.load_feature_names()
         self.trade_confidence_threshold = trade_confidence_threshold
+        self.data_loader = None # Will be set by the Trader
 
-    def load_model(self, model_path: str):
+    def load_model(self):
+        """Loads the trained model from disk."""
+        model_path = "models/model.joblib"
         if not Path(model_path).exists():
             log.error(f"inference_strategy.load_model.not_found path='{model_path}'")
             return None
@@ -145,6 +148,20 @@ class InferenceStrategy(Strategy):
         except Exception:
             log.error("inference_strategy.load_model.fail", exc_info=True)
             return None
+
+    def load_feature_names(self):
+        """Loads the feature names used by the model."""
+        feature_names_path = 'models/feature_names.joblib'
+        if not Path(feature_names_path).exists():
+            log.error(f"inference_strategy.load_feature_names.not_found path='{feature_names_path}'")
+            return []
+        try:
+            feature_names = joblib.load(feature_names_path)
+            log.info("inference_strategy.load_feature_names.success")
+            return feature_names
+        except Exception:
+            log.error("inference_strategy.load_feature_names.fail", exc_info=True)
+            return []
 
     def evaluate(
         self,

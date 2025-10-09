@@ -6,7 +6,7 @@ import signal
 
 from smartcfd.config import load_config_from_file
 from smartcfd.db import connect as db_connect, init_schema, record_run, record_heartbeat
-from smartcfd.alpaca import build_api_base, build_headers_from_env
+from smartcfd.alpaca_helpers import build_api_base, build_headers_from_env
 from smartcfd.health_server import start_health_server
 from smartcfd.regime_detector import RegimeDetector
 from smartcfd.strategy import get_strategy_by_name, InferenceStrategy
@@ -105,7 +105,7 @@ def main():
         )
 
     # Initialize the Trader
-    trader = Trader(portfolio_manager, strategy, risk_manager, app_cfg, regime_detector)
+    trader = Trader(portfolio_manager, strategy, risk_manager, app_cfg, regime_detector, alpaca_cfg)
 
     log.info(
         "runner.start",

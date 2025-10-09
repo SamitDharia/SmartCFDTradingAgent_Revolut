@@ -7,6 +7,7 @@ from .broker import Broker
 from .risk import RiskManager
 from .portfolio import PortfolioManager
 from .regime_detector import RegimeDetector, MarketRegime
+from .data_loader import DataLoader
 
 log = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ class Trader:
     A RiskManager is used to size the orders.
     """
 
-    def __init__(self, portfolio_manager: PortfolioManager, strategy: Strategy, risk_manager: RiskManager, app_config: Any, regime_detector: RegimeDetector):
+    def __init__(self, portfolio_manager: PortfolioManager, strategy: Strategy, risk_manager: RiskManager, app_config: Any, regime_detector: RegimeDetector, alpaca_config: Any):
         self.portfolio_manager = portfolio_manager
         self.strategy = strategy
         self.risk_manager = risk_manager
@@ -25,6 +26,13 @@ class Trader:
         self.regime_detector = regime_detector
         # The broker client is now accessed via the portfolio manager
         self.broker = portfolio_manager.client
+        self.data_loader = DataLoader(
+            api_key=alpaca_config.api_key,
+            secret_key=alpaca_config.secret_key,
+            api_base="https://paper-api.alpaca.markets" if app_config.alpaca_env == "paper" else "https://api.alpaca.markets"
+        )
+        # Pass the data loader to the strategy
+        self.strategy.data_loader = self.data_loader
 
     def run(self):
         """

@@ -14,7 +14,13 @@ def check_data_feed_health(config: AppConfig) -> dict:
     """
     primary_symbol = config.watch_list.split(',')[0]
     interval = config.trade_interval
-    loader = DataLoader()
+    
+    api_base = "https://paper-api.alpaca.markets" if config.alpaca_env == "paper" else "https://api.alpaca.markets"
+    loader = DataLoader(
+        api_key=config.api_key,
+        secret_key=config.secret_key,
+        api_base=api_base
+    )
     
     log.info("health_checks.data_feed.start", extra={"extra": {"symbol": primary_symbol}})
     

@@ -4,7 +4,7 @@ yfinance==0.2.40
 pandas_market_calendars==4.4.0
 requests==2.32.3
 python-dotenv==1.0.1
-alpaca-py==0.20.0
+alpaca-trade-api==1.5.1
 click==8.1.7
 pyarrow==16.1.0
 pytest==8.3.2
@@ -27,4 +27,5 @@ flask
 ta
 xgboost
 numpy
+pydantic==2.9.0
 

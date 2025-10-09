@@ -118,7 +118,13 @@ def train_and_evaluate_model(
     evaluates it, and saves it to disk.
     """
     print(f"Fetching data for {symbol} from {start_date} to {end_date}...")
-    loader = DataLoader()
+    app_cfg, _, alpaca_cfg = load_config_from_file()
+    api_base = "https://paper-api.alpaca.markets" if app_cfg.alpaca_env == "paper" else "https://api.alpaca.markets"
+    loader = DataLoader(
+        api_key=alpaca_cfg.api_key,
+        secret_key=alpaca_cfg.secret_key,
+        api_base=api_base
+    )
     df = loader.fetch_historical_range(symbol, start_date, end_date, timeframe_str)
     
     if df.empty:

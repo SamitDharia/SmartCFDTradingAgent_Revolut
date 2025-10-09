@@ -1,5 +1,5 @@
 import os
-from smartcfd.alpaca import build_headers_from_env, build_api_base
+from smartcfd.alpaca_helpers import build_headers_from_env, build_api_base
 
 def test_build_api_base():
     assert build_api_base("paper").endswith("paper-api.alpaca.markets")
