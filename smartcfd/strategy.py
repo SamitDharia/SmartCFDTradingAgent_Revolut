@@ -208,42 +208,38 @@ class InferenceStrategy(Strategy):
                 features = features[model_features]
 
                 prediction = self.model.predict(features.tail(1))
-                prediction_proba = self.model.predict_proba(features.tail(1))
-                confidence = prediction_proba.max()
-
+                probabilities = self.model.predict_proba(features.tail(1))[0]
+                
                 log.info(
-                    f"inference_strategy.evaluate.predict_proba symbol={symbol} probabilities={prediction_proba.tolist()} confidence={confidence} prediction={int(prediction[0])}"
+                    f"inference_strategy.evaluate.predict_proba symbol={symbol} probabilities={probabilities.tolist()} prediction={int(prediction[0])}"
                 )
 
+                # New logic: Check probabilities for Buy (1) and Sell (2) signals
+                buy_prob = probabilities[1]
+                sell_prob = probabilities[2]
+                
+                decision = 'hold'
+                action_prob = 0.0
 
-                if confidence < self.trade_confidence_threshold:
-                    log.info(
-                        "inference_strategy.evaluate.low_confidence",
-                        extra={
-                            "extra": {
-                                "symbol": symbol,
-                                "confidence": float(confidence),
-                                "threshold": self.trade_confidence_threshold,
-                            }
-                        },
-                    )
-                    continue
+                if buy_prob > self.trade_confidence_threshold:
+                    decision = 'buy'
+                    action_prob = buy_prob
+                elif sell_prob > self.trade_confidence_threshold:
+                    decision = 'sell'
+                    action_prob = sell_prob
 
                 log.info(
-                    "inference_strategy.evaluate.predict",
-                    extra={
-                        "extra": {
-                            "symbol": symbol,
-                            "prediction": int(prediction[0]),
-                            "confidence": float(confidence),
-                            "regime": current_regime.value,
-                        }
-                    },
+                    f"prediction for {symbol}: {prediction[0]}, decision: {decision}, "
+                    f"buy_prob: {buy_prob:.4f}, sell_prob: {sell_prob:.4f}, "
+                    f"threshold: {self.trade_confidence_threshold}, regime: {current_regime}"
                 )
 
-                action = self.map_prediction_to_action(prediction[0], symbol, current_regime)
-                if action['action'] != 'hold':
-                    actions.append(action)
+                if decision != 'hold':
+                    actions.append({
+                        "action": decision,
+                        "symbol": symbol,
+                        "confidence": action_prob
+                    })
 
             except Exception:
                 log.error("inference_strategy.evaluate.action_error", extra={"extra": {"symbol": symbol}}, exc_info=True)
@@ -252,6 +248,8 @@ class InferenceStrategy(Strategy):
 
     def map_prediction_to_action(self, prediction: int, symbol: str, regime: str) -> Dict[str, str]:
         """Maps a model's integer prediction to a trading action."""
+        # This function is now effectively bypassed by the new logic in evaluate()
+        # but we keep it for potential future use or different strategies.
         if prediction == 1:
             decision = "buy"
         elif prediction == 2:

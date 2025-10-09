@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List, Any
-from .types import Order
+from .types import Order, OrderRequest
 
 class Broker(ABC):
     """
@@ -9,7 +9,7 @@ class Broker(ABC):
     """
 
     @abstractmethod
-    def submit_order(self, symbol: str, qty: float, side: str, order_type: str, time_in_force: str) -> Any:
+    def submit_order(self, order_request: OrderRequest) -> Any:
         """
         Submits an order to the broker.
         """

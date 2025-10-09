@@ -131,7 +131,8 @@ class Trader:
                         order_request = self.risk_manager.generate_bracket_order(
                             symbol=symbol, qty=qty, side="buy", current_price=current_price, historical_data=historical_data
                         )
-                        self.broker.submit_order(order_request)
+                        if order_request:
+                            self.broker.submit_order(order_request)
 
             # --- Logic for SELL signal (shorting) ---
             elif signal == "sell":
@@ -147,7 +148,8 @@ class Trader:
                         order_request = self.risk_manager.generate_bracket_order(
                             symbol=symbol, qty=qty, side="sell", current_price=current_price, historical_data=historical_data
                         )
-                        self.broker.submit_order(order_request)
+                        if order_request:
+                            self.broker.submit_order(order_request)
 
         except Exception:
             log.error("trader.execute_order.fail", exc_info=True)

@@ -3,7 +3,8 @@ A mock broker for backtesting purposes that simulates order execution.
 """
 import logging
 from datetime import datetime
-from smartcfd.broker import Broker, Order
+from smartcfd.broker import Broker
+from smartcfd.types import Order, OrderRequest
 import pandas as pd
 
 log = logging.getLogger(__name__)
@@ -26,7 +27,7 @@ class MockBroker(Broker):
         """Sets the current time step for the simulation."""
         self.current_step = step
 
-    def submit_order(self, symbol: str, qty: float, side: str, order_type: str, time_in_force: str) -> Order | None:
+    def submit_order(self, order_request: OrderRequest) -> Order | None:
         """
         Simulates submitting an order. The order is considered filled instantly
         at the current bar's closing price.
@@ -41,26 +42,24 @@ class MockBroker(Broker):
 
         order = Order(
             id=order_id,
-            symbol=symbol,
-            qty=qty,
-            side=side,
-            status='filled',
-            filled_qty=qty,
-            filled_avg_price=current_price,
-            created_at=datetime.utcnow()
+            symbol=order_request.symbol,
+            qty=order_request.qty,
+            side=order_request.side,
+            type=order_request.type,
+            created_at=datetime.now().isoformat(),
+            filled_at=datetime.now().isoformat(),
+            filled_avg_price=str(current_price),
+            status='filled'
         )
         self.orders.append(order)
-
         self.trade_count += 1
         self.trade_history.append({
-            "timestamp": self.data.index[self.current_step],
-            "symbol": symbol,
-            "qty": qty,
-            "side": side,
-            "price": current_price,
-            "order_type": order_type
+            'timestamp': self.data.index[self.current_step],
+            'price': current_price,
+            'action': order_request.side,
+            'quantity': order_request.qty
         })
-        
+        log.info(f"Simulated order: {order.side} {order.qty} {order.symbol} at {current_price}")
         return order
 
     def get_trade_count(self) -> int:

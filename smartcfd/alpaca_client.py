@@ -2,9 +2,17 @@ import logging
 import os
 from typing import Any, List
 from alpaca.trading.client import TradingClient
-from alpaca.trading.requests import MarketOrderRequest, GetOrdersRequest
+from alpaca.trading.requests import (
+    MarketOrderRequest,
+    GetOrdersRequest,
+    BracketOrderRequest,
+    StopLossRequest,
+    TakeProfitRequest,
+)
 from alpaca.trading.enums import OrderSide, TimeInForce, QueryOrderStatus
+from alpaca.common.exceptions import APIError
 from .broker import Broker
+from .types import OrderRequest
 
 log = logging.getLogger(__name__)
 
@@ -68,20 +76,32 @@ class AlpacaBroker(Broker):
             log.error(f"Failed to fetch Alpaca orders: {e}", exc_info=True)
             raise
 
-    def submit_order(self, symbol: str, qty: float, side: str, order_type: str, time_in_force: str) -> Any:
-        """Submits an order to the broker."""
+    def submit_order(self, order_request: OrderRequest) -> Any:
+        """Submits a bracket order."""
         try:
-            market_order_data = MarketOrderRequest(
-                symbol=symbol,
-                qty=qty,
-                side=OrderSide[side.upper()],
-                time_in_force=TimeInForce[time_in_force.upper()]
+            # Convert our internal OrderRequest to the Alpaca SDK's BracketOrderRequest
+            bracket_order_data = BracketOrderRequest(
+                symbol=order_request.symbol,
+                qty=float(order_request.qty),
+                side=OrderSide[order_request.side.upper()],
+                time_in_force=TimeInForce[order_request.time_in_force.upper()],
+                order_class=order_request.order_class,
+                take_profit=TakeProfitRequest(
+                    limit_price=float(order_request.take_profit["limit_price"])
+                ),
+                stop_loss=StopLossRequest(
+                    stop_price=float(order_request.stop_loss["stop_price"])
+                ),
             )
-            market_order = self.trading_client.submit_order(order_data=market_order_data)
-            log.info(f"Successfully submitted order {market_order.id} for {symbol}.")
-            return market_order
-        except Exception as e:
-            log.error(f"Failed to submit order for {symbol}: {e}", exc_info=True)
+
+            log.info("alpaca.submit_order.request", extra={"extra": bracket_order_data.model_dump()})
+
+            submitted_order = self.trading_client.submit_order(order_data=bracket_order_data)
+
+            log.info("alpaca.submit_order.success", extra={"extra": {"order_id": submitted_order.id}})
+            return submitted_order
+        except APIError as e:
+            log.error("alpaca.submit_order.fail", exc_info=True)
             raise
 
     def close_position(self, symbol: str) -> Any:
