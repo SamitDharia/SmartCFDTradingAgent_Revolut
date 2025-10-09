@@ -32,6 +32,9 @@ services:
       context: .
       dockerfile: docker/Dockerfile
     container_name: smartcfd-retrain
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     volumes:
       - ./config.ini:/app/config.ini:ro
       - ./models:/app/models

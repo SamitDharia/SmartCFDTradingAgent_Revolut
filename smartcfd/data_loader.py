@@ -90,10 +90,8 @@ class DataLoader:
             timeframe = parse_interval(interval)
             
             # --- Calculate start_date instead of relying on 'limit' ---
-            # Add a buffer to ensure we have enough data after cleaning and for feature creation.
             required_bars = limit + 50 
             
-            # Estimate the duration needed based on the interval
             if timeframe.unit == TimeFrameUnit.Minute:
                 delta = timedelta(minutes=timeframe.amount * required_bars)
             elif timeframe.unit == TimeFrameUnit.Hour:
@@ -101,13 +99,11 @@ class DataLoader:
             elif timeframe.unit == TimeFrameUnit.Day:
                 delta = timedelta(days=timeframe.amount * required_bars)
             else:
-                # Default fallback for less common timeframes
                 delta = timedelta(days=required_bars) 
 
-            # Calculate the start date, giving a bit of extra buffer
             start_date = datetime.now(timezone.utc) - delta - timedelta(days=1)
 
-            # 1. Fetch historical bars using a start date
+            # 1. Fetch historical bars using get_crypto_bars
             raw_bars_df = self.api.get_crypto_bars(
                 symbols,
                 timeframe,
@@ -120,16 +116,14 @@ class DataLoader:
             # --- Data Combination and Validation ---
             validated_data = {}
             for symbol in symbols:
-                # Extract historical data for the specific symbol
                 if isinstance(raw_bars_df.index, pd.MultiIndex) and symbol in raw_bars_df.index.get_level_values('symbol'):
                     bars_df = raw_bars_df.loc[symbol].copy()
                 elif not isinstance(raw_bars_df.index, pd.MultiIndex) and len(symbols) == 1:
                     bars_df = raw_bars_df.copy()
                 else:
                     log.warning(f"data_loader.get_market_data.no_hist_data", extra={"extra": {"symbol": symbol}})
-                    bars_df = pd.DataFrame() # Start with an empty frame
+                    bars_df = pd.DataFrame()
 
-                # Get the corresponding snapshot
                 snapshot = snapshots.get(symbol)
 
                 current_bar = None
@@ -140,11 +134,17 @@ class DataLoader:
 
                 if not snapshot or not current_bar:
                     log.warning(f"data_loader.get_market_data.no_snapshot_bar", extra={"extra": {"symbol": symbol}})
-                    validated_data[symbol] = pd.DataFrame() # Invalidate if no snapshot
+                    validated_data[symbol] = pd.DataFrame()
                     continue
 
-                # Create a DataFrame from the snapshot's bar
-                snapshot_bar_dict = current_bar.dict()
+                snapshot_bar_dict = {
+                    "open": current_bar.open,
+                    "high": current_bar.high,
+                    "low": current_bar.low,
+                    "close": current_bar.close,
+                    "volume": current_bar.volume,
+                    "timestamp": current_bar.timestamp,
+                }
                 snapshot_df = pd.DataFrame([snapshot_bar_dict])
                 snapshot_df['timestamp'] = pd.to_datetime(snapshot_df['timestamp'])
                 snapshot_df = snapshot_df.set_index('timestamp')
@@ -154,7 +154,8 @@ class DataLoader:
                 if not bars_df.empty:
                     snapshot_columns = [col for col in bars_df.columns if col in snapshot_df.columns]
                     snapshot_df = snapshot_df[snapshot_columns]
-                    snapshot_df = snapshot_df[bars_df.columns]
+                    if set(bars_df.columns) == set(snapshot_df.columns):
+                         snapshot_df = snapshot_df[bars_df.columns]
 
                 # Combine historical and snapshot data
                 if not bars_df.empty and not snapshot_df.empty and snapshot_df.index[0] == bars_df.index[-1]:

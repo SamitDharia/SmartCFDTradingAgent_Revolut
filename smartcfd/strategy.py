@@ -14,7 +14,7 @@ from .indicators import (
 )
 from .regime_detector import MarketRegime
 from .config import AppConfig
-from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
+from alpaca_trade_api.rest import TimeFrame, TimeFrameUnit
 
 log = logging.getLogger(__name__)
 

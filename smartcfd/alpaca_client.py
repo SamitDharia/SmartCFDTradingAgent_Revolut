@@ -1,7 +1,7 @@
 import logging
 from typing import Any, List
 import alpaca_trade_api as tradeapi
-from alpaca.common.exceptions import APIError
+from alpaca_trade_api.rest import APIError
 from .broker import Broker
 from .types import OrderRequest
 

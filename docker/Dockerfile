@@ -1,5 +1,5 @@
-# Using a slim Python image for a smaller footprint
-FROM python:3.11-slim
+# Using a full Python image to ensure all build dependencies are available
+FROM python:3.11-bookworm
 
 # Set environment variables for Python
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -12,6 +12,7 @@ WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential python3.11-dev \
     curl ca-certificates bash && \
     rm -rf /var/lib/apt/lists/*
 
