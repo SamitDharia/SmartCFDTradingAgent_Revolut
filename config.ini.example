@@ -8,3 +8,9 @@ secret_key = YOUR_SECRET_KEY_HERE
 [settings]
 # Environment can be 'paper' or 'live'
 alpaca_env = paper
+
+# The minimum number of data points required for the regime detector to make a decision.
+min_data_points = 400
+
+# The minimum confidence score (from 0.0 to 1.0) required from the ML model to place a trade.
+trade_confidence_threshold = 0.75

@@ -10,6 +10,9 @@ services:
       - 1.1.1.1
     volumes:
       - ./config.ini:/app/config.ini:ro
+      - ./models:/app/models:ro
+      - ./logs:/app/logs
+      - ./reports:/app/reports
     environment:
       # Environment variables are now secondary to config.ini
       TIMEZONE: ${TIMEZONE:-America/New_York}

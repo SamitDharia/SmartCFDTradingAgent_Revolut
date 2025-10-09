@@ -25,6 +25,12 @@
       crypto: 2
     max_trades: 10
     grace: 0
+    # --- Strategy Settings ---
+    # The minimum number of data points required to detect a market regime.
+    min_data_points: 100
+    # The confidence threshold required from the model to place a trade.
+    trade_confidence_threshold: 0.60
+
     # --- Circuit Breaker Settings ---
     # Halt trading if the current true range exceeds ATR by this multiplier.
     # A value of 0 disables the circuit breaker.

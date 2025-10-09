@@ -17,6 +17,7 @@ import numpy as np
 import os
 from pathlib import Path
 import matplotlib.pyplot as plt
+from sklearn.utils import class_weight
 
 # --- Default Configuration ---
 app_cfg, _, _ = load_config_from_file()
@@ -53,6 +54,7 @@ def create_target(df: pd.DataFrame, period: int = 5) -> pd.Series:
 def create_features(df: pd.DataFrame) -> pd.DataFrame:
     """
     Create a rich set of features for the model from historical data.
+    This function must be identical to the one in `strategy.py`.
     """
     if df.empty:
         return pd.DataFrame()
@@ -64,12 +66,24 @@ def create_features(df: pd.DataFrame) -> pd.DataFrame:
     features['feature_return_1m'] = df['close'].pct_change(1)
     features['feature_return_5m'] = df['close'].pct_change(5)
     features['feature_return_15m'] = df['close'].pct_change(15)
+    features['feature_return_30m'] = df['close'].pct_change(30)
+    features['feature_return_60m'] = df['close'].pct_change(60)
 
     # Volatility
     features['feature_volatility_5m'] = features['feature_return_1m'].rolling(5).std()
     features['feature_volatility_15m'] = features['feature_return_1m'].rolling(15).std()
+    features['feature_volatility_30m'] = features['feature_return_1m'].rolling(30).std()
+    features['feature_volatility_60m'] = features['feature_return_1m'].rolling(60).std()
 
     # Technical Indicators
+    features['feature_rsi'] = rsi(df['close'])
+    
+    adx_df = adx(df['high'], df['low'], df['close'])
+    features['feature_adx'] = adx_df['ADX_14']
+    
+    proc = price_rate_of_change(df['close'])
+    features['feature_proc'] = proc
+
     bollinger = bollinger_bands(df['close'])
     features['feature_bband_mavg'] = bollinger['BBM_20_2.0']
     features['feature_bband_hband'] = bollinger['BBH_20_2.0']
@@ -136,6 +150,10 @@ def train_and_evaluate_model(
     X = df_features[features]
     y = df_features['target']
 
+    print("--- Target Variable Distribution ---")
+    print(y.value_counts(normalize=True))
+    print("------------------------------------")
+
     if len(X) == 0:
         print("Not enough data to train after processing. Exiting.")
         return
@@ -146,6 +164,16 @@ def train_and_evaluate_model(
     print(f"Saved {len(feature_names)} feature names to models/feature_names.joblib")
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, shuffle=False)
+
+    print("Calculating class weights to handle imbalance...")
+    # Calculate class weights
+    classes = np.unique(y_train)
+    weights = class_weight.compute_class_weight(class_weight='balanced', classes=classes, y=y_train)
+    class_weights = dict(zip(classes, weights))
+    print(f"Computed class weights: {class_weights}")
+
+    # Create sample weights for the training data
+    sample_weights = np.array([class_weights[i] for i in y_train])
 
     print(f"Training model on {len(X_train)} samples...")
     
@@ -174,7 +202,7 @@ def train_and_evaluate_model(
         n_jobs=-1
     )
 
-    random_search.fit(X_train, y_train)
+    random_search.fit(X_train, y_train, sample_weight=sample_weights)
 
     print("Best parameters found: ", random_search.best_params_)
     

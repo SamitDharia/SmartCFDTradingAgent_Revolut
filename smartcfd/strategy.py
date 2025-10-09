@@ -33,12 +33,24 @@ def create_features(df: pd.DataFrame) -> pd.DataFrame:
     features['feature_return_1m'] = df['close'].pct_change(1)
     features['feature_return_5m'] = df['close'].pct_change(5)
     features['feature_return_15m'] = df['close'].pct_change(15)
+    features['feature_return_30m'] = df['close'].pct_change(30)
+    features['feature_return_60m'] = df['close'].pct_change(60)
 
     # Volatility
     features['feature_volatility_5m'] = features['feature_return_1m'].rolling(5).std()
     features['feature_volatility_15m'] = features['feature_return_1m'].rolling(15).std()
+    features['feature_volatility_30m'] = features['feature_return_1m'].rolling(30).std()
+    features['feature_volatility_60m'] = features['feature_return_1m'].rolling(60).std()
 
     # Technical Indicators
+    features['feature_rsi'] = rsi(df['close'])
+    
+    adx_df = adx(df['high'], df['low'], df['close'])
+    features['feature_adx'] = adx_df['ADX_14']
+    
+    proc = price_rate_of_change(df['close'])
+    features['feature_proc'] = proc
+
     bollinger = bollinger_bands(df['close'])
     features['feature_bband_mavg'] = bollinger['BBM_20_2.0']
     features['feature_bband_hband'] = bollinger['BBH_20_2.0']
@@ -115,11 +127,12 @@ class InferenceStrategy(Strategy):
     """
     A strategy that uses a trained model to make trading decisions.
     """
-    def __init__(self, model_path: str = "models/model.joblib", data_loader: DataLoader = None, config: AppConfig = None):
+    def __init__(self, model_path: str = "models/model.joblib", data_loader: DataLoader = None, config: AppConfig = None, trade_confidence_threshold: float = 0.75):
         self.model_path = model_path
         self.model = self.load_model(model_path)
         self.data_loader = data_loader or DataLoader()
         self.config = config
+        self.trade_confidence_threshold = trade_confidence_threshold
 
     def load_model(self, model_path: str):
         if not Path(model_path).exists():
@@ -146,10 +159,13 @@ class InferenceStrategy(Strategy):
         if market_regimes is None:
             # If historical_data is not provided, fetch it.
             if historical_data is None:
+                # We need enough data for regime detection AND feature creation.
+                # Add a buffer to the minimum required points.
+                limit = self.config.min_data_points + 50 
                 historical_data = self.data_loader.get_market_data(
                     symbols=watch_list,
                     interval=self.config.trade_interval,
-                    limit=200 # Fetch enough data for feature creation
+                    limit=limit
                 )
             return [], historical_data
 
@@ -161,10 +177,11 @@ class InferenceStrategy(Strategy):
 
         # If historical_data was passed, use it; otherwise, fetch it.
         if historical_data is None:
+            limit = self.config.min_data_points + 50
             historical_data = self.data_loader.get_market_data(
                 symbols=watch_list,
                 interval=self.config.trade_interval,
-                limit=200  # Fetch enough data for feature creation
+                limit=limit
             )
 
         for symbol in watch_list:
@@ -195,6 +212,24 @@ class InferenceStrategy(Strategy):
                 confidence = prediction_proba.max()
 
                 log.info(
+                    f"inference_strategy.evaluate.predict_proba symbol={symbol} probabilities={prediction_proba.tolist()} confidence={confidence} prediction={int(prediction[0])}"
+                )
+
+
+                if confidence < self.trade_confidence_threshold:
+                    log.info(
+                        "inference_strategy.evaluate.low_confidence",
+                        extra={
+                            "extra": {
+                                "symbol": symbol,
+                                "confidence": float(confidence),
+                                "threshold": self.trade_confidence_threshold,
+                            }
+                        },
+                    )
+                    continue
+
+                log.info(
                     "inference_strategy.evaluate.predict",
                     extra={
                         "extra": {
@@ -223,6 +258,9 @@ class InferenceStrategy(Strategy):
             decision = "sell"
         else:
             decision = "hold"
+
+        log.info(f"prediction for {symbol}: {prediction}, decision: {decision}, regime: {regime}")
+
         return {"action": decision, "symbol": symbol, "decision": decision}
 
 

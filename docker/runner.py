@@ -8,8 +8,9 @@ from smartcfd.config import load_config_from_file
 from smartcfd.db import connect as db_connect, init_schema, record_run, record_heartbeat
 from smartcfd.alpaca import build_api_base, build_headers_from_env
 from smartcfd.health_server import start_health_server
+from smartcfd.regime_detector import RegimeDetector
+from smartcfd.strategy import get_strategy_by_name, InferenceStrategy
 from smartcfd.trader import Trader
-from smartcfd.strategy import get_strategy_by_name
 from smartcfd.alpaca_client import AlpacaBroker
 from smartcfd.risk import RiskManager
 from smartcfd.data_loader import DataLoader
@@ -89,10 +90,22 @@ def main():
     
     risk_manager = RiskManager(portfolio_manager, risk_cfg)
     strategy_name = os.getenv("STRATEGY", "inference")
+    
+    # --- Instantiate strategy and its dependencies ---
+    regime_detector = RegimeDetector(min_data_points=app_cfg.min_data_points)
+    
+    # Get the base strategy
     strategy = get_strategy_by_name(strategy_name, app_cfg)
     
+    # If it's the inference strategy, re-initialize it with the confidence threshold
+    if isinstance(strategy, InferenceStrategy):
+        strategy = InferenceStrategy(
+            config=app_cfg,
+            trade_confidence_threshold=app_cfg.trade_confidence_threshold
+        )
+
     # Initialize the Trader
-    trader = Trader(portfolio_manager, strategy, risk_manager, app_cfg)
+    trader = Trader(portfolio_manager, strategy, risk_manager, app_cfg, regime_detector)
 
     log.info(
         "runner.start",

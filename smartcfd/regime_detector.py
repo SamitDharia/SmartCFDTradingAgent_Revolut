@@ -18,7 +18,7 @@ class RegimeDetector:
     """
     Detects the current market regime based on historical data.
     """
-    def __init__(self, short_window: int = 14, long_window: int = 50, threshold_multiplier: float = 1.25):
+    def __init__(self, short_window: int = 14, long_window: int = 50, threshold_multiplier: float = 1.25, min_data_points: int = 400):
         """
         Initializes the RegimeDetector.
 
@@ -26,6 +26,7 @@ class RegimeDetector:
         :param long_window: The window for the long-term ATR.
         :param threshold_multiplier: The multiplier to determine the high volatility threshold.
                                      If short_atr > long_atr * multiplier, it's high volatility.
+        :param min_data_points: The minimum number of data points required to detect a regime.
         """
         if short_window >= long_window:
             raise ValueError("short_window must be less than long_window")
@@ -33,6 +34,7 @@ class RegimeDetector:
         self.short_window = short_window
         self.long_window = long_window
         self.threshold_multiplier = threshold_multiplier
+        self.min_data_points = min_data_points
 
     def detect_regime(self, historical_data: pd.DataFrame) -> MarketRegime:
         """
@@ -41,10 +43,10 @@ class RegimeDetector:
         :param historical_data: A DataFrame with 'High', 'Low', and 'Close' columns.
         :return: The detected MarketRegime.
         """
-        if historical_data is None or len(historical_data) < self.long_window:
+        if historical_data is None or len(historical_data) < self.min_data_points:
             log.warning(
                 "regime_detector.detect_regime.insufficient_data",
-                extra={"extra": {"data_length": len(historical_data) if historical_data is not None else 0, "required": self.long_window}}
+                extra={"extra": {"data_length": len(historical_data) if historical_data is not None else 0, "required": self.min_data_points}}
             )
             return MarketRegime.UNDEFINED
 

@@ -96,16 +96,30 @@ class DataLoader:
 
         try:
             timeframe = parse_interval(interval)
-            # Calculate a larger limit to fetch more historical data than required.
-            # This provides a buffer for gap detection and ensures we have enough
-            # valid data points even if some are discarded.
-            fetch_limit = limit * 2
+            
+            # --- Calculate start_date instead of relying on 'limit' ---
+            # Add a buffer to ensure we have enough data after cleaning and for feature creation.
+            required_bars = limit + 50 
+            
+            # Estimate the duration needed based on the interval
+            if timeframe.unit == TimeFrameUnit.Minute:
+                delta = timedelta(minutes=timeframe.amount * required_bars)
+            elif timeframe.unit == TimeFrameUnit.Hour:
+                delta = timedelta(hours=timeframe.amount * required_bars)
+            elif timeframe.unit == TimeFrameUnit.Day:
+                delta = timedelta(days=timeframe.amount * required_bars)
+            else:
+                # Default fallback for less common timeframes
+                delta = timedelta(days=required_bars) 
 
-            # 1. Fetch historical bars using a limit
+            # Calculate the start date, giving a bit of extra buffer
+            start_date = datetime.now(timezone.utc) - delta - timedelta(days=1)
+
+            # 1. Fetch historical bars using a start date
             bars_request = CryptoBarsRequest(
                 symbol_or_symbols=symbols,
                 timeframe=timeframe,
-                limit=fetch_limit
+                start=start_date
             )
             raw_bars_df = self.client.get_crypto_bars(bars_request).df
 

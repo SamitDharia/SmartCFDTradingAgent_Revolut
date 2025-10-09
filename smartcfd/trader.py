@@ -17,12 +17,12 @@ class Trader:
     A RiskManager is used to size the orders.
     """
 
-    def __init__(self, portfolio_manager: PortfolioManager, strategy: Strategy, risk_manager: RiskManager, app_config: Any):
+    def __init__(self, portfolio_manager: PortfolioManager, strategy: Strategy, risk_manager: RiskManager, app_config: Any, regime_detector: RegimeDetector):
         self.portfolio_manager = portfolio_manager
         self.strategy = strategy
         self.risk_manager = risk_manager
         self.app_config = app_config
-        self.regime_detector = RegimeDetector()
+        self.regime_detector = regime_detector
         # The broker client is now accessed via the portfolio manager
         self.broker = portfolio_manager.client
 

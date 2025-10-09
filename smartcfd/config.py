@@ -20,6 +20,8 @@ class AppConfig:
     trade_interval: str = "15m" # Interval for trading data
     max_data_staleness_minutes: int = 30 # Max age of data before it's considered stale
     feed: str = "iex" # Default feed
+    min_data_points: int = 400 # Minimum data points for regime detection
+    trade_confidence_threshold: float = 0.75 # Minimum confidence for a trade
 
 
 @dataclass
@@ -62,6 +64,8 @@ def load_config_from_file(path: str = 'config.ini') -> tuple[AppConfig, RiskConf
         trade_interval=parser.get('settings', 'trade_interval', fallback=os.getenv("TRADE_INTERVAL", "15m")),
         max_data_staleness_minutes=parser.getint('settings', 'max_data_staleness_minutes', fallback=int(os.getenv("MAX_DATA_STALENESS_MINUTES", "30"))),
         feed=parser.get('settings', 'feed', fallback=os.getenv("FEED", "iex")),
+        min_data_points=parser.getint('settings', 'min_data_points', fallback=int(os.getenv("MIN_DATA_POINTS", "400"))),
+        trade_confidence_threshold=parser.getfloat('settings', 'trade_confidence_threshold', fallback=float(os.getenv("TRADE_CONFIDENCE_THRESHOLD", "0.75"))),
     )
 
     # --- Load RiskConfig ---

@@ -12,3 +12,16 @@ dist
 .env
 .env.*
 .DS_Store
+models/
+reports/
+logs/
+test_cache/
+*.db
+*.sqlite3
+config.ini
+README.md
+.vscode/
+.pytest_cache/
+pip-cache/
+env/
+venv/

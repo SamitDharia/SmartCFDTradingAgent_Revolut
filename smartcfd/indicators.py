@@ -50,9 +50,15 @@ def bollinger_bands(series: pd.Series, window: int = 20, window_dev: int = 2) ->
     return df
 
 
-def adx(high: pd.Series, low: pd.Series, close: pd.Series, window: int = 14) -> pd.Series:
-    """Calculate Average Directional Movement Index (ADX)."""
-    return ta.trend.adx(high=high, low=low, close=close, window=window)
+def adx(high: pd.Series, low: pd.Series, close: pd.Series, window: int = 14) -> pd.DataFrame:
+    """
+    Calculate Average Directional Movement Index (ADX).
+    Returns a DataFrame with the ADX value.
+    """
+    adx_indicator = ta.trend.ADXIndicator(high=high, low=low, close=close, window=window)
+    df = pd.DataFrame()
+    df[f'ADX_{window}'] = adx_indicator.adx()
+    return df
 
 
 def stochastic_oscillator(high: pd.Series, low: pd.Series, close: pd.Series, window: int = 14, smooth_window: int = 3) -> pd.DataFrame:
