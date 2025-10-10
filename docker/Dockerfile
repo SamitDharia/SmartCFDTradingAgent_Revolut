@@ -5,7 +5,8 @@ FROM python:3.11-bookworm
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    AIOHTTP_NO_EXTENSIONS=1
 
 # Set the working directory
 WORKDIR /app
@@ -24,6 +25,8 @@ COPY requirements.txt pyproject.toml /app/
 RUN python -m pip install --upgrade pip && \
     pip install -r requirements.txt && \
     pip install certifi
+
+
 
 # --- Application Code ---
 # Copy the rest of the application code

@@ -158,12 +158,21 @@ class DataLoader:
                          snapshot_df = snapshot_df[bars_df.columns]
 
                 # Combine historical and snapshot data
-                if not bars_df.empty and not snapshot_df.empty and snapshot_df.index[0] == bars_df.index[-1]:
-                    bars_df.iloc[-1] = snapshot_df.iloc[0]
+                if not bars_df.empty and not snapshot_df.empty:
+                    if snapshot_df.index[0] == bars_df.index[-1]:
+                        # Update only the columns present in the snapshot
+                        common_cols = [col for col in snapshot_df.columns if col in bars_df.columns]
+                        bars_df.loc[bars_df.index[-1], common_cols] = snapshot_df.iloc[0][common_cols]
+                    else:
+                        # The snapshot is a new bar, append it
+                        bars_df = pd.concat([bars_df, snapshot_df])
                 elif not snapshot_df.empty:
-                    bars_df = pd.concat([bars_df, snapshot_df])
+                    # No historical data, just use the snapshot
+                    bars_df = snapshot_df
 
                 # --- Data Cleaning ---
+                if isinstance(bars_df.index, pd.DatetimeIndex):
+                    bars_df.index = bars_df.index.tz_convert('UTC')
                 symbol_df = remove_zero_volume_anomalies(bars_df)
 
                 # --- Final Validation ---
@@ -220,8 +229,8 @@ def has_data_gaps(df: pd.DataFrame, expected_interval: TimeFrame, tolerance: flo
     Checks for missing timestamps in the data, indicating gaps.
     Allows for a certain tolerance (e.g., 10%) of missing data before failing.
     """
-    if len(df) < 2:
-        return False  # Not enough data to detect a gap.
+    if not isinstance(df.index, pd.DatetimeIndex) or len(df) < 2:
+        return False  # Not a DatetimeIndex or not enough data to detect a gap.
 
     # Convert Alpaca TimeFrame to pandas frequency string
     if expected_interval.unit == TimeFrameUnit.Minute:
@@ -234,7 +243,12 @@ def has_data_gaps(df: pd.DataFrame, expected_interval: TimeFrame, tolerance: flo
         log.warning(f"Unsupported timeframe unit for gap detection: {expected_interval.unit}")
         return False
 
-    # Ensure index is sorted
+    # Ensure index is timezone-aware (UTC) and sorted
+    if isinstance(df.index, pd.DatetimeIndex):
+        if df.index.tz is None:
+            df.index = df.index.tz_localize('UTC')
+        else:
+            df.index = df.index.tz_convert('UTC')
     df = df.sort_index()
     
     # Use the generated frequency string
@@ -278,16 +292,17 @@ def has_anomalous_data(df: pd.DataFrame, anomaly_threshold: float = 5.0) -> bool
     # Anomalies are now removed in the get_market_data pipeline.
 
     # Check for sudden price spikes
-    df['range'] = df['high'] - df['low']
-    
-    # Avoid the most recent bar in the average calculation to detect its anomaly
-    if len(df) > 1:
-        average_range = df['range'].iloc[:-1].mean()
-        latest_range = df['range'].iloc[-1]
+    if 'high' in df.columns and 'low' in df.columns:
+        df['range'] = df['high'] - df['low']
+        
+        # Avoid the most recent bar in the average calculation to detect its anomaly
+        if len(df) > 1:
+            average_range = df['range'].iloc[:-1].mean()
+            latest_range = df['range'].iloc[-1]
 
-        # Check for division by zero or near-zero
-        if average_range > 1e-9 and (latest_range / average_range) > anomaly_threshold:
-            log.warning(f"Anomaly detected: Sudden price spike. Latest range ({latest_range:.2f}) is more than {anomaly_threshold}x the average range ({average_range:.2f}).")
+            # Check for division by zero or near-zero
+            if average_range > 1e-9 and (latest_range / average_range) > anomaly_threshold:
+                log.warning(f"Anomaly detected: Sudden price spike. Latest range ({latest_range:.2f}) is more than {anomaly_threshold}x the average range ({average_range:.2f}).")
     
     return False # Relaxed check - don't invalidate data for this
 

@@ -78,6 +78,78 @@ A critical lesson learned during the development of V1.0 was the importance of v
 3.  **Verify Signature**: Check the function/method signature to ensure you are passing the correct arguments.
 
 This simple, disciplined process prevents `ImportError` and `AttributeError` issues and is much faster than debugging after a failed assumption. For a detailed history of these issues, see the `LESSONS_LEARNED.md` file.
+
+---
+
+## ⚙️ Running the Bot: A Step-by-Step Guide
+
+This guide provides the exact steps to get the trading bot running in a clean, reliable Docker environment.
+
+### Prerequisites
+
+1.  **Docker Desktop:** Ensure Docker Desktop is installed and the Docker daemon is running.
+2.  **API Keys:** You must have a valid `config.ini` file in the project root, populated with your Alpaca API key and secret. Create it from `config.ini.example` if it doesn't exist.
+
+### Step 1: Build and Start the Containers
+
+The application is managed using `docker-compose`. To build the Docker images and start the services in detached mode (running in the background), use the following command:
+
+```bash
+docker-compose up --build -d
+```
+
+*   `--build`: This flag forces Docker to rebuild the images, ensuring any code changes are included.
+*   `-d`: This flag runs the containers in detached mode.
+
+### Step 2: Monitor the Application Logs
+
+To view the live logs from the main application container (`app`), use:
+
+```bash
+docker-compose logs -f app
+```
+
+*   `-f`: "Follows" the log output, showing new logs in real-time.
+*   `app`: This is the name of the service defined in `docker-compose.yml`.
+
+You should see output indicating that the runner has started, the portfolio has been reconciled, and the strategy is being evaluated.
+
+### Step 3: Check Application Health
+
+The application exposes a health check endpoint. You can verify that the system is healthy by accessing it in your browser or using a tool like `curl`:
+
+```bash
+# From your local machine's terminal
+curl http://localhost:8080/healthz
+```
+
+A healthy application will return:
+```json
+{"status": "ok"}
+```
+
+An unhealthy application will return a `503` status code with details about the failure.
+
+### Step 4: Stopping the Application
+
+To stop the running containers, use:
+
+```bash
+docker-compose down
+```
+
+This will stop and remove the containers and the network created by `docker-compose up`.
+
+### Troubleshooting Common Issues
+
+*   **`longintrepr.h: No such file or directory` on build:** This indicates a missing Python development environment. The `Dockerfile` has been fixed to include the necessary build tools, so a fresh build (`docker-compose up --build`) should resolve this.
+*   **`401 Unauthorized` or `404 Not Found` from Alpaca:**
+    1.  Double-check that your API key and secret in `config.ini` are correct.
+    2.  Ensure `alpaca_env` is set correctly (e.g., `paper`).
+    3.  The `alpaca-trade-api` library has been upgraded to `3.2.0` to use the correct modern endpoints.
+*   **`AttributeError` or `TypeError` related to Pandas:** These were common during development due to inconsistent timezone handling. The codebase has been standardized to use timezone-aware UTC timestamps. If new errors of this type appear, the first step is to inspect the DataFrame's index (`df.index`) to ensure it is a `pd.DatetimeIndex` and is timezone-aware.
+*   **Health Check Failures (`503` status):** The health check now correctly receives all necessary configuration. If it fails, check the application logs (`docker-compose logs -f app`) for specific error messages related to `health.compute.data_feed_fail` or `health.compute.db_fail`.
+
 ---
 
 This document serves as the central hub. For specifics on **what we are doing next**, always refer to the **[Development Roadmap](ROADMAP.md)**.

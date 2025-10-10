@@ -125,9 +125,9 @@ class PortfolioManager:
         """Calculates the total market value of all open positions."""
         if not self.positions:
             return 0.0
-        return sum(float(pos.market_value) for pos in self.positions.values())
+        return sum(abs(float(pos.market_value)) for pos in self.positions.values())
 
     def get_exposure_for_symbol(self, symbol: str) -> float:
         """Returns the market value for a specific symbol's position."""
         position = self.get_position(symbol)
-        return position.market_value if position else 0.0
+        return abs(float(position.market_value)) if position else 0.0

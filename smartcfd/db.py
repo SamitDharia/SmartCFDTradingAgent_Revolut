@@ -44,6 +44,25 @@ def init_schema(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    # Trade Groups table for client-side OCO
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS trade_groups (
+            gid TEXT PRIMARY KEY,
+            symbol TEXT NOT NULL,
+            side TEXT NOT NULL,
+            status TEXT NOT NULL,
+            entry_order_id TEXT,
+            entry_filled_qty REAL,
+            tp_order_id TEXT,
+            sl_order_id TEXT,
+            open_qty REAL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            note TEXT
+        )
+        """
+    )
     conn.commit()
 
 def record_run(

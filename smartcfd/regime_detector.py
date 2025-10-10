@@ -1,6 +1,10 @@
 import pandas as pd
+from typing import TYPE_CHECKING
 import logging
 from enum import Enum
+
+if TYPE_CHECKING:
+    from .config import RegimeConfig, AppConfig
 
 from smartcfd.indicators import atr
 
@@ -18,42 +22,40 @@ class RegimeDetector:
     """
     Detects the current market regime based on historical data.
     """
-    def __init__(self, short_window: int = 14, long_window: int = 50, threshold_multiplier: float = 1.25, min_data_points: int = 400):
-        """
-        Initializes the RegimeDetector.
+    def __init__(self, app_config: "AppConfig", regime_config: "RegimeConfig"):
+        self.short_window = regime_config.short_window
+        self.long_window = regime_config.long_window
+        self.min_data_points = app_config.min_data_points
+        
+        if self.short_window >= self.long_window:
+            raise ValueError("Short window must be smaller than long window for regime detection.")
 
-        :param short_window: The window for the short-term ATR.
-        :param long_window: The window for the long-term ATR.
-        :param threshold_multiplier: The multiplier to determine the high volatility threshold.
-                                     If short_atr > long_atr * multiplier, it's high volatility.
-        :param min_data_points: The minimum number of data points required to detect a regime.
+    def detect(self, data: pd.DataFrame) -> MarketRegime:
         """
-        if short_window >= long_window:
-            raise ValueError("short_window must be less than long_window")
-            
-        self.short_window = short_window
-        self.long_window = long_window
-        self.threshold_multiplier = threshold_multiplier
-        self.min_data_points = min_data_points
+        Detects the market regime for a given dataset.
 
-    def detect_regime(self, historical_data: pd.DataFrame) -> MarketRegime:
-        """
-        Detects the market regime from historical data.
-
-        :param historical_data: A DataFrame with 'High', 'Low', and 'Close' columns.
+        :param data: A DataFrame with 'High', 'Low', and 'Close' columns.
         :return: The detected MarketRegime.
         """
-        if historical_data is None or len(historical_data) < self.min_data_points:
+        if data is None or len(data) < self.min_data_points:
             log.warning(
-                "regime_detector.detect_regime.insufficient_data",
-                extra={"extra": {"data_length": len(historical_data) if historical_data is not None else 0, "required": self.min_data_points}}
+                "regime_detector.detect.insufficient_data",
+                extra={"extra": {"rows": len(data) if data is not None else 0, "required": self.min_data_points}}
+            )
+            return MarketRegime.UNDEFINED
+
+        # Additional check to prevent IndexError in ATR calculation
+        if len(data) < self.long_window:
+            log.warning(
+                "regime_detector.detect.insufficient_data_for_long_window",
+                extra={"extra": {"rows": len(data), "required": self.long_window}}
             )
             return MarketRegime.UNDEFINED
 
         try:
             # Calculate short-term and long-term ATR
-            short_atr = atr(historical_data['high'], historical_data['low'], historical_data['close'], window=self.short_window).iloc[-1]
-            long_atr = atr(historical_data['high'], historical_data['low'], historical_data['close'], window=self.long_window).iloc[-1]
+            short_atr = atr(data['high'], data['low'], data['close'], window=self.short_window).iloc[-1]
+            long_atr = atr(data['high'], data['low'], data['close'], window=self.long_window).iloc[-1]
 
             if pd.isna(short_atr) or pd.isna(long_atr) or long_atr == 0:
                 log.warning("regime_detector.detect_regime.atr_calculation_failed")

@@ -64,23 +64,50 @@ class RiskManager:
                 take_profit_price = current_price - (atr * self.config.take_profit_atr_multiplier)
 
             # --- Construct Order Request ---
-            # Alpaca API requires prices and quantities to be strings.
+            # Alpaca API for crypto does not support bracket orders.
+            # We will submit a market order and then two separate OCO (One-Cancels-Other) orders for SL/TP.
+            # This logic will be handled by the trader. For now, we create a simple market order.
             order_request = OrderRequest(
                 symbol=symbol,
                 qty=str(qty),
                 side=side,
                 type="market",
                 time_in_force="gtc",
-                order_class="bracket",
-                stop_loss={"stop_price": str(round(stop_price, 2))},
-                take_profit={"limit_price": str(round(take_profit_price, 2))},
             )
+
+            # We will still calculate the SL/TP prices and attach them to the request
+            # so the trader can use them.
+            order_request.stop_loss = StopLossRequest(stop_price=str(round(stop_price, 2)))
+            order_request.take_profit = TakeProfitRequest(limit_price=str(round(take_profit_price, 2)))
+
+            log_extra = order_request.model_dump()
+            if order_request.stop_loss:
+                log_extra['stop_loss'] = order_request.stop_loss.model_dump()
+            if order_request.take_profit:
+                log_extra['take_profit'] = order_request.take_profit.model_dump()
             
-            log.info("risk.generate_bracket_order.success", extra={"extra": order_request.model_dump()})
+            log.info("risk.generate_bracket_order.success", extra={"extra": log_extra})
             return order_request
         except Exception:
             log.error("risk.generate_bracket_order.fail", exc_info=True)
             return None
+
+    def generate_entry_order(self, symbol: str, side: str, qty: float) -> Optional[Dict[str, Any]]:
+        """
+        Generates a simple market order for market entry.
+        """
+        if qty <= 0:
+            return None
+        
+        order_request = {
+            "symbol": symbol,
+            "qty": str(qty),
+            "side": side,
+            "type": "market",
+            "time_in_force": "gtc",
+        }
+        log.info("risk.generate_entry_order.success", extra={"extra": order_request})
+        return order_request
 
     def calculate_order_qty(self, symbol: str, side: str, historical_data: Optional[pd.DataFrame]) -> Tuple[float, float]:
         """
@@ -126,7 +153,12 @@ class RiskManager:
             # Rule 1: Max total exposure
             equity = float(account.equity)
             max_total_exposure_value = equity * (self.config.max_total_exposure_percent / 100.0)
+            
+            # Use absolute value for exposure calculation
             total_exposure = float(self.portfolio_manager.get_total_exposure())
+
+            log.info(f"EQUITY: {equity}, TOTAL_EXPOSURE: {total_exposure}, MAX_EXPOSURE: {max_total_exposure_value}")
+            
             available_capital_total = max_total_exposure_value - total_exposure
             if available_capital_total <= 0:
                 log.warning("risk.calculate_order_qty.max_total_exposure_breached", 
@@ -135,7 +167,10 @@ class RiskManager:
 
             # Rule 2: Max exposure per asset
             max_asset_exposure_value = equity * (self.config.max_exposure_per_asset_percent / 100.0)
+            
+            # Use absolute value for exposure calculation
             current_asset_exposure = float(self.portfolio_manager.get_exposure_for_symbol(symbol))
+            
             available_capital_asset = max_asset_exposure_value - current_asset_exposure
             if available_capital_asset <= 0:
                 log.warning("risk.calculate_order_qty.max_asset_exposure_breached",
@@ -169,6 +204,77 @@ class RiskManager:
         except Exception:
             log.error("risk.calculate_order_qty.fail", exc_info=True)
             return 0.0, 0.0
+
+    def generate_exit_orders(self, symbol: str, entry_price: float, qty: float, side: str, historical_data: pd.DataFrame) -> Optional[Dict[str, Dict]]:
+        """
+        Generates take-profit and stop-loss order parameters based on ATR.
+        """
+        if historical_data.empty:
+            log.error("risk.generate_exit_orders.no_data")
+            return None
+
+        try:
+            # Ensure 'atr' is calculated if not present
+            if 'atr' not in historical_data.columns:
+                # Assuming 'high', 'low', 'close' are present for ATR calculation
+                from smartcfd.indicators import atr
+                historical_data['atr'] = atr(historical_data['high'], historical_data['low'], historical_data['close'], length=14)
+
+            current_atr = historical_data['atr'].iloc[-1]
+            
+            if side == 'buy':
+                # For a buy order, TP is above entry, SL is below
+                take_profit_price = entry_price + (current_atr * self.config.take_profit_atr_multiplier)
+                stop_loss_price = entry_price - (current_atr * self.config.stop_loss_atr_multiplier)
+                
+                tp_order = {
+                    "symbol": symbol,
+                    "qty": qty,
+                    "side": "sell",
+                    "type": "limit",
+                    "limit_price": round(take_profit_price, 2),
+                    "order_class": "oto", # One-Triggers-Other
+                    "time_in_force": "gtc"
+                }
+                sl_order = {
+                    "symbol": symbol,
+                    "qty": qty,
+                    "side": "sell",
+                    "type": "stop",
+                    "stop_price": round(stop_loss_price, 2),
+                    "order_class": "oto",
+                    "time_in_force": "gtc"
+                }
+            else: # side == 'sell'
+                # For a sell order, TP is below entry, SL is above
+                take_profit_price = entry_price - (current_atr * self.config.take_profit_atr_multiplier)
+                stop_loss_price = entry_price + (current_atr * self.config.stop_loss_atr_multiplier)
+
+                tp_order = {
+                    "symbol": symbol,
+                    "qty": qty,
+                    "side": "buy",
+                    "type": "limit",
+                    "limit_price": round(take_profit_price, 2),
+                    "order_class": "oto",
+                    "time_in_force": "gtc"
+                }
+                sl_order = {
+                    "symbol": symbol,
+                    "qty": qty,
+                    "side": "buy",
+                    "type": "stop",
+                    "stop_price": round(stop_loss_price, 2),
+                    "order_class": "oto",
+                    "time_in_force": "gtc"
+                }
+
+            log.info("risk.generate_exit_orders.success", extra={"extra": {"symbol": symbol, "tp_price": take_profit_price, "sl_price": stop_loss_price}})
+            return {"take_profit": tp_order, "stop_loss": sl_order}
+
+        except Exception:
+            log.error("risk.generate_exit_orders.fail", exc_info=True)
+            return None
 
     def _get_account_info(self) -> Optional[Account]:
         """DEPRECATED: Use portfolio_manager.account directly."""
@@ -340,117 +446,10 @@ class RiskManager:
         """
         daily_pnl = get_daily_pnl()
         drawdown_percent = (daily_pnl / account_equity) * 100 if account_equity > 0 else 0
-        is_exceeded = drawdown_percent < self.config.max_daily_drawdown_percent
-        log.info(
-            "risk.is_drawdown_exceeded.check",
-            extra={
-                "extra": {
-                    "is_exceeded": is_exceeded,
-                    "daily_pnl": daily_pnl,
-                    "account_equity": account_equity,
-                    "drawdown_percent": drawdown_percent,
-                }
-            },
-        )
-        return is_exceeded
-
-    def is_volatility_too_high(self, historical_data: pd.DataFrame, symbol: str) -> bool:
-        """
-        Checks if the current market volatility is too high to continue trading.
-        A 'circuit breaker' based on the Average True Range (ATR).
-        """
-        atr_multiplier = self.config.circuit_breaker_atr_multiplier
-        if atr_multiplier <= 0:
-            return False  # Circuit breaker is disabled
-
-        # We need at least `window + 1` periods to calculate ATR and have something to compare.
-        window = 14
-        if len(historical_data) < window + 1:
-            log.warning(
-                "risk.is_volatility_too_high.insufficient_data",
-                extra={"extra": {"symbol": symbol, "data_length": len(historical_data)}},
-            )
-            return False
-
-        # Ensure columns are lowercase for consistent access
-        historical_data.columns = [x.lower() for x in historical_data.columns]
-
-        # Calculate 14-period ATR
-        atr_series = atr(historical_data['high'], historical_data['low'], historical_data['close'], window=window).dropna()
-
-        if atr_series.empty:
-            log.warning(
-                "risk.is_volatility_too_high.atr_calculation_failed",
-                extra={"extra": {"symbol": symbol}},
-            )
-
-        # Calculate the True Range of the last bar
-        last_high = historical_data['high'].iloc[-1]
-        last_low = historical_data['low'].iloc[-1]
-        prev_close = historical_data['close'].iloc[-2]
-        
-        last_true_range = max(last_high - last_low, abs(last_high - prev_close), abs(last_low - prev_close))
-
-        # Average of all available ATR values, excluding the influence of the last bar
-        average_atr = atr_series.iloc[:-1].mean()
-
-        if pd.isna(last_true_range) or pd.isna(average_atr) or average_atr == 0:
-            return False # Cannot compute, play it safe
-
-        threshold = average_atr * atr_multiplier
-
-        if last_true_range > threshold:
-            print(f"CIRCUIT BREAKER TRIPPED for {symbol}: Last TR ({last_true_range:.4f}) > Threshold ({threshold:.4f}) [Avg ATR: {average_atr:.4f}]")
+        if drawdown_percent < -self.config.max_daily_drawdown_percent:
+            self.is_halted = True
+            self.halt_reason = f"Account drawdown exceeded: {drawdown_percent:.2f}% < -{self.config.max_daily_drawdown_percent:.2f}%"
+            log.critical("risk.halt.drawdown_exceeded", extra={"extra": {"drawdown_percent": drawdown_percent, "max_drawdown_percent": -self.config.max_daily_drawdown_percent}})
             return True
         
         return False
-
-        return False
-
-class BacktestRiskManager:
-    def __init__(self, risk_config: RiskConfig):
-        self.config = risk_config
-
-    def calculate_order_qty(self, symbol: str, price: float, portfolio: BacktestPortfolio) -> float:
-        # Risk a percentage of total equity, not just available cash
-        total_equity = portfolio.get_total_equity({symbol: price})
-        risk_amount = total_equity * (self.config.risk_per_trade_percent / 100.0)
-        
-        # Calculate potential quantity based on risk amount
-        qty = risk_amount / price
-
-        # Enforce a minimum order size to avoid dust trades
-        min_notional_value = 1.0  # $1 minimum, similar to Alpaca
-        if (qty * price) < min_notional_value:
-            # This is a common case (no signal or not enough to trade), so we don't log it
-            # to avoid noise. A zero quantity is the intended result.
-            return 0.0
-        
-        # Ensure we don't try to buy more than we have cash for
-        if (qty * price) > portfolio.cash:
-            log.debug(
-                "risk.backtest.calculate_order_qty.cash_limited",
-                extra={"extra": {"symbol": symbol, "requested_qty": qty, "cash_available": portfolio.cash, "price": price}}
-            )
-            qty = portfolio.cash / price
-            # After adjusting for cash, re-check if it's still above the minimum notional value
-            if (qty * price) < min_notional_value:
-                log.debug(
-                    "risk.backtest.calculate_order_qty.below_min_after_cash_limit",
-                    extra={"extra": {"symbol": symbol, "adjusted_qty": qty, "notional_value": qty * price}}
-                )
-                return 0.0
-
-        log.debug(
-            "risk.backtest.calculate_order_qty.success",
-            extra={
-                "extra": {
-                    "symbol": symbol,
-                    "price": price,
-                    "total_equity": total_equity,
-                    "risk_per_trade_percent": self.config.risk_per_trade_percent,
-                    "calculated_qty": qty,
-                }
-            },
-        )
-        return qty

@@ -289,4 +289,43 @@ This final, intense debugging cascade was what truly hardened the system into th
 
 ---
 
+### The Great Debugging Gauntlet: From Build to Health Checks
+
+**Date:** 2025-10-09
+
+This series of issues represented a full-stack debugging challenge, touching every part of the application from the Docker environment to the application's core logic.
+
+**1. The Docker Build Failure (`longintrepr.h` not found):**
+
+*   **Problem:** The Docker build failed with `fatal error: longintrepr.h: No such file or directory` while trying to install a Python package.
+*   **Root Cause:** The base `python:3.11-slim-bullseye` image was missing the C header files required to compile some Python dependencies from source.
+*   **Solution:** We switched the base image to `python:3.11-bookworm` and explicitly installed the Python development headers with `apt-get install -y python3.11-dev`.
+*   **Lesson:** A "slim" image is not always better if it sacrifices build-time necessities. For complex applications with many dependencies, a full development image can be more reliable. Always ensure the build environment has the necessary compilers and headers.
+
+**2. The Alpaca API 404 and Dependency Conflict:**
+
+*   **Problem:** After fixing the build, the application failed at runtime with a `404 Not Found` error when fetching data from Alpaca.
+*   **Root Cause:** The `alpaca-trade-api` version `2.3.0` was outdated and pointing to old API endpoints that had been deprecated.
+*   **Solution:** We upgraded `alpaca-trade-api` to `3.2.0`. This, however, created a new dependency conflict with `aiohttp`. We resolved this by upgrading `aiohttp` from `3.8.1` to `3.8.3`.
+*   **Lesson:** `404` errors from an API client often mean the client is outdated. When upgrading a core dependency, always be prepared to handle and resolve sub-dependency conflicts.
+
+**3. The Pandas Timezone and Index Minefield:**
+
+*   **Problem:** A cascade of `TypeError` and `AttributeError` exceptions occurred in `data_loader.py` and `strategy.py`. The errors were related to Pandas `DatetimeIndex` operations.
+*   **Root Cause:** Different parts of the code made different assumptions about the DataFrame's index. Some parts expected a timezone-aware index, others a naive one, and in some cases, the index wasn't a `DatetimeIndex` at all, leading to errors when trying to access datetime properties like `.dayofweek`.
+*   **Solution:** We implemented a robust, multi-step fix:
+    1.  Added `isinstance(df.index, pd.DatetimeIndex)` guards to prevent errors on invalid index types.
+    2.  Used `pd.to_datetime(..., utc=True)` to reliably convert and create timezone-aware indexes.
+    3.  Standardized on UTC by using `.tz_localize('UTC')` and `.tz_convert('UTC')` at critical data ingress and processing points.
+*   **Lesson:** Data consistency is paramount. For time-series data, establish a strict convention for timezones (e.g., "always convert to UTC on ingress") and enforce it throughout the application. Never assume the type or state of a DataFrame's index.
+
+**4. The Final Boss: Health Check Configuration Error:**
+
+*   **Problem:** The application was stable, but the health check endpoint was failing with an `AttributeError: 'AppConfig' object has no attribute 'api_key'`.
+*   **Root Cause:** The `check_data_feed_health` function required API keys to instantiate its own `DataLoader`, but it was only being passed the `AppConfig` object, which doesn't contain secrets. The API keys reside in the `AlpacaConfig` object.
+*   **Solution:** We refactored the `check_data_feed_health` function to accept both `AppConfig` and `AlpacaConfig`. The calling function in `health_server.py` was updated to load and pass both configuration objects.
+*   **Lesson:** This was a classic dependency injection failure. Configuration, especially secrets, should be passed explicitly to the functions that need them. This makes dependencies clear and avoids side-effects where a function implicitly relies on a global or improperly scoped state.
+
+---
+
 *(This document will be updated as the project progresses.)*

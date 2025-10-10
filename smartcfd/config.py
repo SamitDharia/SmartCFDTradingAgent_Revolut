@@ -6,6 +6,12 @@ def _as_bool(value: str) -> bool:
     return str(value).strip().lower() in ("1", "true", "yes", "on")
 
 @dataclass
+class AlpacaConfig:
+    key_id: str
+    secret_key: str
+    api_base: str
+
+@dataclass
 class AppConfig:
     timezone: str = "Europe/Dublin"
     alpaca_env: str = "paper"
@@ -22,7 +28,13 @@ class AppConfig:
     feed: str = "iex" # Default feed
     min_data_points: int = 400 # Minimum data points for regime detection
     trade_confidence_threshold: float = 0.75 # Minimum confidence for a trade
-
+    strategy: str = "inference" # Strategy to use for trading
+    db_path: str = "logs/trades.db" # Path to the SQLite database
+    heartbeat_max_age_seconds: int = 120 # Max age for health check
+    startup_grace_period: int = 60 # Grace period for health checks on startup
+    
+    # Nested Alpaca config for clarity
+    alpaca: AlpacaConfig = None
 
 @dataclass
 class RiskConfig:
@@ -37,11 +49,11 @@ class RiskConfig:
     min_order_notional: float = 1.0 # Minimum notional value for an order
 
 @dataclass
-class AlpacaConfig:
-    api_key: str
-    secret_key: str
+class RegimeConfig:
+    short_window: int = 50
+    long_window: int = 200
 
-def load_config_from_file(path: str = 'config.ini') -> tuple[AppConfig, RiskConfig, AlpacaConfig]:
+def load_config_from_file(path: str = 'config.ini') -> tuple[AppConfig, AlpacaConfig, RiskConfig, RegimeConfig]:
     """Loads configuration from a .ini file."""
     parser = configparser.ConfigParser()
     if not os.path.exists(path):
@@ -66,6 +78,10 @@ def load_config_from_file(path: str = 'config.ini') -> tuple[AppConfig, RiskConf
         feed=parser.get('settings', 'feed', fallback=os.getenv("FEED", "iex")),
         min_data_points=parser.getint('settings', 'min_data_points', fallback=int(os.getenv("MIN_DATA_POINTS", "400"))),
         trade_confidence_threshold=parser.getfloat('settings', 'trade_confidence_threshold', fallback=float(os.getenv("TRADE_CONFIDENCE_THRESHOLD", "0.75"))),
+        strategy=parser.get('settings', 'strategy', fallback=os.getenv("STRATEGY", "inference")),
+        db_path=parser.get('settings', 'db_path', fallback=os.getenv("DB_PATH", "logs/trades.db")),
+        heartbeat_max_age_seconds=parser.getint('settings', 'heartbeat_max_age_seconds', fallback=int(os.getenv("HEALTH_MAX_AGE_SECONDS", "120"))),
+        startup_grace_period=parser.getint('settings', 'startup_grace_period', fallback=int(os.getenv("STARTUP_GRACE_PERIOD", "60"))),
     )
 
     # --- Load RiskConfig ---
@@ -81,18 +97,28 @@ def load_config_from_file(path: str = 'config.ini') -> tuple[AppConfig, RiskConf
         min_order_notional=parser.getfloat('risk', 'min_order_notional', fallback=float(os.getenv("MIN_ORDER_NOTIONAL", "1.0"))),
     )
 
+    # --- Load RegimeConfig ---
+    regime_cfg = RegimeConfig(
+        short_window=parser.getint('regime', 'short_window', fallback=int(os.getenv("REGIME_SHORT_WINDOW", "50"))),
+        long_window=parser.getint('regime', 'long_window', fallback=int(os.getenv("REGIME_LONG_WINDOW", "200"))),
+    )
+
     # --- Load AlpacaConfig ---
     alpaca_api_key = parser.get('alpaca', 'api_key', fallback=os.getenv('APCA_API_KEY_ID'))
     alpaca_secret_key = parser.get('alpaca', 'secret_key', fallback=os.getenv('APCA_API_SECRET_KEY'))
+    
+    # Determine API base URL
+    is_paper = app_cfg.alpaca_env.lower() == 'paper'
+    api_base = "https://paper-api.alpaca.markets" if is_paper else "https://api.alpaca.markets"
 
     if not alpaca_api_key or 'YOUR' in alpaca_api_key:
         raise ValueError("Alpaca API key is not configured in config.ini or environment variables.")
     if not alpaca_secret_key or 'YOUR' in alpaca_secret_key:
         raise ValueError("Alpaca secret key is not configured in config.ini or environment variables.")
 
-    alpaca_cfg = AlpacaConfig(api_key=alpaca_api_key, secret_key=alpaca_secret_key)
-
-    return app_cfg, risk_cfg, alpaca_cfg
+    alpaca_cfg = AlpacaConfig(key_id=alpaca_api_key, secret_key=alpaca_secret_key, api_base=api_base)
+    
+    return app_cfg, alpaca_cfg, risk_cfg, regime_cfg
 
 def to_dict(cfg: AppConfig) -> dict:
     return asdict(cfg)

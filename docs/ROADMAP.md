@@ -41,40 +41,61 @@ This phase automated key processes and built a robust validation framework.
 - [x] **State Management & Debugging**: Centralized portfolio state management and resolved complex bugs related to environment, configuration, and data flow.
 - [x] **Intelligent Health Checks**: Implemented a `/healthz` endpoint that performs a full check on all critical components before reporting a healthy status.
 
----
+### Phase 4A: Live Paper Trading & Validation (V1.0 - In Progress)
 
-### Phase 4: Advanced Trading & Production Hardening (V1.0 - Completed)
+This phase focuses on validating the agent's end-to-end functionality in a live paper trading environment. The goal is to build confidence in its decision-making and execution capabilities before considering it "complete."
 
-This phase introduced sophisticated trading logic and hardened the system for stability, culminating in the V1.0 release.
-
+**Accomplishments (System Hardening):**
 - [x] **Market Regime Detection**: Implemented a `RegimeDetector` to classify market conditions, allowing the strategy to adapt.
 - [x] **Multi-Symbol Trading**: Enabled the agent to trade multiple symbols concurrently, with risk managed on a per-trade basis.
 - [x] **Advanced Risk Management**: Implemented dynamic, ATR-based stop-loss and take-profit orders, with position sizes calculated based on a fixed risk percentage.
 - [x] **Real-time Data Handling**: Switched to using the `get_crypto_snapshot` endpoint for live data to ensure accuracy and prevent trading on partial bars.
-- [x] **Code Hardening & Stability**: Performed extensive data validation, error handling, and stability fixes based on integration test findings and live paper trading. This included a deep debugging session to resolve a cascade of interacting issues, resulting in a truly stable system.
+- [x] **Code Hardening & Stability**: Performed extensive data validation, error handling, and stability fixes based on integration test findings. This included a deep debugging session to resolve a cascade of interacting issues, resulting in a truly stable system.
 - [x] **Startup Grace Period**: Added a 60-second grace period to the health check to prevent failures during application initialization in Docker.
 
----
-
-### Phase 5: Live Operations & Continuous Improvement (Post V1.0)
-
-This phase focuses on deploying the V1.0 agent, monitoring its performance, and continuously improving its capabilities.
-
-- [ ] **Comprehensive Peer Review & Code Audit**: Conduct a thorough peer review of the entire codebase, focusing on logic, security, and adherence to best practices. Engage a third-party expert to audit the strategy and risk management components before deploying with real capital.
-- [ ] **Data Feed Redundancy & Health**: Decouple data from execution. Integrate a primary, exchange-native data feed (e.g., Kraken, Coinbase) and use Alpaca as a fallback and for order execution. Implement a "data-health gate" to validate data quality in real-time and backfill gaps.
-- [ ] **Enhanced Monitoring and Alerting**: Implement a more sophisticated monitoring solution (e.g., Prometheus/Grafana) and set up alerts for critical events like failed trades, significant losses, or data feed interruptions.
-- [ ] **Cloud Deployment & CI/CD**: Deploy the agent to a cloud environment (e.g., AWS, GCP) and establish a continuous integration and deployment pipeline for automated testing and deployment of new versions.
-- [ ] **Live Trading**: After extensive testing and validation in the paper environment, transition the agent to live trading with real capital, starting with a small, controlled allocation.
+**V1.0 Completion Criteria (To-Do):**
+- [ ] **Verify End-to-End Trade Execution**: Observe the agent autonomously execute multiple trades (both simple and complex, with stop-loss/take-profit) in the live paper market.
+- [ ] **Confirm Autonomous Learning Loop**: Ensure the agent can run for an extended period, automatically retrain its model, and continue trading with the updated model without manual intervention.
+- [ ] **Achieve Decision-Making Confidence**: Monitor trading decisions over a sustained period to ensure they are logical, profitable, and align with the strategy's intent. V1.0 is complete only when we trust its ability to manage capital.
 
 ---
 
-### Version 2.0: Autonomous Intelligence (Future Vision)
+### Phase 4B: Live Performance Analysis & Calibration
 
-This version will build upon the stable foundation of Version 1.0, introducing more sophisticated and autonomous features.
+**Status:** In Progress
 
-- [ ] **Dynamic Model & Strategy Switching**: Implement a master-model that dynamically selects the most appropriate underlying ML model or trading strategy (e.g., momentum, mean-reversion) based on the current detected market regime.
-- [ ] **Portfolio-Level Optimization**: Evolve the agent from single-asset trading to true portfolio management. Use Modern Portfolio Theory (MPT) to optimize capital allocation across a basket of assets to maximize the portfolio's overall risk-adjusted return.
-- [ ] **Alternative Data Integration**: Integrate non-price-based data sources, such as news sentiment analysis or on-chain blockchain metrics, to provide the model with a richer, more predictive feature set.
-- [ ] **Explainable AI (XAI) for Trading Decisions**: Integrate tools like SHAP (SHapley Additive exPlanations) to provide clear, visual explanations for why the model made a specific trade decision, enhancing trust and debuggability.
-- [ ] **Reinforcement Learning (RL) Core**: As the ultimate evolution, research and implement a Reinforcement Learning agent that learns an optimal trading policy directly from market interaction, moving beyond simple prediction to holistic decision-making.
-- [ ] **Formal Quantitative Modeling & Alpha Research**: Transition from a pure ML-based approach to a hybrid quant model. Systematically research, test, and validate specific "alpha factors" (e.g., momentum, mean-reversion, value). Develop a factor-based model that can weigh these different signals, providing a more robust and explainable foundation for trading decisions than a black-box model alone.
+**Objective:** Analyze the live performance of the V1 model and calibrate its parameters based on real-world data.
+
+**Key Tasks:**
+- [x] **Log All Prediction Probabilities:** Modified the `InferenceStrategy` to log the full probability array (`[hold, buy, sell]`) for every single evaluation. This will create a dataset of the model's confidence over time. *(Note: Implemented via a temporary `print` statement for immediate visibility.)*
+- [ ] **Analyze Confidence Distribution:** After a data collection period (e.g., 24-48 hours), analyze the distribution of the logged probabilities. Determine the model's actual confidence range (min, max, average) for 'buy' and 'sell' signals.
+- [ ] **Calibrate `trade_confidence_threshold`:** Based on the analysis, make an informed, data-driven decision on whether to adjust the `trade_confidence_threshold` in `config.ini` to a more realistic value for the current model.
+- [ ] **Assess Model Viability:** Conclude whether the model is fundamentally capable of producing actionable signals or if it requires retraining with different features or a different architecture.
+
+---
+
+### Phase 5: Professional-Grade Trading & Multi-Broker Support (Future Vision)
+
+This phase will begin *after* V1.0 is validated and complete. It will evolve the agent from a single-broker system into a professional-grade, broker-agnostic trading platform, ensuring V1 remains a stable, separate foundation.
+
+1.  **Foundational Architecture (V2 Groundwork)**:
+    - [ ] **Broker-Agnostic Architecture**: Refactor the core trading logic to be independent of any single broker. Create a standardized `Broker` interface and implement separate adapters for each supported broker (e.g., `AlpacaAdapter`, `InteractiveBrokersAdapter`). This is the cornerstone of V2.
+
+2.  **Expansion & Intelligence**:
+    - [ ] **Interactive Brokers (IBKR) Integration**: Integrate the IBKR API to gain access to a vastly wider range of markets, including stocks, options, futures, and forex.
+    - [ ] **CCXT Library Integration**: For cryptocurrency trading, integrate the `CCXT` library to connect to over 100 crypto exchanges for data redundancy and arbitrage opportunities.
+    - [ ] **Formal Quantitative Modeling**: Transition from a pure ML approach to a hybrid quant model, systematically researching and validating specific "alpha factors" (e.g., momentum, mean-reversion).
+    - [ ] **Portfolio-Level Optimization**: Implement Modern Portfolio Theory (MPT) to optimize capital allocation across a basket of assets.
+
+3.  **Deployment & Validation**:
+    - [ ] **Cloud Deployment & CI/CD**: Deploy the V2 agent to a cloud environment (e.g., AWS, GCP) and establish a CI/CD pipeline.
+    - [ ] **V2 Paper Trading**: Conduct a dedicated, extensive paper trading phase for the new V2 architecture to validate its performance and stability.
+    - [ ] **Enhanced Monitoring**: Implement a sophisticated monitoring solution (e.g., Prometheus/Grafana) for critical alerts.
+    - [ ] **V2 Live Deployment**: After successful paper trading, transition the V2 agent to live trading with a small, controlled capital allocation.
+
+### Phase 6: Autonomous Intelligence (Long-Term Vision)
+
+- [ ] **Dynamic Model & Strategy Switching**: Implement a master-model that dynamically selects the best underlying ML model or trading strategy based on the detected market regime.
+- [ ] **Alternative Data Integration**: Integrate non-price-based data sources, such as news sentiment or on-chain metrics.
+- [ ] **Explainable AI (XAI) for Trading Decisions**: Integrate tools like SHAP to provide clear explanations for why the model made a specific trade decision.
+- [ ] **Reinforcement Learning (RL) Core**: Research and implement a Reinforcement Learning agent that learns an optimal trading policy directly from market interaction.

@@ -8,6 +8,7 @@ from smartcfd.config import load_config_from_file
 from smartcfd.db import connect as db_connect, init_schema, record_run, record_heartbeat
 from smartcfd.alpaca_helpers import build_api_base, build_headers_from_env
 from smartcfd.health_server import start_health_server
+from smartcfd.logging_setup import setup_logging
 from smartcfd.regime_detector import RegimeDetector
 from smartcfd.strategy import get_strategy_by_name, InferenceStrategy
 from smartcfd.trader import Trader
@@ -30,11 +31,12 @@ def shutdown_handler(signum, frame):
 
 def main():
     global conn, run_id, running
+    setup_logging() # Setup logging at the very beginning
     running = True
     log = logging.getLogger("runner")
 
     try:
-        app_cfg, risk_cfg, alpaca_cfg = load_config_from_file()
+        app_cfg, alpaca_cfg, risk_cfg, regime_cfg = load_config_from_file()
     except (FileNotFoundError, ValueError) as e:
         log.critical(f"Failed to load configuration: {e}")
         return # Exit if config is missing or invalid
@@ -69,91 +71,70 @@ def main():
         if os.getenv("RUN_HEALTH_SERVER", "1") not in ("0", "false", "False", "FALSE"):
             port = int(os.getenv("HEALTH_PORT", "8080"))
             max_age = int(os.getenv("HEALTH_MAX_AGE_SECONDS", "120"))
-            start_health_server(port=port, db_path=None, max_age_seconds=max_age)
-            log.info("runner.health.server.start", extra={"extra": {"port": port, "max_age_seconds": max_age}})
-    except Exception as e:
-        log.warning("runner.health.server.fail", extra={"extra": {"error": repr(e)}})
+            # Start the health server in a separate thread
+            health_thread = start_health_server(app_cfg, alpaca_cfg)
 
-    # Initialize the Alpaca client, Risk Manager, and Strategy
-    try:
-        broker = AlpacaBroker(
-            api_key=alpaca_cfg.api_key,
-            secret_key=alpaca_cfg.secret_key,
-            paper=(app_cfg.alpaca_env == 'paper')
-        )
-    except ValueError as e:
-        log.critical(f"Failed to initialize broker: {e}")
-        return
+            # Initialize Broker and DB connection
+            broker = AlpacaBroker(key_id=alpaca_cfg.key_id, secret_key=alpaca_cfg.secret_key, paper=(app_cfg.alpaca_env == 'paper'))
+            conn = db_connect()
+            init_schema(conn)
+            run_id = record_run(conn, "paper") # Assuming paper mode for now
 
-    # Pass the broker to the PortfolioManager
-    portfolio_manager = PortfolioManager(broker)
-    
-    risk_manager = RiskManager(portfolio_manager, risk_cfg)
-    strategy_name = os.getenv("STRATEGY", "inference")
-    
-    # --- Instantiate strategy and its dependencies ---
-    regime_detector = RegimeDetector(min_data_points=app_cfg.min_data_points)
-    
-    # Get the base strategy
-    strategy = get_strategy_by_name(strategy_name, app_cfg)
-    
-    # If it's the inference strategy, re-initialize it with the confidence threshold
-    if isinstance(strategy, InferenceStrategy):
-        strategy = InferenceStrategy(
-            config=app_cfg,
-            trade_confidence_threshold=app_cfg.trade_confidence_threshold
-        )
+            # Initialize the PortfolioManager first
+            portfolio_manager = PortfolioManager(broker)
 
-    # Initialize the Trader
-    trader = Trader(portfolio_manager, strategy, risk_manager, app_cfg, regime_detector, alpaca_cfg)
+            # Initialize the RiskManager with the portfolio_manager and risk_config
+            risk_manager = RiskManager(portfolio_manager, risk_cfg, broker)
 
-    log.info(
-        "runner.start",
-        extra={
-            "extra": {
-                "run_interval_seconds": app_cfg.run_interval_seconds,
-                "strategy": strategy_name,
-                "watch_list": app_cfg.watch_list,
-            }
-        },
-    )
+            # Initialize the Trader
+            log.info("runner.init.trader.start")
+            trader = Trader(
+                app_config=app_cfg,
+                risk_config=risk_cfg,
+                regime_config=regime_cfg,
+                broker=broker,
+                db_conn=conn,
+                portfolio_manager=portfolio_manager,
+                risk_manager=risk_manager
+            )
+            log.info("runner.init.trader.success")
 
-    backoff_seconds = 1.0
-    network_max_backoff = float(os.getenv("NETWORK_MAX_BACKOFF_SECONDS", "60"))
+            log.info("runner.start")
 
-    while running:
-        try:
-            # Record a heartbeat to show the runner is alive
+            # Main loop
+            backoff_seconds = 1.0
+            network_max_backoff = float(os.getenv("NETWORK_MAX_BACKOFF_SECONDS", "60"))
+
+            while running:
+                try:
+                    # Record a heartbeat to show the runner is alive
+                    if conn and run_id:
+                        record_heartbeat(conn, run_id, "runner")
+
+                    trader.run()
+
+                except Exception as e:
+                    log.error("runner.loop.fail", exc_info=True)
+                
+                # Use a variable for sleep time to allow for future dynamic adjustments
+                sleep_duration = app_cfg.run_interval_seconds
+                
+                # to allow the shutdown signal to be caught more quickly.
+                for _ in range(int(sleep_duration)):
+                    if not running:
+                        break
+                    time.sleep(1)
+
+            # --- Shutdown sequence ---
+            log.info("runner.shutdown.start")
             if conn and run_id:
-                record_heartbeat(conn, run_id, "runner")
-
-            trader.run()
-
-        except Exception as e:
-            log.error("runner.loop.fail", exc_info=True)
-        
-        # Use a variable for sleep time to allow for future dynamic adjustments
-        sleep_duration = app_cfg.run_interval_seconds
-        
-        # to allow the shutdown signal to be caught more quickly.
-        for _ in range(int(sleep_duration)):
-            if not running:
-                break
-            time.sleep(1)
-
-    # --- Shutdown sequence ---
-    log.info("runner.shutdown.start")
-    if conn and run_id:
-        record_run(conn, run_id, "end", "shutdown signal received")
-    if conn:
-        conn.close()
-    log.info("runner.shutdown.complete")
+                record_run(conn, run_id, "end", "shutdown signal received")
+            if conn:
+                conn.close()
+            log.info("runner.shutdown.complete")
+    except Exception as e:
+        log.warning("runner.health.server.fail", exc_info=True)
 
 
 if __name__ == "__main__":
-    # Configure logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
     main()

@@ -82,3 +82,19 @@ class OrderResponse(BaseModel):
     model_config = {
         "populate_by_name": True
     }
+
+class TradeGroup(BaseModel):
+    """
+    Represents the state of a client-side OCO trade group.
+    """
+    gid: str
+    symbol: str
+    side: str
+    status: str
+    entry_order_id: Optional[str] = None
+    entry_filled_qty: Optional[float] = None
+    tp_order_id: Optional[str] = None
+    sl_order_id: Optional[str] = None
+    open_qty: Optional[float] = None
+    created_at: str
+    updated_at: str

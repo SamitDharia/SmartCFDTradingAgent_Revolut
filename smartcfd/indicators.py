@@ -75,14 +75,16 @@ def stochastic_oscillator(high: pd.Series, low: pd.Series, close: pd.Series, win
     return df
 
 
-def volume_profile(price: pd.Series, volume: pd.Series, bins: int = 10):
+def volume_profile(price: pd.Series, volume: pd.Series, bins: int = 10) -> pd.DataFrame:
     """
     A simple volume profile implementation.
     This is a complex indicator and this is a simplified version.
     """
     # This is a placeholder for a more complex implementation
     log.warning("volume_profile is a complex indicator and this is a simplified placeholder.")
-    return pd.Series(index=price.index, dtype=float)
+    df = pd.DataFrame(index=price.index)
+    df['vp_placeholder'] = pd.NA  # Using pd.NA for missing values
+    return df
 
 
 def price_rate_of_change(series: pd.Series, window: int = 12) -> pd.Series:
