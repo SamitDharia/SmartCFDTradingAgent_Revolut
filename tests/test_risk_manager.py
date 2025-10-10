@@ -28,7 +28,7 @@ class TestRiskManager(unittest.TestCase):
 
     def test_qty_limited_by_risk_per_trade(self):
         """Order size should be determined by risk_per_trade_percent when no other limits are hit."""
-        qty, _ = self.risk_manager.calculate_order_qty("BTC/USD", "buy")
+        qty, _ = self.risk_manager.calculate_order_qty("BTC/USD", "buy", None)
         # Expected: (100,000 * 1%) / 50,000 = 0.02
         self.assertAlmostEqual(qty, 0.02)
 
@@ -38,7 +38,7 @@ class TestRiskManager(unittest.TestCase):
         self.portfolio_manager.positions = {
             "BTC/USD": Position(symbol="BTC/USD", market_value=24000.0, qty=0.48, avg_entry_price=50000.0, unrealized_pl=0, unrealized_plpc=0, side="long")
         }
-        qty, _ = self.risk_manager.calculate_order_qty("BTC/USD", "buy")
+        qty, _ = self.risk_manager.calculate_order_qty("BTC/USD", "buy", None)
         # Risk per trade is 1% ($1000), asset headroom is 1% ($1000). Min is $1000.
         # Expected: 1000 / 50000 = 0.02
         self.assertAlmostEqual(qty, 0.02)
@@ -49,7 +49,7 @@ class TestRiskManager(unittest.TestCase):
         self.portfolio_manager.positions = {
             "ETH/USD": Position(symbol="ETH/USD", market_value=49500.0, qty=16.5, avg_entry_price=3000.0, unrealized_pl=0, unrealized_plpc=0, side="long")
         }
-        qty, _ = self.risk_manager.calculate_order_qty("BTC/USD", "buy")
+        qty, _ = self.risk_manager.calculate_order_qty("BTC/USD", "buy", None)
         # Risk per trade is 1% ($1000), total headroom is 0.5% ($500). Min is $500.
         # Expected: 500 / 50000 = 0.01
         self.assertAlmostEqual(qty, 0.01)
@@ -60,7 +60,7 @@ class TestRiskManager(unittest.TestCase):
         self.portfolio_manager.positions = {
             "BTC/USD": Position(symbol="BTC/USD", market_value=25000.0, qty=0.5, avg_entry_price=50000.0, unrealized_pl=0, unrealized_plpc=0, side="long")
         }
-        qty, _ = self.risk_manager.calculate_order_qty("BTC/USD", "buy")
+        qty, _ = self.risk_manager.calculate_order_qty("BTC/USD", "buy", None)
         self.assertEqual(qty, 0)
 
     def test_generate_bracket_order_for_buy(self):

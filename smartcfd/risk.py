@@ -1,5 +1,5 @@
 import logging
-from typing import List, Dict, Any, Optional, Tuple, Tuple, Tuple
+from typing import List, Dict, Any, Optional, Tuple
 import pandas as pd
 from pydantic import BaseModel
 import ta
@@ -376,6 +376,10 @@ class RiskManager:
         except Exception:
             log.error("risk.volatility_check.fail", exc_info=True)
             return False # Fail safe, don't halt
+
+    # Backwards-compatibility alias used by some tests or older code
+    def is_volatility_too_high(self, historical_data: pd.DataFrame, symbol: str) -> bool:
+        return self.volatility_check(historical_data, symbol)
 
     def check_for_halt(self, historical_data: Dict[str, pd.DataFrame], trade_interval: str) -> bool:
         """

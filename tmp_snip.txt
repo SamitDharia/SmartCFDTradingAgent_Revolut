@@ -1,0 +1,60 @@
+                                log.info("orders.lifecycle.replace_success", extra={"extra": {"order_id": peer.id, "new_qty": rem_qty}})
+                            except Exception:
+                                log.warning("orders.lifecycle.replace_fail", exc_info=True, extra={"extra": {"order_id": peer.id, "new_qty": rem_qty}})
+                            self.trade_group_manager.update_trade_group_status(group.gid, "PARTIAL_EXIT")
+                            log.info("orders.lifecycle.partial_exit", extra={"extra": {"group_id": group.gid, "tp_status": status_tp, "sl_status": status_sl, "rem_qty": rem_qty}})
+                        else:
+                            # No remaining qty or peer not open: close out group and ensure peer is cancelled
+                            if peer is not None and _is_open(peer):
+                                _cancel_with_backoff(peer.id)
+                            self.trade_group_manager.update_trade_group_status(group.gid, "CLOSED", note="partial_exit_no_remaining")
+                            log.info("orders.lifecycle.partial_exit_closed", extra={"extra": {"group_id": group.gid}})
+                except Exception:
+                            except Exception:
+                                log.warning("orders.lifecycle.replace_fail", exc_info=True, extra={"extra": {"order_id": peer.id, "new_qty": rem_qty}})
+                            self.trade_group_manager.update_trade_group_status(group.gid, "PARTIAL_EXIT")
+                            log.info("orders.lifecycle.partial_exit", extra={"extra": {"group_id": group.gid, "tp_status": status_tp, "sl_status": status_sl, "rem_qty": rem_qty}})
+                        else:
+                            # No remaining qty or peer not open: close out group and ensure peer is cancelled
+                            if peer is not None and _is_open(peer):
+                                _cancel_with_backoff(peer.id)
+                            self.trade_group_manager.update_trade_group_status(group.gid, "CLOSED", note="partial_exit_no_remaining")
+                            log.info("orders.lifecycle.partial_exit_closed", extra={"extra": {"group_id": group.gid}})
+                except Exception:
+                    log.error("trader.reconcile_trade_groups.manage_oco_fail", exc_info=True, extra={"extra": {"group_id": group.gid}})
+                            # No remaining qty or peer not open: close out group and ensure peer is cancelled
+                            if peer is not None and _is_open(peer):
+                                _cancel_with_backoff(peer.id)
+                            self.trade_group_manager.update_trade_group_status(group.gid, "CLOSED", note="partial_exit_no_remaining")
+                            log.info("orders.lifecycle.partial_exit_closed", extra={"extra": {"group_id": group.gid}})
+                except Exception:
+                    log.error("trader.reconcile_trade_groups.manage_oco_fail", exc_info=True, extra={"extra": {"group_id": group.gid}})
+    
+    def arm_exits(self, group: TradeGroup, entry_order: Order, historical_data: Dict[str, pd.DataFrame]):
+        """
+        Arms the take-profit and stop-loss orders for a filled entry order.
+        """
+                            if peer is not None and _is_open(peer):
+                                _cancel_with_backoff(peer.id)
+                            self.trade_group_manager.update_trade_group_status(group.gid, "CLOSED", note="partial_exit_no_remaining")
+                            log.info("orders.lifecycle.partial_exit_closed", extra={"extra": {"group_id": group.gid}})
+                except Exception:
+                    log.error("trader.reconcile_trade_groups.manage_oco_fail", exc_info=True, extra={"extra": {"group_id": group.gid}})
+    
+    def arm_exits(self, group: TradeGroup, entry_order: Order, historical_data: Dict[str, pd.DataFrame]):
+        """
+        Arms the take-profit and stop-loss orders for a filled entry order.
+        """
+        symbol_data = historical_data.get(group.symbol)
+                    pass
+            else:
+                # This requires rollback logic, which is complex. For now, log critical error.
+                log.critical("trader.arm_exits.partial_exit_submission", extra={"extra": {"group_id": group.gid, "tp_order": str(bool(tp_order)), "sl_order": str(bool(sl_order))}})
+
+        except Exception as e:
+            log.error("trader.arm_exits.exception", exc_info=True, extra={"extra": {"group_id": group.gid}})
+
+    def evaluate_new_trades(self):
+        """
+        Evaluates the strategy for new trading opportunities and executes them.
+        """

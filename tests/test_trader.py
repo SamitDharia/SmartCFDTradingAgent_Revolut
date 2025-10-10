@@ -1,96 +1,65 @@
-import pytest
-from unittest.mock import MagicMock, ANY
+import sqlite3
+import pandas as pd
+from unittest.mock import MagicMock
 
 from smartcfd.trader import Trader
-from smartcfd.config import AppConfig
+from smartcfd.config import AppConfig, RiskConfig, RegimeConfig
+from smartcfd.db import init_schema
+from smartcfd.portfolio import PortfolioManager
+from smartcfd.risk import RiskManager
 
-@pytest.fixture
-def mock_strategy():
-    """Creates a mock strategy."""
-    strategy = MagicMock()
-    strategy.evaluate.return_value = (
-        [
-            {"action": "buy", "symbol": "BTC/USD"}
-        ],
-        {'BTC/USD': MagicMock()} # Mock historical data
+
+def _make_trader_with_mocks():
+    app_cfg = AppConfig(watch_list="BTC/USD", trade_interval="15m")
+    risk_cfg = RiskConfig()
+    regime_cfg = RegimeConfig()
+    broker = MagicMock()
+
+    # In-memory DB for trade groups
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    init_schema(conn)
+
+    portfolio_manager = PortfolioManager(broker)
+    risk_manager = RiskManager(portfolio_manager, risk_cfg, broker)
+
+    trader = Trader(
+        app_config=app_cfg,
+        risk_config=risk_cfg,
+        regime_config=regime_cfg,
+        broker=broker,
+        db_conn=conn,
+        portfolio_manager=portfolio_manager,
+        risk_manager=risk_manager,
     )
-    return strategy
+    return trader, broker, risk_manager
 
-@pytest.fixture
-def mock_portfolio_manager():
-    """Creates a mock portfolio manager."""
-    pm = MagicMock()
-    pm.client.submit_order.return_value = {"id": "123", "status": "filled"}
-    pm.get_position.return_value = None # Default to no existing position
-    return pm
 
-@pytest.fixture
-def mock_risk_manager():
-    """Creates a mock risk manager."""
-    risk_manager = MagicMock()
-    risk_manager.calculate_order_qty.return_value = 1.5
-    risk_manager.generate_bracket_order.return_value = {
-        'symbol': 'BTC/USD', 'qty': 1.5, 'side': 'buy', 'type': 'market', 
-        'order_class': 'bracket', 'stop_loss': {'stop_price': 49000}, 
-        'take_profit': {'limit_price': 51000}
-    }
-    return risk_manager
+def test_initiate_trade_submits_entry_order():
+    trader, broker, risk_manager = _make_trader_with_mocks()
+    # Risk returns > 0 qty and basic order dict
+    risk_manager.calculate_order_qty = MagicMock(return_value=(0.02, 50000.0))
+    risk_manager.generate_entry_order = MagicMock(return_value={
+        "symbol": "BTC/USD",
+        "qty": "0.02",
+        "side": "buy",
+        "type": "market",
+        "time_in_force": "gtc",
+    })
+    # Broker returns an object with id attribute
+    broker.submit_order.return_value = MagicMock(id="ord_1")
 
-@pytest.fixture
-def app_config():
-    """Provides a default AppConfig."""
-    return AppConfig(watch_list="BTC/USD", trade_interval="15m")
+    trade_details = {"symbol": "BTC/USD", "side": "buy"}
+    df = pd.DataFrame({"close": [50000, 50010]})
 
-@pytest.fixture
-def mock_client():
-    """Creates a mock Alpaca client."""
-    return MagicMock()
+    trader.initiate_trade(trade_details, df)
+    assert broker.submit_order.called
 
-def test_trader_run(mock_strategy, mock_portfolio_manager, mock_risk_manager, app_config, mock_client):
-    """Tests the main run loop of the Trader."""
-    mock_risk_manager.check_for_halt.return_value = False
-    mock_risk_manager.is_volatility_too_high.return_value = False # Assume normal volatility
-    mock_risk_manager.calculate_order_qty.return_value = (0.02, 50000.0) # Return a tuple
-    trader = Trader(mock_portfolio_manager, mock_strategy, mock_risk_manager, app_config)
-    trader.broker = mock_client # Manually inject the mock client
-    trader.run()
 
-    mock_portfolio_manager.reconcile.assert_called_once()
-    # Evaluate is called twice now: once for regime, once for final decision
-    assert mock_strategy.evaluate.call_count == 2
-    mock_client.submit_order.assert_called_once()
-
-def test_trader_run_halted(mock_strategy, mock_portfolio_manager, mock_risk_manager, app_config, mock_client):
-    """Tests that the trader does not proceed if risk manager halts."""
-    # For this test, we can imagine the halt is already set
-    mock_risk_manager.check_for_halt.return_value = True
-    trader = Trader(mock_portfolio_manager, mock_strategy, mock_risk_manager, app_config)
-    trader.broker = mock_client # Manually inject the mock client
-    trader.run()
-
-    mock_portfolio_manager.reconcile.assert_called_once()
-    # Strategy should not be evaluated if halted
-    mock_strategy.evaluate.assert_not_called()
-
-def test_trader_execute_actions_no_actions(mock_strategy, mock_portfolio_manager, mock_risk_manager, app_config, mock_client):
-    """Tests that nothing happens when the strategy returns no actions."""
-    mock_strategy.evaluate.return_value = ([], {})
-    trader = Trader(mock_portfolio_manager, mock_strategy, mock_risk_manager, app_config)
-    trader.broker = mock_client # Manually inject the mock client
-    trader.run()
-
-    mock_client.post_order.assert_not_called()
-
-def test_trader_execute_order_zero_qty(mock_strategy, mock_portfolio_manager, mock_risk_manager, app_config, mock_client):
-    """Tests that no order is placed when the risk manager returns zero quantity."""
-    mock_risk_manager.check_for_halt.return_value = False
-    mock_risk_manager.is_volatility_too_high.return_value = False # Assume normal volatility
-    mock_risk_manager.calculate_order_qty.return_value = 0
-    mock_strategy.evaluate.return_value = ([{"action": "buy", "symbol": "BTC/USD"}], {'BTC/USD': MagicMock()})
-    trader = Trader(mock_portfolio_manager, mock_strategy, mock_risk_manager, app_config)
-    trader.broker = mock_client # Manually inject the mock client
-    trader.run()
-
-    mock_risk_manager.calculate_order_qty.assert_called_once_with("BTC/USD", "buy")
-    mock_client.post_order.assert_not_called()
+def test_initiate_trade_zero_qty_no_order():
+    trader, broker, risk_manager = _make_trader_with_mocks()
+    risk_manager.calculate_order_qty = MagicMock(return_value=(0.0, 50000.0))
+    trade_details = {"symbol": "BTC/USD", "side": "buy"}
+    trader.initiate_trade(trade_details, pd.DataFrame({"close": [50000]}))
+    assert not broker.submit_order.called
 

@@ -5,7 +5,7 @@ import requests
 import signal
 
 from smartcfd.config import load_config_from_file
-from smartcfd.db import connect as db_connect, init_schema, record_run, record_heartbeat
+from smartcfd.db import connect as db_connect, init_schema, record_run, record_heartbeat, record_order_event
 from smartcfd.alpaca_helpers import build_api_base, build_headers_from_env
 from smartcfd.health_server import start_health_server
 from smartcfd.logging_setup import setup_logging
@@ -68,72 +68,63 @@ def main():
 
     # Start /healthz server (optional)
     try:
+        # Start health server optionally
         if os.getenv("RUN_HEALTH_SERVER", "1") not in ("0", "false", "False", "FALSE"):
-            port = int(os.getenv("HEALTH_PORT", "8080"))
-            max_age = int(os.getenv("HEALTH_MAX_AGE_SECONDS", "120"))
-            # Start the health server in a separate thread
-            health_thread = start_health_server(app_cfg, alpaca_cfg)
+            start_health_server(app_cfg, alpaca_cfg)
 
-            # Initialize Broker and DB connection
-            broker = AlpacaBroker(key_id=alpaca_cfg.key_id, secret_key=alpaca_cfg.secret_key, paper=(app_cfg.alpaca_env == 'paper'))
-            conn = db_connect()
-            init_schema(conn)
-            run_id = record_run(conn, "paper") # Assuming paper mode for now
+        # Initialize Broker and DB connection
+        broker = AlpacaBroker(key_id=alpaca_cfg.key_id, secret_key=alpaca_cfg.secret_key, paper=(app_cfg.alpaca_env == 'paper'))
+        conn = db_connect()
+        init_schema(conn)
+        run_id = record_run(conn, status="start", note="runner")
 
-            # Initialize the PortfolioManager first
-            portfolio_manager = PortfolioManager(broker)
+        # Initialize managers
+        portfolio_manager = PortfolioManager(broker)
+        risk_manager = RiskManager(portfolio_manager, risk_cfg, broker)
 
-            # Initialize the RiskManager with the portfolio_manager and risk_config
-            risk_manager = RiskManager(portfolio_manager, risk_cfg, broker)
+        # Initialize the Trader
+        log.info("runner.init.trader.start")
+        trader = Trader(
+            app_config=app_cfg,
+            risk_config=risk_cfg,
+            regime_config=regime_cfg,
+            broker=broker,
+            db_conn=conn,
+            portfolio_manager=portfolio_manager,
+            risk_manager=risk_manager
+        )
+        log.info("runner.init.trader.success")
 
-            # Initialize the Trader
-            log.info("runner.init.trader.start")
-            trader = Trader(
-                app_config=app_cfg,
-                risk_config=risk_cfg,
-                regime_config=regime_cfg,
-                broker=broker,
-                db_conn=conn,
-                portfolio_manager=portfolio_manager,
-                risk_manager=risk_manager
-            )
-            log.info("runner.init.trader.success")
+        log.info("runner.start")
 
-            log.info("runner.start")
+        # Main loop
+        while running:
+            try:
+                # Record a heartbeat to show the runner is alive
+                if conn:
+                    record_heartbeat(conn, ok=True, note="runner")
 
-            # Main loop
-            backoff_seconds = 1.0
-            network_max_backoff = float(os.getenv("NETWORK_MAX_BACKOFF_SECONDS", "60"))
+                trader.run()
 
-            while running:
-                try:
-                    # Record a heartbeat to show the runner is alive
-                    if conn and run_id:
-                        record_heartbeat(conn, run_id, "runner")
+            except Exception:
+                log.error("runner.loop.fail", exc_info=True)
+            
+            # Sleep in 1s intervals to allow signal handling
+            sleep_duration = app_cfg.run_interval_seconds
+            for _ in range(int(sleep_duration)):
+                if not running:
+                    break
+                time.sleep(1)
 
-                    trader.run()
-
-                except Exception as e:
-                    log.error("runner.loop.fail", exc_info=True)
-                
-                # Use a variable for sleep time to allow for future dynamic adjustments
-                sleep_duration = app_cfg.run_interval_seconds
-                
-                # to allow the shutdown signal to be caught more quickly.
-                for _ in range(int(sleep_duration)):
-                    if not running:
-                        break
-                    time.sleep(1)
-
-            # --- Shutdown sequence ---
-            log.info("runner.shutdown.start")
-            if conn and run_id:
-                record_run(conn, run_id, "end", "shutdown signal received")
-            if conn:
-                conn.close()
-            log.info("runner.shutdown.complete")
-    except Exception as e:
-        log.warning("runner.health.server.fail", exc_info=True)
+        # --- Shutdown sequence ---
+        log.info("runner.shutdown.start")
+        if conn and run_id:
+            record_run(conn, status="end", note="shutdown signal received", run_id=run_id)
+        if conn:
+            conn.close()
+        log.info("runner.shutdown.complete")
+    except Exception:
+        log.warning("runner.main.fail", exc_info=True)
 
 
 if __name__ == "__main__":

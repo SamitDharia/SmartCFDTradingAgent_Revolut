@@ -98,3 +98,4 @@ class TradeGroup(BaseModel):
     open_qty: Optional[float] = None
     created_at: str
     updated_at: str
+    note: Optional[str] = None

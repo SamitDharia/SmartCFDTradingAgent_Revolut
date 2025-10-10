@@ -143,6 +143,23 @@ class AlpacaBroker(Broker):
             log.error("alpaca.cancel_order.fail", exc_info=True)
             raise
 
+    def replace_order(self, order_id: str, qty: str | None = None, limit_price: str | None = None, stop_price: str | None = None) -> Any:
+        """Replaces an existing order to adjust quantities or prices."""
+        try:
+            args = {}
+            if qty is not None:
+                args["qty"] = qty
+            if limit_price is not None:
+                args["limit_price"] = limit_price
+            if stop_price is not None:
+                args["stop_price"] = stop_price
+            order = self.api.replace_order(order_id, **args)
+            log.info("alpaca.replace_order.success", extra={"extra": {"order_id": order_id, **args}})
+            return order
+        except APIError:
+            log.error("alpaca.replace_order.fail", exc_info=True)
+            raise
+
     def close_position(self, symbol: str) -> Any:
         """Closes an open position for a given symbol."""
         try:

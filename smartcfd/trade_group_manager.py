@@ -53,20 +53,20 @@ class TradeGroupManager:
         self.conn.commit()
         return self.get_group_by_gid(gid)
 
-    def update_trade_group_entry(self, group_id: str, entry_order_id: str):
+    def update_trade_group_entry(self, gid: str, entry_order_id: str):
         """Updates the entry order ID for a trade group."""
-        self.update_group(group_id, {"entry_order_id": entry_order_id})
+        self.update_group(gid, {"entry_order_id": entry_order_id})
 
-    def update_trade_group_exits(self, group_id: str, tp_order_id: str, sl_order_id: str):
+    def update_trade_group_exits(self, gid: str, tp_order_id: str, sl_order_id: str):
         """Updates the exit order IDs for a trade group."""
-        self.update_group(group_id, {"tp_order_id": tp_order_id, "sl_order_id": sl_order_id})
+        self.update_group(gid, {"tp_order_id": tp_order_id, "sl_order_id": sl_order_id})
 
-    def update_trade_group_status(self, group_id: str, status: str, note: Optional[str] = None):
+    def update_trade_group_status(self, gid: str, status: str, note: Optional[str] = None):
         """Updates the status and optionally a note for a trade group."""
         updates = {"status": status}
-        if note:
+        if note is not None:
             updates["note"] = note
-        self.update_group(group_id, updates)
+        self.update_group(gid, updates)
 
     def get_group_by_gid(self, gid: str) -> Optional[TradeGroup]:
         """
@@ -76,20 +76,20 @@ class TradeGroupManager:
         row = cur.fetchone()
         if not row:
             return None
-        # Manually map row to TradeGroup since column names don't match perfectly
-        # and to handle optional fields.
+        keys = row.keys()
         return TradeGroup(
-            id=row['id'],
             gid=row['gid'],
             symbol=row['symbol'],
             side=row['side'],
             status=row['status'],
-            entry_order_id=row.get('entry_order_id'),
-            tp_order_id=row.get('tp_order_id'),
-            sl_order_id=row.get('sl_order_id'),
+            entry_order_id=row['entry_order_id'] if 'entry_order_id' in keys else None,
+            entry_filled_qty=row['entry_filled_qty'] if 'entry_filled_qty' in keys else None,
+            tp_order_id=row['tp_order_id'] if 'tp_order_id' in keys else None,
+            sl_order_id=row['sl_order_id'] if 'sl_order_id' in keys else None,
+            open_qty=row['open_qty'] if 'open_qty' in keys else None,
             created_at=row['created_at'],
             updated_at=row['updated_at'],
-            note=row.get('note')
+            note=row['note'] if 'note' in keys else None,
         )
 
     def get_groups_by_status(self, status: str) -> List[TradeGroup]:
@@ -100,18 +100,20 @@ class TradeGroupManager:
         rows = cur.fetchall()
         groups = []
         for row in rows:
+            keys = row.keys()
             groups.append(TradeGroup(
-                id=row['id'],
                 gid=row['gid'],
                 symbol=row['symbol'],
                 side=row['side'],
                 status=row['status'],
-                entry_order_id=row.get('entry_order_id'),
-                tp_order_id=row.get('tp_order_id'),
-                sl_order_id=row.get('sl_order_id'),
+                entry_order_id=row['entry_order_id'] if 'entry_order_id' in keys else None,
+                entry_filled_qty=row['entry_filled_qty'] if 'entry_filled_qty' in keys else None,
+                tp_order_id=row['tp_order_id'] if 'tp_order_id' in keys else None,
+                sl_order_id=row['sl_order_id'] if 'sl_order_id' in keys else None,
+                open_qty=row['open_qty'] if 'open_qty' in keys else None,
                 created_at=row['created_at'],
                 updated_at=row['updated_at'],
-                note=row.get('note')
+                note=row['note'] if 'note' in keys else None,
             ))
         return groups
 
@@ -123,17 +125,19 @@ class TradeGroupManager:
         rows = cur.fetchall()
         groups = []
         for row in rows:
+            keys = row.keys()
             groups.append(TradeGroup(
-                id=row['id'],
                 gid=row['gid'],
                 symbol=row['symbol'],
                 side=row['side'],
                 status=row['status'],
-                entry_order_id=row.get('entry_order_id'),
-                tp_order_id=row.get('tp_order_id'),
-                sl_order_id=row.get('sl_order_id'),
+                entry_order_id=row['entry_order_id'] if 'entry_order_id' in keys else None,
+                entry_filled_qty=row['entry_filled_qty'] if 'entry_filled_qty' in keys else None,
+                tp_order_id=row['tp_order_id'] if 'tp_order_id' in keys else None,
+                sl_order_id=row['sl_order_id'] if 'sl_order_id' in keys else None,
+                open_qty=row['open_qty'] if 'open_qty' in keys else None,
                 created_at=row['created_at'],
                 updated_at=row['updated_at'],
-                note=row.get('note')
+                note=row['note'] if 'note' in keys else None,
             ))
         return groups

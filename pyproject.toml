@@ -27,7 +27,7 @@ dependencies = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["SmartCFDTradingAgent"]
+include = ["smartcfd*"]
 
 [tool.pytest.ini_options]
 pythonpath = [

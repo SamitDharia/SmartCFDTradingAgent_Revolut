@@ -35,11 +35,13 @@ This project is an automated trading agent designed to analyze market data, gene
     ```
 
 2.  **Configure Environment:**
-    Create a `.env` file from the example and add your Alpaca API keys and any other required credentials.
+    Provide Alpaca API keys via environment variables (recommended) or `config.ini`.
+    - Preferred: create a `.env` with `APCA_API_KEY_ID` and `APCA_API_SECRET_KEY`.
+    - Optional: copy `config.ini.example` and fill `[alpaca]` values (avoid committing secrets).
     ```bash
     cp config.ini.example config.ini
     ```
-    *Note: The project now uses `config.ini` for credentials.*
+    The loader prefers environment variables and falls back to `config.ini`.
 
 3.  **Build and Run with Docker:**
     Using Docker is the recommended way to run the agent, as it handles all dependencies and ensures a consistent environment.

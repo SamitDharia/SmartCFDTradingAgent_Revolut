@@ -8,10 +8,7 @@ from xgboost import XGBClassifier
 from sklearn.metrics import classification_report
 import joblib
 from smartcfd.data_loader import DataLoader
-from .indicators import (
-    atr, rsi, macd, bollinger_bands, adx,
-    stochastic_oscillator, volume_profile, price_rate_of_change
-)
+from smartcfd.features import create_features
 from smartcfd.config import load_config_from_file
 import numpy as np
 import os
@@ -20,7 +17,7 @@ import matplotlib.pyplot as plt
 from sklearn.utils import class_weight
 
 # --- Default Configuration ---
-app_cfg, _, _ = load_config_from_file()
+app_cfg, _, _, _ = load_config_from_file()
 DEFAULT_SYMBOL = app_cfg.watch_list.split(',')[0].strip()
 DEFAULT_START_DATE = "2022-01-01"
 DEFAULT_END_DATE = "2024-01-01"
@@ -51,59 +48,7 @@ def create_target(df: pd.DataFrame, period: int = 5) -> pd.Series:
     return np.select(conditions, choices, default=0) # 0 for Hold
 
 
-def create_features(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Create a rich set of features for the model from historical data.
-    This function must be identical to the one in `strategy.py`.
-    """
-    if df.empty:
-        return pd.DataFrame()
-
-    df.columns = [x.lower() for x in df.columns]
-    features = pd.DataFrame(index=df.index)
-
-    # Basic returns
-    features['feature_return_1m'] = df['close'].pct_change(1)
-    features['feature_return_5m'] = df['close'].pct_change(5)
-    features['feature_return_15m'] = df['close'].pct_change(15)
-    features['feature_return_30m'] = df['close'].pct_change(30)
-    features['feature_return_60m'] = df['close'].pct_change(60)
-
-    # Volatility
-    features['feature_volatility_5m'] = features['feature_return_1m'].rolling(5).std()
-    features['feature_volatility_15m'] = features['feature_return_1m'].rolling(15).std()
-    features['feature_volatility_30m'] = features['feature_return_1m'].rolling(30).std()
-    features['feature_volatility_60m'] = features['feature_return_1m'].rolling(60).std()
-
-    # Technical Indicators
-    features['feature_rsi'] = rsi(df['close'])
-    
-    adx_df = adx(df['high'], df['low'], df['close'])
-    features['feature_adx'] = adx_df['ADX_14']
-    
-    proc = price_rate_of_change(df['close'])
-    features['feature_proc'] = proc
-
-    bollinger = bollinger_bands(df['close'])
-    features['feature_bband_mavg'] = bollinger['BBM_20_2.0']
-    features['feature_bband_hband'] = bollinger['BBH_20_2.0']
-    features['feature_bband_lband'] = bollinger['BBL_20_2.0']
-
-    macd_df = macd(df['close'])
-    features['feature_macd'] = macd_df['MACD_12_26_9']
-    features['feature_macd_signal'] = macd_df['MACDs_12_26_9']
-    features['feature_macd_diff'] = macd_df['MACDh_12_26_9']
-
-    stoch = stochastic_oscillator(df['high'], df['low'], df['close'])
-    features['feature_stoch_k'] = stoch['STOCHk_14_3_3']
-    features['feature_stoch_d'] = stoch['STOCHd_14_3_3']
-
-    # Time-based features
-    features['feature_day_of_week'] = df.index.dayofweek
-    features['feature_hour_of_day'] = df.index.hour
-    features['feature_minute_of_hour'] = df.index.minute
-
-    return features.dropna()
+    # feature engineering now imported from smartcfd.features
 
 
 def train_and_evaluate_model(

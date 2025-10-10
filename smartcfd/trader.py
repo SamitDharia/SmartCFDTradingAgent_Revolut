@@ -13,6 +13,9 @@ from .trade_group_manager import TradeGroupManager
 from smartcfd.alpaca_client import AlpacaBroker
 from .types import TradeGroup
 from alpaca_trade_api.entity import Order
+from time import sleep
+from smartcfd.db import record_order_event
+from smartcfd.indicators import atr
 
 log = logging.getLogger(__name__)
 
@@ -75,8 +78,146 @@ class Trader:
                 # Check if the entry order has been filled
                 entry_order = self.broker.get_order_by_client_id(group.entry_order_id)
                 if entry_order and entry_order.status == 'filled':
-                    log.info("trader.arm_exits.entry_filled", extra={"extra": {"group_id": group.id, "symbol": group.symbol}})
+                    log.info("trader.arm_exits.entry_filled", extra={"extra": {"group_id": group.gid, "symbol": group.symbol}})
+                    try:
+                        record_order_event(
+                            self.db_conn,
+                            event_type="entry_filled",
+                            group_gid=group.gid,
+                            symbol=group.symbol,
+                            order_client_id=group.entry_order_id,
+                            broker_order_id=getattr(entry_order, 'id', None),
+                            side=getattr(entry_order, 'side', None),
+                            qty=float(getattr(entry_order, 'filled_qty', 0) or 0),
+                            price=float(getattr(entry_order, 'filled_avg_price', 0) or 0),
+                            status=getattr(entry_order, 'status', None),
+                        )
+                    except Exception:
+                        pass
                     self.arm_exits(group, entry_order, historical_data)
+            elif group.status == "ACTIVE":
+                # Manage OCO exits: if one is filled, cancel the other and close
+                try:
+                    tp_cid = group.tp_order_id
+                    sl_cid = group.sl_order_id
+                    tp_order = self.broker.get_order_by_client_id(tp_cid) if tp_cid else None
+                    sl_order = self.broker.get_order_by_client_id(sl_cid) if sl_cid else None
+
+                    def _is_open(o):
+                        return o is not None and str(getattr(o, 'status', '')).lower() in ("new", "accepted", "open", "partially_filled", "pending_cancel")
+
+                    status_tp = str(getattr(tp_order, 'status', '')).lower() if tp_order else ''
+                    status_sl = str(getattr(sl_order, 'status', '')).lower() if sl_order else ''
+                    tp_filled = status_tp == 'filled'
+                    sl_filled = status_sl == 'filled'
+                    tp_partial = status_tp == 'partially_filled'
+                    sl_partial = status_sl == 'partially_filled'
+
+                    def _cancel_with_backoff(order_id: str) -> bool:
+                        delays = [0.5, 1.0, 2.0]
+                        for i, d in enumerate(delays):
+                            try:
+                                log.info("orders.lifecycle.cancel_attempt", extra={"extra": {"order_id": order_id, "attempt": i+1}})
+                                self.broker.cancel_order(order_id)
+                                log.info("orders.lifecycle.cancel_success", extra={"extra": {"order_id": order_id}})
+                                return True
+                            except Exception:
+                                log.warning("orders.lifecycle.cancel_retry", exc_info=True, extra={"extra": {"order_id": order_id, "backoff_s": d}})
+                                sleep(d)
+                        log.error("orders.lifecycle.cancel_failed", extra={"extra": {"order_id": order_id}})
+                        return False
+
+                    if tp_filled:
+                        if _is_open(sl_order):
+                            _cancel_with_backoff(sl_order.id)
+                            try:
+                                record_order_event(self.db_conn, "exit_cancelled_sl", group.gid, group.symbol, sl_cid, getattr(sl_order, 'id', None), note="peer_tp_filled")
+                            except Exception:
+                                pass
+                        self.trade_group_manager.update_trade_group_status(group.gid, "CLOSED", note="tp_filled")
+                        try:
+                            record_order_event(self.db_conn, "group_closed", group.gid, group.symbol, status="tp_filled")
+                        except Exception:
+                            pass
+                        log.info("trader.reconcile_trade_groups.closed_tp", extra={"extra": {"group_id": group.gid}})
+                    elif sl_filled:
+                        if _is_open(tp_order):
+                            _cancel_with_backoff(tp_order.id)
+                            try:
+                                record_order_event(self.db_conn, "exit_cancelled_tp", group.gid, group.symbol, tp_cid, getattr(tp_order, 'id', None), note="peer_sl_filled")
+                            except Exception:
+                                pass
+                        self.trade_group_manager.update_trade_group_status(group.gid, "CLOSED", note="sl_filled")
+                        try:
+                            record_order_event(self.db_conn, "group_closed", group.gid, group.symbol, status="sl_filled")
+                        except Exception:
+                            pass
+                        log.info("trader.reconcile_trade_groups.closed_sl", extra={"extra": {"group_id": group.gid}})
+                    elif tp_partial or sl_partial:
+                        # Partial exit: adjust the peer order qty and refresh price using ATR if possible
+                        pos = self.portfolio_manager.get_position(group.symbol)
+                        rem_qty = float(getattr(pos, 'qty', 0.0) or 0.0)
+                        peer = sl_order if tp_partial else tp_order
+                        if rem_qty > 0 and peer is not None and _is_open(peer):
+                            # Compute ATR-based refreshed price from provided historical data
+                            symbol_df = historical_data.get(group.symbol)
+                            new_limit = None
+                            new_stop = None
+                            try:
+                                if symbol_df is not None and not symbol_df.empty:
+                                    current_close = float(symbol_df['close'].iloc[-1])
+                                    current_atr = float(atr(symbol_df['high'], symbol_df['low'], symbol_df['close'], window=14).iloc[-1])
+                                    if tp_partial:
+                                        # Peer is SL
+                                        if group.side == 'buy':
+                                            new_stop = current_close - (current_atr * self.risk_config.stop_loss_atr_multiplier)
+                                        else:
+                                            new_stop = current_close + (current_atr * self.risk_config.stop_loss_atr_multiplier)
+                                    else:
+                                        # sl_partial, peer is TP
+                                        if group.side == 'buy':
+                                            new_limit = current_close + (current_atr * self.risk_config.take_profit_atr_multiplier)
+                                        else:
+                                            new_limit = current_close - (current_atr * self.risk_config.take_profit_atr_multiplier)
+                            except Exception:
+                                pass
+
+                            try:
+                                self.broker.replace_order(
+                                    peer.id,
+                                    qty=str(rem_qty),
+                                    limit_price=(str(round(new_limit, 2)) if new_limit is not None else None),
+                                    stop_price=(str(round(new_stop, 2)) if new_stop is not None else None),
+                                )
+                                log.info("orders.lifecycle.replace_success", extra={"extra": {"order_id": peer.id, "new_qty": rem_qty, "new_limit": new_limit, "new_stop": new_stop}})
+                                try:
+                                    record_order_event(self.db_conn, "replace_success", group.gid, group.symbol, broker_order_id=getattr(peer, 'id', None), qty=rem_qty, price=new_limit or new_stop)
+                                except Exception:
+                                    pass
+                            except Exception:
+                                log.warning("orders.lifecycle.replace_fail", exc_info=True, extra={"extra": {"order_id": peer.id, "new_qty": rem_qty, "new_limit": new_limit, "new_stop": new_stop}})
+                                try:
+                                    record_order_event(self.db_conn, "replace_fail", group.gid, group.symbol, broker_order_id=getattr(peer, 'id', None), qty=rem_qty, price=new_limit or new_stop)
+                                except Exception:
+                                    pass
+                            self.trade_group_manager.update_trade_group_status(group.gid, "PARTIAL_EXIT")
+                            log.info("orders.lifecycle.partial_exit", extra={"extra": {"group_id": group.gid, "tp_status": status_tp, "sl_status": status_sl, "rem_qty": rem_qty}})
+                        else:
+                            # No remaining qty or peer not open: close out group and ensure peer is cancelled
+                            if peer is not None and _is_open(peer):
+                                _cancel_with_backoff(peer.id)
+                                try:
+                                    record_order_event(self.db_conn, "exit_cancelled_peer_after_partial", group.gid, group.symbol, broker_order_id=getattr(peer, 'id', None))
+                                except Exception:
+                                    pass
+                            self.trade_group_manager.update_trade_group_status(group.gid, "CLOSED", note="partial_exit_no_remaining")
+                            try:
+                                record_order_event(self.db_conn, "group_closed", group.gid, group.symbol, status="partial_exit_no_remaining")
+                            except Exception:
+                                pass
+                            log.info("orders.lifecycle.partial_exit_closed", extra={"extra": {"group_id": group.gid}})
+                except Exception:
+                    log.error("trader.reconcile_trade_groups.manage_oco_fail", exc_info=True, extra={"extra": {"group_id": group.gid}})
     
     def arm_exits(self, group: TradeGroup, entry_order: Order, historical_data: Dict[str, pd.DataFrame]):
         """
@@ -84,7 +225,7 @@ class Trader:
         """
         symbol_data = historical_data.get(group.symbol)
         if symbol_data is None or symbol_data.empty:
-            log.error("trader.arm_exits.no_historical_data", extra={"extra": {"group_id": group.id, "symbol": group.symbol}})
+            log.error("trader.arm_exits.no_historical_data", extra={"extra": {"group_id": group.gid, "symbol": group.symbol}})
             return
 
         # Now we have data, calculate and place exit orders
@@ -98,14 +239,14 @@ class Trader:
             )
             
             if not exit_orders:
-                log.error("trader.arm_exits.exit_order_generation_failed", extra={"extra": {"group_id": group.id}})
+                log.error("trader.arm_exits.exit_order_generation_failed", extra={"extra": {"group_id": group.gid}})
                 return
 
             tp_order_data = exit_orders['take_profit']
             sl_order_data = exit_orders['stop_loss']
 
             # Create a unique client_order_id for the OCO group
-            client_order_id_base = f"oco_{group.id}_{int(time.time())}"
+            client_order_id_base = f"oco_{group.gid}_{int(time.time())}"
             tp_order_data['client_order_id'] = f"{client_order_id_base}_tp"
             sl_order_data['client_order_id'] = f"{client_order_id_base}_sl"
 
@@ -114,21 +255,39 @@ class Trader:
             # We will submit two separate orders and manage the cancellation logic ourselves.
             
             # Submit Take Profit
-            tp_order = self.broker.submit_order(tp_order_data)
-            
-            # Submit Stop Loss
-            sl_order = self.broker.submit_order(sl_order_data)
+            # Submit via dedicated broker helpers (Alpaca crypto lacks native OCO)
+            tp_order = self.broker.submit_take_profit_order(
+                symbol=tp_order_data["symbol"],
+                qty=str(tp_order_data["qty"]),
+                side=tp_order_data["side"],
+                price=str(tp_order_data["limit_price"]),
+                client_order_id=tp_order_data["client_order_id"],
+            )
+
+            sl_order = self.broker.submit_stop_loss_order(
+                symbol=sl_order_data["symbol"],
+                qty=str(sl_order_data["qty"]),
+                side=sl_order_data["side"],
+                price=str(sl_order_data["stop_price"]),
+                client_order_id=sl_order_data["client_order_id"],
+            )
 
             if tp_order and sl_order:
-                self.db_conn.update_trade_group_exits(group.id, tp_order.id, sl_order.id)
-                self.db_conn.update_trade_group_status(group.id, "ACTIVE")
-                log.info("trader.arm_exits.success", extra={"extra": {"group_id": group.id, "tp_order_id": tp_order.id, "sl_order_id": sl_order.id}})
+                # Store client order IDs (not broker-generated IDs) for robust lookup
+                self.trade_group_manager.update_trade_group_exits(group.gid, tp_order_data['client_order_id'], sl_order_data['client_order_id'])
+                self.trade_group_manager.update_trade_group_status(group.gid, "ACTIVE")
+                log.info("trader.arm_exits.success", extra={"extra": {"group_id": group.gid, "tp_client_id": tp_order_data['client_order_id'], "sl_client_id": sl_order_data['client_order_id']}})
+                try:
+                    record_order_event(self.db_conn, "exit_submit_tp", group.gid, group.symbol, tp_order_data['client_order_id'], getattr(tp_order, 'id', None), side="sell" if entry_order.side=="buy" else "buy", order_kind="limit", qty=float(tp_order_data['qty']), price=float(tp_order_data['limit_price']))
+                    record_order_event(self.db_conn, "exit_submit_sl", group.gid, group.symbol, sl_order_data['client_order_id'], getattr(sl_order, 'id', None), side="sell" if entry_order.side=="buy" else "buy", order_kind="stop", qty=float(sl_order_data['qty']), price=float(sl_order_data['stop_price']))
+                except Exception:
+                    pass
             else:
                 # This requires rollback logic, which is complex. For now, log critical error.
-                log.critical("trader.arm_exits.partial_exit_submission", extra={"extra": {"group_id": group.id, "tp_order": tp_order, "sl_order": sl_order}})
+                log.critical("trader.arm_exits.partial_exit_submission", extra={"extra": {"group_id": group.gid, "tp_order": str(bool(tp_order)), "sl_order": str(bool(sl_order))}})
 
         except Exception as e:
-            log.error("trader.arm_exits.exception", exc_info=True, extra={"extra": {"group_id": group.id}})
+            log.error("trader.arm_exits.exception", exc_info=True, extra={"extra": {"group_id": group.gid}})
 
     def evaluate_new_trades(self):
         """
@@ -236,7 +395,7 @@ class Trader:
             qty, current_price = self.risk_manager.calculate_order_qty(symbol, side, historical_data)
             if qty <= 0:
                 log.warning("trader.initiate_trade.zero_or_neg_qty", extra={"extra": {"symbol": symbol, "qty": qty}})
-                self.trade_group_manager.update_group_status(group.id, "CANCELLED", "Zero quantity calculated")
+                self.trade_group_manager.update_group_status(group.gid, "CANCELLED", "Zero quantity calculated")
                 return
 
             # Generate the simple market order request
@@ -251,18 +410,53 @@ class Trader:
 
             # Tag the order with our Group ID for tracking
             order_request['client_order_id'] = f"{group.gid}_entry"
+            try:
+                record_order_event(
+                    self.db_conn,
+                    event_type="entry_submit",
+                    group_gid=group.gid,
+                    symbol=symbol,
+                    order_client_id=order_request['client_order_id'],
+                    side=side,
+                    order_kind="market",
+                    qty=float(qty),
+                )
+            except Exception:
+                pass
 
             # Submit the entry order
-            entry_order = self.broker.submit_order(order_request)
+            from smartcfd.types import OrderRequest as _OrderRequest
+            try:
+                entry_order = self.broker.submit_order(_OrderRequest(**order_request))
+                try:
+                    record_order_event(
+                        self.db_conn,
+                        event_type="entry_submitted",
+                        group_gid=group.gid,
+                        symbol=symbol,
+                        order_client_id=order_request['client_order_id'],
+                        broker_order_id=getattr(entry_order, 'id', None),
+                        side=side,
+                        order_kind="market",
+                        qty=float(qty),
+                        status=getattr(entry_order, 'status', None),
+                    )
+                except Exception:
+                    pass
+            except Exception:
+                log.error("trader.initiate_trade.order_build_fail", exc_info=True, extra={"extra": {"group_id": group.gid}})
+                self.trade_group_manager.update_group_status(group.gid, "FAILED", "Entry order build failed")
+                return
 
             # Update the trade group with the entry order ID and set status to pending
-            if entry_order and entry_order.id:
-                self.trade_group_manager.update_trade_group_entry(group.gid, entry_order.id)
-                self.trade_group_manager.update_trade_group_status(group.id, "ENTRY_ORDER_PLACED")
-                log.info("trader.initiate_trade.success", extra={"extra": {"group_id": group.id, "entry_order_id": entry_order.id}})
+            if entry_order and getattr(entry_order, 'id', None):
+                # Store the client_order_id so we can query by client ID later
+                self.trade_group_manager.update_trade_group_entry(group.gid, order_request['client_order_id'])
+                self.trade_group_manager.update_trade_group_status(group.gid, "ENTRY_ORDER_PLACED")
+                log.info("trader.initiate_trade.success", extra={"extra": {"group_id": group.gid, "entry_order_id": entry_order.id, "client_order_id": order_request['client_order_id']}})
             else:
-                log.error("trader.initiate_trade.order_submission_failed", extra={"extra": {"group_id": group.id}})
-                self.trade_group_manager.update_group_status(group.id, "FAILED", "Entry order submission failed")
+                log.error("trader.initiate_trade.order_submission_failed", extra={"extra": {"group_id": group.gid}})
+                self.trade_group_manager.update_group_status(group.gid, "FAILED", "Entry order submission failed")
 
         except Exception:
             log.error("trader.initiate_trade.fail", exc_info=True)

@@ -22,6 +22,8 @@ services:
       NETWORK_MAX_BACKOFF_SECONDS: ${NETWORK_MAX_BACKOFF_SECONDS:-60}
       ON_RECONNECT_RECONCILE: ${ON_RECONNECT_RECONCILE:-true}
       RUN_CONTAINER_SMOKE_TEST: ${RUN_CONTAINER_SMOKE_TEST:-1}
+    env_file:
+      - .env
     healthcheck:
       test: ["CMD", "python", "/app/docker/healthcheck.py"]
       interval: 30s
@@ -42,3 +44,5 @@ services:
       - ./models:/app/models
       - ./reports:/app/reports
     command: ["python", "scripts/retrain_model.py"]
+    env_file:
+      - .env

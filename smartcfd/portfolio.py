@@ -93,6 +93,7 @@ class PortfolioManager:
             self.orders = self.client.get_orders(status="open")
             log.info("portfolio.reconcile.orders_updated", extra={"extra": {"order_count": len(self.orders)}})
 
+            self.last_reconciliation = pd.Timestamp.now(tz='UTC')
             log.info("portfolio.reconcile.end")
 
         except Exception:
@@ -103,11 +104,9 @@ class PortfolioManager:
 
     def needs_reconciliation(self) -> bool:
         """Determines if the portfolio needs reconciliation with the broker."""
-        if self.account_info is None:
+        if self.account is None or self.last_reconciliation is None:
             return True
-        if pd.Timestamp.now() - self.last_reconciliation > self.reconciliation_interval:
-            return True
-        return False
+        return (pd.Timestamp.now(tz='UTC') - self.last_reconciliation) > self.reconciliation_interval
 
     def get_position(self, symbol: str) -> Optional[Position]:
         """Returns the position for a given symbol, if it exists."""

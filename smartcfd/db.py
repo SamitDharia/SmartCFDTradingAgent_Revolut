@@ -63,6 +63,26 @@ def init_schema(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    # Order events table for telemetry
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS order_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            group_gid TEXT,
+            symbol TEXT,
+            order_client_id TEXT,
+            broker_order_id TEXT,
+            side TEXT,
+            order_kind TEXT,
+            qty REAL,
+            price REAL,
+            status TEXT,
+            note TEXT
+        )
+        """
+    )
     conn.commit()
 
 def record_run(
@@ -133,6 +153,48 @@ def get_daily_pnl(conn: Optional[sqlite3.Connection] = None) -> float:
     unless this function is mocked in tests.
     """
     return 0.0
+
+def record_order_event(
+    conn: sqlite3.Connection,
+    event_type: str,
+    group_gid: Optional[str] = None,
+    symbol: Optional[str] = None,
+    order_client_id: Optional[str] = None,
+    broker_order_id: Optional[str] = None,
+    side: Optional[str] = None,
+    order_kind: Optional[str] = None,
+    qty: Optional[float] = None,
+    price: Optional[float] = None,
+    status: Optional[str] = None,
+    note: Optional[str] = None,
+    ts: Optional[str] = None,
+) -> int:
+    tstamp = ts or datetime.now(timezone.utc).isoformat()
+    cur = conn.execute(
+        """
+        INSERT INTO order_events (
+            ts, event_type, group_gid, symbol, order_client_id, broker_order_id,
+            side, order_kind, qty, price, status, note
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (tstamp, event_type, group_gid, symbol, order_client_id, broker_order_id,
+         side, order_kind, qty, price, status, note),
+    )
+    conn.commit()
+    # Also append to CSV for quick inspection
+    try:
+        import csv, os
+        path = os.getenv("ORDER_EVENTS_CSV", "logs/order_events.csv")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        file_exists = os.path.exists(path)
+        with open(path, "a", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            if not file_exists:
+                writer.writerow(["ts","event_type","group_gid","symbol","order_client_id","broker_order_id","side","order_kind","qty","price","status","note"])
+            writer.writerow([tstamp,event_type,group_gid,symbol,order_client_id,broker_order_id,side,order_kind,qty,price,status,note])
+    except Exception:
+        pass
+    return int(cur.lastrowid)
 
 def get_heartbeat_stats(conn: sqlite3.Connection, hours: int = 24) -> Dict:
     """

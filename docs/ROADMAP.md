@@ -52,9 +52,14 @@ This phase focuses on validating the agent's end-to-end functionality in a live 
 - [x] **Real-time Data Handling**: Switched to using the `get_crypto_snapshot` endpoint for live data to ensure accuracy and prevent trading on partial bars.
 - [x] **Code Hardening & Stability**: Performed extensive data validation, error handling, and stability fixes based on integration test findings. This included a deep debugging session to resolve a cascade of interacting issues, resulting in a truly stable system.
 - [x] **Startup Grace Period**: Added a 60-second grace period to the health check to prevent failures during application initialization in Docker.
+- [x] **Client-Side OCO for Crypto**: Implemented exit arming (TP/SL) with cancel-on-fill logic using client_order_ids and trade groups.
+- [x] **Runner Loop Decoupling**: Trading loop now runs regardless of health server flag; fixed heartbeat/run bookkeeping.
+- [x] **Order Telemetry & Dashboard**: Added order_events table + CSV export and a simple Streamlit dashboard to visualize lifecycle events.
 
 **V1.0 Completion Criteria (To-Do):**
 - [ ] **Verify End-to-End Trade Execution**: Observe the agent autonomously execute multiple trades (both simple and complex, with stop-loss/take-profit) in the live paper market.
+- [ ] **OCO Robustness**: Validate peer cancellation under partial fills and intermittent broker latency.
+- [ ] **Telemetry Coverage**: Ensure all key lifecycle events and error states are captured and visualized.
 - [ ] **Confirm Autonomous Learning Loop**: Ensure the agent can run for an extended period, automatically retrain its model, and continue trading with the updated model without manual intervention.
 - [ ] **Achieve Decision-Making Confidence**: Monitor trading decisions over a sustained period to ensure they are logical, profitable, and align with the strategy's intent. V1.0 is complete only when we trust its ability to manage capital.
 

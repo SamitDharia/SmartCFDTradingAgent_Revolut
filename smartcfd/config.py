@@ -104,17 +104,18 @@ def load_config_from_file(path: str = 'config.ini') -> tuple[AppConfig, AlpacaCo
     )
 
     # --- Load AlpacaConfig ---
-    alpaca_api_key = parser.get('alpaca', 'api_key', fallback=os.getenv('APCA_API_KEY_ID'))
-    alpaca_secret_key = parser.get('alpaca', 'secret_key', fallback=os.getenv('APCA_API_SECRET_KEY'))
+    # Prefer environment variables for secrets; fall back to config.ini
+    alpaca_api_key = os.getenv('APCA_API_KEY_ID') or parser.get('alpaca', 'api_key', fallback=None)
+    alpaca_secret_key = os.getenv('APCA_API_SECRET_KEY') or parser.get('alpaca', 'secret_key', fallback=None)
     
     # Determine API base URL
     is_paper = app_cfg.alpaca_env.lower() == 'paper'
     api_base = "https://paper-api.alpaca.markets" if is_paper else "https://api.alpaca.markets"
 
-    if not alpaca_api_key or 'YOUR' in alpaca_api_key:
-        raise ValueError("Alpaca API key is not configured in config.ini or environment variables.")
-    if not alpaca_secret_key or 'YOUR' in alpaca_secret_key:
-        raise ValueError("Alpaca secret key is not configured in config.ini or environment variables.")
+    if not alpaca_api_key or 'YOUR' in str(alpaca_api_key):
+        raise ValueError("Alpaca API key is not configured via environment variables or config.ini.")
+    if not alpaca_secret_key or 'YOUR' in str(alpaca_secret_key):
+        raise ValueError("Alpaca secret key is not configured via environment variables or config.ini.")
 
     alpaca_cfg = AlpacaConfig(key_id=alpaca_api_key, secret_key=alpaca_secret_key, api_base=api_base)
     

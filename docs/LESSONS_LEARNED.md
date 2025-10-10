@@ -31,6 +31,12 @@ This document tracks the key learnings, mistakes, and pivotal decisions made thr
 *   **Learning:** It's crucial to understand the full lifecycle of a trade (entry, management, exit). We realized that an entry-only strategy is incomplete and carries significant risk, prompting the immediate focus on implementing stop-loss and take-profit logic.
 *   **Good Practice:** Creating the `PROJECT_SUMMARY.md` and this `LESSONS_LEARNED.md` document. This helps formalize the project's progress and learnings, which is invaluable for portfolio building and future reference.
 
+## Section 4.1: Trade Lifecycle Completeness (Entry → Arm Exits → OCO Closure)
+
+*   **Gap Identified:** Entry orders were placed, but exit orders (TP/SL) were not armed automatically on fill for crypto where native OCO is unavailable.
+*   **Resolution:** Implemented client-side OCO with two separate orders (limit and stop) and cancel-on-fill logic. Persisted client_order_ids in the trade group to reconcile reliably.
+*   **Lesson:** Persist and reconcile by client_order_id, not transient broker IDs, to avoid fragile lookups and simplify idempotent operations.
+
 ## Section 5: Networking & Deployment
 
 *   **Mistake:** Running the application on a network with an active VPN caused SSL certificate verification failures.
@@ -329,3 +335,14 @@ This series of issues represented a full-stack debugging challenge, touching eve
 ---
 
 *(This document will be updated as the project progresses.)*
+**11. Trading Loop Coupled to Health Server:**
+
+*   **Problem:** Disabling the health server inadvertently disabled the trading loop due to a gating mistake in `runner.py`.
+*   **Fix:** Decoupled the health thread from the main loop; corrected `record_heartbeat` and `record_run` signatures and ordering.
+*   **Lesson:** Avoid hidden couplings in startup paths; keep background services optional and independent of the core loop.
+
+**12. API Model Mismatches (dict vs Pydantic):**
+
+*   **Problem:** Passing dicts to API helpers expecting Pydantic models caused runtime attribute errors.
+*   **Fix:** Normalize at module boundaries: translate dicts into typed `OrderRequest` before calling the broker.
+*   **Lesson:** Strong typing on interfaces prevents entire classes of runtime errors.

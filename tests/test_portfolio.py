@@ -3,12 +3,11 @@ from unittest.mock import MagicMock, PropertyMock
 import pandas as pd
 
 from smartcfd.portfolio import PortfolioManager, Account, Position
-from smartcfd.alpaca_client import AlpacaClient
 
 class TestPortfolioManager(unittest.TestCase):
     def setUp(self):
         """Set up a mock Alpaca client and a PortfolioManager instance."""
-        self.mock_client = MagicMock(spec=AlpacaClient)
+        self.mock_client = MagicMock()
         self.portfolio_manager = PortfolioManager(self.mock_client)
 
     def test_initial_state(self):
@@ -20,16 +19,14 @@ class TestPortfolioManager(unittest.TestCase):
     def test_reconcile_successful(self):
         """Test a successful reconciliation of account and position data."""
         # Mock the return values from the Alpaca client
-        mock_account_data = {
-            "id": "test_account_id",
-            "equity": 100000.0,
-            "last_equity": 99000.0,
-            "buying_power": 50000.0,
-            "cash": "50000.0",
-            "status": "ACTIVE"
-        }
-        # The client returns an object that Pydantic can validate
-        mock_account = MagicMock(**mock_account_data)
+        # PortfolioManager expects get_account_info() which can return object-like
+        mock_account = MagicMock()
+        mock_account.id = "test_account_id"
+        mock_account.equity = 100000.0
+        mock_account.last_equity = 99000.0
+        mock_account.buying_power = 50000.0
+        mock_account.cash = 50000.0
+        mock_account.status = "ACTIVE"
 
         mock_position_data = [
             {
@@ -53,8 +50,8 @@ class TestPortfolioManager(unittest.TestCase):
         ]
         mock_positions = [MagicMock(**p_data) for p_data in mock_position_data]
 
-        self.mock_client.get_account.return_value = mock_account
-        self.mock_client.get_positions.return_value = mock_positions
+        self.mock_client.get_account_info.return_value = mock_account
+        self.mock_client.list_positions.return_value = mock_positions
         self.mock_client.get_orders.return_value = [] # No open orders
 
         # Run reconcile
@@ -83,8 +80,8 @@ class TestPortfolioManager(unittest.TestCase):
         self.portfolio_manager.account = Account(id="old_id", equity=1.0, last_equity=1.0, buying_power=1.0, cash=1.0, status="ACTIVE")
         
         # Mock client failure
-        self.mock_client.get_account.side_effect = Exception("API Error")
-        self.mock_client.get_positions.return_value = [] # Assume this still runs
+        self.mock_client.get_account_info.side_effect = Exception("API Error")
+        self.mock_client.list_positions.return_value = [] # Assume this still runs
 
         # Run reconcile
         self.portfolio_manager.reconcile()
@@ -103,15 +100,15 @@ class TestPortfolioManager(unittest.TestCase):
         
         # Mock client calls
         mock_account = MagicMock()
-        mock_account.id="test_id"
-        mock_account.equity="1000.0"
-        mock_account.last_equity="1000.0"
-        mock_account.buying_power="1000.0"
-        mock_account.cash="1000.0"
-        mock_account.status="ACTIVE"
+        mock_account.id = "test_id"
+        mock_account.equity = 1000.0
+        mock_account.last_equity = 1000.0
+        mock_account.buying_power = 1000.0
+        mock_account.cash = 1000.0
+        mock_account.status = "ACTIVE"
 
-        self.mock_client.get_account.return_value = mock_account
-        self.mock_client.get_positions.side_effect = Exception("API Error")
+        self.mock_client.get_account_info.return_value = mock_account
+        self.mock_client.list_positions.side_effect = Exception("API Error")
 
         # Run reconcile
         self.portfolio_manager.reconcile()

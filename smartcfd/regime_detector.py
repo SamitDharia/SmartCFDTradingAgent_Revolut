@@ -26,6 +26,8 @@ class RegimeDetector:
         self.short_window = regime_config.short_window
         self.long_window = regime_config.long_window
         self.min_data_points = app_config.min_data_points
+        # Threshold multiplier to compare short ATR to long ATR
+        self.threshold_multiplier = getattr(regime_config, 'threshold_multiplier', 1.5)
         
         if self.short_window >= self.long_window:
             raise ValueError("Short window must be smaller than long window for regime detection.")

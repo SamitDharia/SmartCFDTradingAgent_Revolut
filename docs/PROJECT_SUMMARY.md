@@ -48,6 +48,11 @@ This project is an autonomous trading agent that uses machine learning to analyz
 ### Version 1.0: Stable & Autonomous (Current)
 *   **Current Status:** The agent is feature-complete, stable, and fully autonomous. All core systems have been validated in a live paper-trading environment.
 *   **Key Outcome:** The project has successfully achieved its primary goal of creating a reliable, hands-off trading agent that can operate continuously.
+*   **Recent Enhancements:**
+    -   Client-side OCO management for crypto: the bot arms ATR-derived TP/SL as separate orders and cancels the peer on fill.
+    -   Trade Group state tracked by `gid` with client_order_id persistence for robust reconciliation.
+    -   Runner loop hardened: trading loop no longer depends on the health server flag; heartbeat/write ordering fixed.
+    -   RegimeDetector stabilized with configurable threshold multiplier.
 
 ### Version 2.0: Advanced Capabilities (Future Vision)
 *   **Next Steps:** Building on the stable V1.0 foundation, future work will focus on implementing more sophisticated features, such as portfolio-level optimization, dynamic strategy switching, and integrating alternative data sources. See the `ROADMAP.md` for a full breakdown.

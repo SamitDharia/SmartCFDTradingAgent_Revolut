@@ -153,3 +153,20 @@ This will stop and remove the containers and the network created by `docker-comp
 ---
 
 This document serves as the central hub. For specifics on **what we are doing next**, always refer to the **[Development Roadmap](ROADMAP.md)**.
+
+---
+
+## End-to-End Trade Validation (BTC/USD)
+
+1. Ensure `watch_list=BTC/USD` and set a sensible `trade_confidence_threshold` in `config.ini` (e.g., 0.7–0.9).
+2. Start the app and tail logs: `docker-compose up --build` or `docker-compose logs -f`.
+3. Look for `trader.initiate_trade.success` with both broker `entry_order_id` and stored `client_order_id`.
+4. On entry fill, expect `trader.arm_exits.success` logging TP/SL client IDs.
+5. When one exit fills, expect `reconcile_trade_groups.closed_tp` or `closed_sl`, and confirm the peer order was cancelled.
+
+## Tips: Efficient AI/Prompt Usage
+
+- Request “apply_patch only” responses targeting a single file/function.
+- Keep a short repo map and reference functions by path and name.
+- Use selection-based prompting in your IDE for local refactors.
+- Split changes into small, verifiable steps (entry → arm exits → OCO → reconcile).
