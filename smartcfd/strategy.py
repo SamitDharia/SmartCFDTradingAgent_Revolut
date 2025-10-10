@@ -166,13 +166,15 @@ class InferenceStrategy(Strategy):
             return None
 
         # 3. Signal Generation
-        action = None
+        # --- DEBUG: Force a buy signal to test the end-to-end trade lifecycle ---
+        log.warning("DEBUG: Forcing a BUY signal for testing purposes.")
+        action = {'action': 'trade', 'side': 'buy', 'confidence': 0.99}
         # The model was trained with labels: 0=Hold, 1=Buy, 2=Sell
-        if confidence >= self.app_config.min_confidence:
-            if prediction == '1':
-                action = {'side': 'buy', 'confidence': confidence}
-            elif prediction == '2':
-                action = {'side': 'sell', 'confidence': confidence}
+        # if confidence >= self.app_config.trade_confidence_threshold:
+        #     if prediction == '1':
+        #         action = {'side': 'buy', 'confidence': confidence}
+        #     elif prediction == '2':
+        #         action = {'side': 'sell', 'confidence': confidence}
 
         if action:
             log.info(

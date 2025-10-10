@@ -343,7 +343,41 @@ class RiskManager:
 
         return False
 
-    def check_for_halt(self, historical_data: Dict[str, pd.DataFrame], interval: str) -> bool:
+    def volatility_check(self, historical_data: pd.DataFrame, symbol: str) -> bool:
+        """
+        Checks if the current volatility is too high compared to the historical average.
+        Returns True if the circuit breaker is tripped, False otherwise.
+        """
+        if self.config.circuit_breaker_atr_multiplier <= 0:
+            return False # Disabled
+
+        try:
+            # Calculate the most recent True Range
+            high = historical_data['high'].iloc[-1]
+            low = historical_data['low'].iloc[-1]
+            prev_close = historical_data['close'].iloc[-2]
+            true_range = max(high - low, abs(high - prev_close), abs(low - prev_close))
+
+            # Calculate the historical ATR
+            historical_atr = ta.volatility.average_true_range(high=historical_data['high'], low=historical_data['low'], close=historical_data['close'], window=14).iloc[-1]
+
+            # Check if the current true range exceeds the historical ATR by the multiplier
+            is_tripped = true_range > (historical_atr * self.config.circuit_breaker_atr_multiplier)
+            
+            log.info("risk.volatility_check.evaluate", extra={"extra": {
+                "symbol": symbol,
+                "is_tripped": str(is_tripped),
+                "true_range": true_range,
+                "historical_atr": historical_atr,
+                "multiplier": self.config.circuit_breaker_atr_multiplier
+            }})
+            
+            return is_tripped
+        except Exception:
+            log.error("risk.volatility_check.fail", exc_info=True)
+            return False # Fail safe, don't halt
+
+    def check_for_halt(self, historical_data: Dict[str, pd.DataFrame], trade_interval: str) -> bool:
         """
         Checks all halt conditions. If any are met, sets the halt flag and returns True.
         If no conditions are met, it ensures the halt is lifted and returns False.
@@ -389,8 +423,10 @@ class RiskManager:
 
         # 2. Check for volatility circuit breaker for each symbol in the watch list
         for symbol, data in historical_data.items():
-            if self._check_volatility_for_symbol(symbol, data, interval):
-                self.is_halted = True # The reason is set inside the check
+            if self.volatility_check(data, symbol):
+                self.is_halted = True
+                self.halt_reason = f"Volatility circuit breaker tripped for {symbol}."
+                log.critical("risk.check_for_halt.volatility_halt", extra={"extra": {"symbol": symbol}})
                 return True # Halt immediately
 
         # --- If we've reached this point, no halt conditions were met ---

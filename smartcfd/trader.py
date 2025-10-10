@@ -177,6 +177,7 @@ class Trader:
                     historical_data=historical_data[symbol]
                 )
                 if action:
+                    action['symbol'] = symbol # Add symbol to action dict
                     actions.append(action)
 
         # Execute actions
@@ -207,7 +208,7 @@ class Trader:
                     continue
 
                 # Perform volatility check before executing a trade order
-                if symbol and symbol in historical_data and self.risk_manager.is_volatility_too_high(historical_data[symbol], symbol):
+                if symbol and symbol in historical_data and self.risk_manager.volatility_check(historical_data[symbol], symbol):
                     log.warning("trader.execute_order.halted_volatility", 
                                 extra={"extra": {"symbol": symbol, "reason": "Circuit breaker tripped due to high volatility."}})
                     continue # Skip this action
@@ -244,19 +245,19 @@ class Trader:
             )
             
             if not order_request:
-                log.error("trader.initiate_trade.order_request_failed", extra={"extra": {"group_id": group.id}})
-                self.trade_group_manager.update_group_status(group.id, "FAILED", "Order request generation failed")
+                log.error("trader.initiate_trade.order_request_failed", extra={"extra": {"group_id": group.gid}})
+                self.trade_group_manager.update_group_status(group.gid, "FAILED", "Order request generation failed")
                 return
 
             # Tag the order with our Group ID for tracking
-            order_request['client_order_id'] = f"{group.id}_entry"
+            order_request['client_order_id'] = f"{group.gid}_entry"
 
             # Submit the entry order
             entry_order = self.broker.submit_order(order_request)
 
             # Update the trade group with the entry order ID and set status to pending
             if entry_order and entry_order.id:
-                self.trade_group_manager.update_trade_group_entry(group.id, entry_order.id)
+                self.trade_group_manager.update_trade_group_entry(group.gid, entry_order.id)
                 self.trade_group_manager.update_trade_group_status(group.id, "ENTRY_ORDER_PLACED")
                 log.info("trader.initiate_trade.success", extra={"extra": {"group_id": group.id, "entry_order_id": entry_order.id}})
             else:
